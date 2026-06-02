@@ -952,60 +952,70 @@ export default function DatMonNhanhPage() {
             </div>
 
             <div className="mt-5 space-y-3">
-              {cart.map((item) => (
-                <div key={item.cartKey} className="rounded-3xl bg-[#F5FFF8] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="font-black text-[#06113C]">{item.name}</p>
+  {cart.map((item) => (
+    <div key={item.cartKey} className="rounded-3xl bg-[#F5FFF8] p-4">
+      <div className="flex items-start gap-3">
+        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white">
+          <img
+            src={item.image_url || "/images/hero.jpg"}
+            alt={item.name}
+            className="h-full w-full object-cover"
+          />
+        </div>
 
-                      {item.selectedToppings.length > 0 && (
-                        <p className="mt-1 text-xs font-bold text-neutral-500">
-                          Topping:{" "}
-                          {item.selectedToppings
-                            .map((topping) => topping.name)
-                            .join(", ")}
-                        </p>
-                      )}
+        <div className="flex flex-1 items-start justify-between gap-3">
+          <div className="flex-1">
+            <p className="font-black text-[#06113C]">{item.name}</p>
 
-                      <p className="mt-1 text-xs font-bold text-neutral-500">
-                        Độ cay: {item.spicyLevel}
-                      </p>
+            {item.selectedToppings.length > 0 && (
+              <p className="mt-1 text-xs font-bold text-neutral-500">
+                Topping:{" "}
+                {item.selectedToppings
+                  .map((topping) => topping.name)
+                  .join(", ")}
+              </p>
+            )}
 
-                      {item.itemNote && (
-                        <p className="mt-1 text-xs font-bold text-neutral-500">
-                          Ghi chú: {item.itemNote}
-                        </p>
-                      )}
+            <p className="mt-1 text-xs font-bold text-neutral-500">
+              Độ cay: {item.spicyLevel}
+            </p>
 
-                      <p className="mt-1 text-sm font-bold text-[#00B14F]">
-                        {(getItemUnitTotal(item) * item.quantity).toLocaleString(
-                          "vi-VN"
-                        )}
-                        đ
-                      </p>
-                    </div>
+            {item.itemNote && (
+              <p className="mt-1 text-xs font-bold text-neutral-500">
+                Ghi chú: {item.itemNote}
+              </p>
+            )}
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => decreaseItem(item.cartKey)}
-                        className="h-8 w-8 rounded-full bg-white font-black"
-                      >
-                        -
-                      </button>
+            <p className="mt-1 text-sm font-bold text-[#00B14F]">
+              {(getItemUnitTotal(item) * item.quantity).toLocaleString(
+                "vi-VN"
+              )}
+              đ
+            </p>
+          </div>
 
-                      <span className="font-black">{item.quantity}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => decreaseItem(item.cartKey)}
+              className="h-8 w-8 rounded-full bg-white font-black"
+            >
+              -
+            </button>
 
-                      <button
-                        onClick={() => increaseItem(item.cartKey)}
-                        className="h-8 w-8 rounded-full bg-[#00B14F] font-black text-white"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <span className="font-black">{item.quantity}</span>
+
+            <button
+              onClick={() => increaseItem(item.cartKey)}
+              className="h-8 w-8 rounded-full bg-[#00B14F] font-black text-white"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
 
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
               <p className="text-xl font-black text-[#06113C]">

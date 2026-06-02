@@ -79,9 +79,9 @@ export default async function HomePage() {
               </div>
 
               <h1 className="mt-6 max-w-2xl text-5xl font-black leading-[1.03] tracking-tight text-white md:text-7xl">
-                Đang thèm bánh tráng?
+                Đang thèm ăn vặt?
                 <br />
-                Đặt liền cho nóng.
+                Đặt món ngay.
               </h1>
 
               <p className="mt-6 max-w-xl text-lg font-bold leading-8 text-white/90">
@@ -382,28 +382,33 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-        <div className="rounded-[44px] bg-[#E8FFF1] p-8 md:p-12">
-          <p className="text-sm font-black uppercase tracking-wide text-[#00B14F]">
-            Tạo cảm giác tin trước khi đặt
-          </p>
+      <section className="mx-auto max-w-7xl px-4 py-10 md:px-8">
+  <div className="rounded-[32px] bg-[#E8FFF1] p-5 md:p-8">
+    <p className="text-sm font-black uppercase tracking-wide text-[#00B14F]">
+      Khách thích vì
+    </p>
 
-          <h2 className="mt-3 text-4xl font-black tracking-tight text-[#06113C]">
-            Khách ở lại lâu hơn khi thấy món thật, video thật và đơn thật
-          </h2>
+    <h2 className="mt-2 text-3xl font-black leading-tight text-[#06113C] md:text-4xl">
+      Xem món rõ, đặt nhanh, không cần nhắn hỏi giá
+    </h2>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-4">
-            {trustItems.map((item) => (
-              <div
-                key={item}
-                className="rounded-[28px] bg-white p-5 font-black leading-7 text-[#06113C] shadow-lg shadow-neutral-950/5"
-              >
-                ✓ {item}
-              </div>
-            ))}
-          </div>
+    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {[
+        "Hình món rõ ràng",
+        "Có giá từng món",
+        "Chọn topping dễ",
+        "Đặt trực tiếp trên web",
+      ].map((item) => (
+        <div
+          key={item}
+          className="rounded-2xl bg-white p-4 text-sm font-black text-[#06113C] shadow-sm"
+        >
+          ✓ {item}
         </div>
-      </section>
+      ))}
+    </div>
+  </div>
+</section>
 
       <section id="video" className="mx-auto max-w-7xl px-4 py-16 md:px-8">
         <div className="mb-8">
@@ -411,9 +416,9 @@ export default async function HomePage() {
             Video thật từ quán
           </p>
 
-          <h2 className="mt-2 text-4xl font-black tracking-tight text-[#06113C]">
-            Xem quán làm món trước khi đặt
-          </h2>
+          <h2 className="mt-2 text-3xl font-black tracking-tight text-[#06113C] md:text-4xl">
+  Chọn món nhanh như app giao đồ ăn
+</h2>
 
           <p className="mt-3 max-w-2xl font-semibold leading-7 text-neutral-600">
             Video giúp khách biết món trông như thế nào, cách quán làm ra sao

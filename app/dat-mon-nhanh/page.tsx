@@ -14,12 +14,14 @@ type Product = {
   description: string | null;
   is_sold_out?: boolean | null;
   category?: string | null;
+  topping_category?: string | null;
 };
 
 type Topping = {
   id: string;
   name: string;
   price: number;
+  category?: string | null;
 };
 
 type CartItem = Product & {
@@ -147,14 +149,14 @@ export default function DatMonNhanhPage() {
       supabase
         .from("products")
         .select(
-          "id,name,slug,price,badge,image_url,description,is_sold_out,category"
+          "id,name,slug,price,badge,image_url,description,is_sold_out,category,topping_category"
         )
         .eq("is_active", true)
         .order("sort_order", { ascending: true }),
 
       supabase
         .from("toppings")
-        .select("id,name,price")
+        .select("id,name,price,category")
         .eq("is_active", true)
         .order("sort_order", { ascending: true }),
 
@@ -228,7 +230,9 @@ export default function DatMonNhanhPage() {
       setCustomerAddress(customer.last_address || "");
       setPaymentMethod(customer.last_payment_method || "cod");
 
-      setCustomerFoundMessage("Đã tìm thấy thông tin cũ, hệ thống tự điền giúp bạn.");
+      setCustomerFoundMessage(
+        "Đã tìm thấy thông tin cũ, hệ thống tự điền giúp bạn."
+      );
     } else {
       setCustomerId("");
       setCustomerFoundMessage("Khách mới, thông tin sẽ được lưu sau khi đặt.");
@@ -422,6 +426,19 @@ export default function DatMonNhanhPage() {
     return toppings.filter((item) => selectedToppingIds.includes(item.id));
   }, [toppings, selectedToppingIds]);
 
+  const visibleToppings = useMemo(() => {
+    if (!selectedProduct) return [];
+
+    const productToppingCategory =
+      selectedProduct.topping_category || "Topping bánh tráng";
+
+    return toppings.filter(
+      (topping) =>
+        topping.category === productToppingCategory ||
+        topping.category === "Topping dùng chung"
+    );
+  }, [toppings, selectedProduct]);
+
   const selectedProductTotal = useMemo(() => {
     if (!selectedProduct) return 0;
 
@@ -434,7 +451,8 @@ export default function DatMonNhanhPage() {
   }, [selectedProduct, selectedToppings]);
 
   const isShopOpen =
-    shopSettings?.order_status === "closed" || shopSettings?.order_status === "paused"
+    shopSettings?.order_status === "closed" ||
+    shopSettings?.order_status === "paused"
       ? false
       : shopSettings?.is_open === false
       ? false
@@ -445,7 +463,9 @@ export default function DatMonNhanhPage() {
 
     if (subtotal < minOrder) {
       alert(
-        `Mã này cần đơn tối thiểu ${minOrder.toLocaleString("vi-VN")}đ để áp dụng.`
+        `Mã này cần đơn tối thiểu ${minOrder.toLocaleString(
+          "vi-VN"
+        )}đ để áp dụng.`
       );
       return;
     }
@@ -540,30 +560,28 @@ export default function DatMonNhanhPage() {
       const customer = await upsertCustomer();
       const orderCode = `AVNT${Date.now().toString().slice(-6)}`;
 
-      const orderPayload = {
-        order_code: orderCode,
-        customer_id: customer.id,
-        customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim(),
-        customer_address: customerAddress.trim(),
-        note: note.trim(),
-        subtotal,
-        shipping_fee: shippingFee,
-        discount_amount: discountAmount,
-        coupon_code: selectedCoupon?.code || null,
-        total,
-        status: paymentMethod === "momo" ? "waiting_payment" : "new",
-        source: "website",
-        payment_method: paymentMethod,
-        payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
-        delivery_distance_km: deliveryDistanceKm,
-        delivery_area: selectedShippingZone?.name || "Quán xác nhận",
-        delivery_status: "pending",
-      };
-
       const { data: order, error: orderError } = await supabase
         .from("orders")
-        .insert(orderPayload)
+        .insert({
+          order_code: orderCode,
+          customer_id: customer.id,
+          customer_name: customerName.trim(),
+          customer_phone: customerPhone.trim(),
+          customer_address: customerAddress.trim(),
+          note: note.trim(),
+          subtotal,
+          shipping_fee: shippingFee,
+          discount_amount: discountAmount,
+          coupon_code: selectedCoupon?.code || null,
+          total,
+          status: paymentMethod === "momo" ? "waiting_payment" : "new",
+          source: "website",
+          payment_method: paymentMethod,
+          payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
+          delivery_distance_km: deliveryDistanceKm,
+          delivery_area: selectedShippingZone?.name || "Quán xác nhận",
+          delivery_status: "pending",
+        })
         .select()
         .single();
 
@@ -583,6 +601,7 @@ export default function DatMonNhanhPage() {
           id: topping.id,
           name: topping.name,
           price: topping.price,
+          category: topping.category || null,
         })),
       }));
 
@@ -620,7 +639,7 @@ export default function DatMonNhanhPage() {
 
       router.push(`/tra-cuu-don?code=${orderCode}`);
     } catch (error) {
-      console.error(error);
+      console.error("CREATE ORDER ERROR:", error);
       alert("Lỗi tạo đơn hàng. Anh thử lại giúp em.");
     } finally {
       setSubmitting(false);
@@ -868,29 +887,35 @@ export default function DatMonNhanhPage() {
             <div className="mt-6">
               <p className="font-black text-[#06113C]">Chọn topping</p>
 
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {toppings.map((topping) => {
-                  const active = selectedToppingIds.includes(topping.id);
+              {visibleToppings.length === 0 ? (
+                <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
+                  Món này chưa có topping phù hợp.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {visibleToppings.map((topping) => {
+                    const active = selectedToppingIds.includes(topping.id);
 
-                  return (
-                    <button
-                      key={topping.id}
-                      type="button"
-                      onClick={() => toggleTopping(topping.id)}
-                      className={`rounded-2xl border px-4 py-4 text-left font-black ${
-                        active
-                          ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
-                          : "border-black/10 bg-white text-[#06113C]"
-                      }`}
-                    >
-                      <span>{topping.name}</span>
-                      <span className="block text-sm text-neutral-500">
-                        +{Number(topping.price).toLocaleString("vi-VN")}đ
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                    return (
+                      <button
+                        key={topping.id}
+                        type="button"
+                        onClick={() => toggleTopping(topping.id)}
+                        className={`rounded-2xl border px-4 py-4 text-left font-black ${
+                          active
+                            ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
+                            : "border-black/10 bg-white text-[#06113C]"
+                        }`}
+                      >
+                        <span>{topping.name}</span>
+                        <span className="block text-sm text-neutral-500">
+                          +{Number(topping.price).toLocaleString("vi-VN")}đ
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="mt-6">
@@ -952,70 +977,70 @@ export default function DatMonNhanhPage() {
             </div>
 
             <div className="mt-5 space-y-3">
-  {cart.map((item) => (
-    <div key={item.cartKey} className="rounded-3xl bg-[#F5FFF8] p-4">
-      <div className="flex items-start gap-3">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white">
-          <img
-            src={item.image_url || "/images/hero.jpg"}
-            alt={item.name}
-            className="h-full w-full object-cover"
-          />
-        </div>
+              {cart.map((item) => (
+                <div key={item.cartKey} className="rounded-3xl bg-[#F5FFF8] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-white">
+                      <img
+                        src={item.image_url || "/images/hero.jpg"}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
 
-        <div className="flex flex-1 items-start justify-between gap-3">
-          <div className="flex-1">
-            <p className="font-black text-[#06113C]">{item.name}</p>
+                    <div className="flex flex-1 items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="font-black text-[#06113C]">{item.name}</p>
 
-            {item.selectedToppings.length > 0 && (
-              <p className="mt-1 text-xs font-bold text-neutral-500">
-                Topping:{" "}
-                {item.selectedToppings
-                  .map((topping) => topping.name)
-                  .join(", ")}
-              </p>
-            )}
+                        {item.selectedToppings.length > 0 && (
+                          <p className="mt-1 text-xs font-bold text-neutral-500">
+                            Topping:{" "}
+                            {item.selectedToppings
+                              .map((topping) => topping.name)
+                              .join(", ")}
+                          </p>
+                        )}
 
-            <p className="mt-1 text-xs font-bold text-neutral-500">
-              Độ cay: {item.spicyLevel}
-            </p>
+                        <p className="mt-1 text-xs font-bold text-neutral-500">
+                          Độ cay: {item.spicyLevel}
+                        </p>
 
-            {item.itemNote && (
-              <p className="mt-1 text-xs font-bold text-neutral-500">
-                Ghi chú: {item.itemNote}
-              </p>
-            )}
+                        {item.itemNote && (
+                          <p className="mt-1 text-xs font-bold text-neutral-500">
+                            Ghi chú: {item.itemNote}
+                          </p>
+                        )}
 
-            <p className="mt-1 text-sm font-bold text-[#00B14F]">
-              {(getItemUnitTotal(item) * item.quantity).toLocaleString(
-                "vi-VN"
-              )}
-              đ
-            </p>
-          </div>
+                        <p className="mt-1 text-sm font-bold text-[#00B14F]">
+                          {(getItemUnitTotal(item) * item.quantity).toLocaleString(
+                            "vi-VN"
+                          )}
+                          đ
+                        </p>
+                      </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => decreaseItem(item.cartKey)}
-              className="h-8 w-8 rounded-full bg-white font-black"
-            >
-              -
-            </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => decreaseItem(item.cartKey)}
+                          className="h-8 w-8 rounded-full bg-white font-black"
+                        >
+                          -
+                        </button>
 
-            <span className="font-black">{item.quantity}</span>
+                        <span className="font-black">{item.quantity}</span>
 
-            <button
-              onClick={() => increaseItem(item.cartKey)}
-              className="h-8 w-8 rounded-full bg-[#00B14F] font-black text-white"
-            >
-              +
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  ))}
-</div>
+                        <button
+                          onClick={() => increaseItem(item.cartKey)}
+                          className="h-8 w-8 rounded-full bg-[#00B14F] font-black text-white"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
 
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
               <p className="text-xl font-black text-[#06113C]">
@@ -1165,7 +1190,10 @@ export default function DatMonNhanhPage() {
               </div>
 
               <div className="mt-3 flex justify-between text-sm font-bold text-white/70">
-                <span>Ship {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}</span>
+                <span>
+                  Ship{" "}
+                  {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}
+                </span>
                 <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
               </div>
 
@@ -1203,7 +1231,9 @@ export default function DatMonNhanhPage() {
         <div className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:items-center md:justify-center">
           <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-black text-[#06113C]">Chọn ưu đãi</h2>
+              <h2 className="text-2xl font-black text-[#06113C]">
+                Chọn ưu đãi
+              </h2>
 
               <button
                 onClick={() => setCouponOpen(false)}
@@ -1242,7 +1272,9 @@ export default function DatMonNhanhPage() {
                       <p className="mt-1 text-sm font-bold text-[#00B14F]">
                         {getCouponType(coupon).includes("percent")
                           ? `Giảm ${getCouponValue(coupon)}%`
-                          : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`}
+                          : `Giảm ${getCouponValue(coupon).toLocaleString(
+                              "vi-VN"
+                            )}đ`}
                       </p>
 
                       {minOrder > 0 && (

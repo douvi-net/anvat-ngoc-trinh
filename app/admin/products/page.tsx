@@ -16,6 +16,7 @@ type Product = {
   is_sold_out: boolean;
   sort_order: number;
   category: string | null;
+  topping_category: string | null;
 };
 
 type ProductForm = {
@@ -27,6 +28,7 @@ type ProductForm = {
   badge: string;
   sort_order: number;
   category: string;
+  topping_category: string;
 };
 
 type MediaItem = {
@@ -43,6 +45,7 @@ const emptyForm: ProductForm = {
   badge: "MÓN NGON",
   sort_order: 99,
   category: "Món ngon",
+  topping_category: "Topping bánh tráng",
 };
 
 const BUCKET_NAME = "product-images";
@@ -83,7 +86,7 @@ export default function AdminProductsPage() {
     const { data, error } = await supabase
       .from("products")
       .select(
-        "id,name,slug,description,price,image_url,badge,category,is_active,is_sold_out,sort_order"
+        "id,name,slug,description,price,image_url,badge,category,topping_category,is_active,is_sold_out,sort_order"
       )
       .order("sort_order", { ascending: true });
 
@@ -120,6 +123,7 @@ export default function AdminProductsPage() {
       badge: product.badge || "MÓN NGON",
       sort_order: Number(product.sort_order || 99),
       category: product.category || "Món ngon",
+      topping_category: product.topping_category || "Topping bánh tráng",
     });
 
     resetFileInput();
@@ -260,6 +264,7 @@ export default function AdminProductsPage() {
       sort_order: Number(form.sort_order || 99),
       updated_at: new Date().toISOString(),
       category: form.category.trim() || "Món ngon",
+      topping_category: form.topping_category.trim() || "Topping bánh tráng",
     };
 
     if (editingProduct) {
@@ -536,6 +541,21 @@ export default function AdminProductsPage() {
   placeholder="Danh mục: Bánh tráng, Trà sữa, Món hot..."
   className="w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
 />
+<select
+  value={form.topping_category}
+  onChange={(e) =>
+    setForm((prev) => ({
+      ...prev,
+      topping_category: e.target.value,
+    }))
+  }
+  className="w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+>
+  <option value="Topping bánh tráng">Topping bánh tráng</option>
+  <option value="Topping nước">Topping nước</option>
+  <option value="Topping trà sữa">Topping trà sữa</option>
+  <option value="Topping dùng chung">Topping dùng chung</option>
+</select>
             <input
               type="number"
               value={form.sort_order}

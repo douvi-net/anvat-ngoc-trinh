@@ -31,7 +31,16 @@ type CartItem = Product & {
   spicyLevel: string;
   itemNote: string;
 };
-
+type ShippingPromotion = {
+  id: string;
+  name: string;
+  promotion_type: string;
+  min_order_value: number;
+  max_distance_km: number;
+  discount_value: number;
+  is_active: boolean;
+  sort_order: number;
+};
 type Customer = {
   id: string;
   name: string;
@@ -93,7 +102,7 @@ export default function DatMonNhanhPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
-
+  const [shippingPromotions, setShippingPromotions] = useState<ShippingPromotion[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -145,6 +154,7 @@ export default function DatMonNhanhPage() {
       settingResult,
       bannerResult,
       couponResult,
+      promotionResult,
     ] = await Promise.all([
       supabase
         .from("products")
@@ -175,6 +185,11 @@ export default function DatMonNhanhPage() {
         .order("sort_order", { ascending: true }),
 
       supabase.from("coupons").select("*"),
+      supabase
+  .from("shipping_promotions")
+  .select("*")
+  .eq("is_active", true)
+  .order("sort_order", { ascending: true }),
     ]);
 
     setProducts((productResult.data || []) as Product[]);
@@ -187,7 +202,9 @@ export default function DatMonNhanhPage() {
       (item) => item.is_active !== false
     );
     setCoupons(activeCoupons);
-
+    setShippingPromotions(
+      (promotionResult.data || []) as ShippingPromotion[]
+    );
     setLoading(false);
   }
 
@@ -420,7 +437,46 @@ export default function DatMonNhanhPage() {
   }
 
   const discountAmount = calculateDiscount(selectedCoupon);
-  const total = Math.max(0, subtotal + shippingFee - discountAmount);
+
+const validShippingPromotions = shippingPromotions.filter((promo) => {
+  const maxDistance = Number(promo.max_distance_km || 0);
+
+  return (
+    subtotal >= Number(promo.min_order_value || 0) &&
+    (maxDistance <= 0 || deliveryDistanceKm <= maxDistance)
+  );
+});
+
+const bestShippingPromotion =
+  validShippingPromotions
+    .map((promo) => {
+      let promoDiscount = 0;
+
+      if (promo.promotion_type === "free_ship") {
+        promoDiscount = shippingFee;
+      }
+
+      if (promo.promotion_type === "ship_percent") {
+        promoDiscount = Math.floor(
+          shippingFee * (Number(promo.discount_value || 0) / 100)
+        );
+      }
+
+      if (promo.promotion_type === "fixed") {
+        promoDiscount = Number(promo.discount_value || 0);
+      }
+
+      return {
+        ...promo,
+        discountAmount: Math.min(promoDiscount, shippingFee),
+      };
+    })
+    .sort((a, b) => b.discountAmount - a.discountAmount)[0] || null;
+
+const shippingDiscount = bestShippingPromotion?.discountAmount || 0;
+const finalShippingFee = Math.max(0, shippingFee - shippingDiscount);
+
+const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
 
   const selectedToppings = useMemo(() => {
     return toppings.filter((item) => selectedToppingIds.includes(item.id));
@@ -570,8 +626,8 @@ export default function DatMonNhanhPage() {
           customer_address: customerAddress.trim(),
           note: note.trim(),
           subtotal,
-          shipping_fee: shippingFee,
-          discount_amount: discountAmount,
+          shipping_fee: finalShippingFee,
+discount_amount: discountAmount + shippingDiscount,
           coupon_code: selectedCoupon?.code || null,
           total,
           status: paymentMethod === "momo" ? "waiting_payment" : "new",
@@ -1194,9 +1250,28 @@ export default function DatMonNhanhPage() {
                   Ship{" "}
                   {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}
                 </span>
-                <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
+                {shippingDiscount > 0 ? (
+  <div className="text-right">
+    <div className="text-xs text-white/40 line-through">
+      {shippingFee.toLocaleString("vi-VN")}đ
+    </div>
+    <div className="font-black text-[#00B14F]">
+      {finalShippingFee.toLocaleString("vi-VN")}đ
+    </div>
+  </div>
+) : (
+  <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
+)}
               </div>
-
+              {bestShippingPromotion && shippingDiscount > 0 && (
+  <div className="mt-3 rounded-2xl border border-[#00B14F]/30 bg-[#00B14F]/10 p-3 text-sm font-bold text-[#00B14F]">
+    <div>🎁 Đã áp dụng ưu đãi tốt nhất</div>
+    <div className="mt-1 text-white/80">
+      {bestShippingPromotion.name} - Giảm{" "}
+      {shippingDiscount.toLocaleString("vi-VN")}đ phí ship
+    </div>
+  </div>
+)}
               {discountAmount > 0 && (
                 <div className="mt-3 flex justify-between text-sm font-bold text-[#00B14F]">
                   <span>Giảm giá</span>

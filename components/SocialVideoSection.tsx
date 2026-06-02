@@ -4,17 +4,17 @@ const videos = [
   {
     title: "POV: khách thấy 1 món, tụi mình thấy 20 bill 😵",
     platform: "TikTok",
-    url: "https://www.tiktok.com/@trungvts",
+    url: "https://www.tiktok.com/@anvatngoctrinh",
   },
   {
     title: "Một ngày làm bánh tráng ở quán ăn vặt Quận 6",
     platform: "Facebook",
-    url: "https://www.facebook.com/",
+    url: "https://www.facebook.com/anvatngoctrinhq1",
   },
   {
     title: "Cuốn đỏ mỡ hành khách hỏi mỗi ngày",
     platform: "YouTube",
-    url: "https://www.youtube.com/",
+    url: "https://www.youtube.com/@anvatngoctrinh",
   },
 ];
 

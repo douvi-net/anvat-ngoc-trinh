@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Product = {
@@ -11,8 +12,8 @@ type Product = {
   badge: string | null;
   image_url: string | null;
   description: string | null;
-  is_sold_out: boolean | null;
-  category: string | null;
+  is_sold_out?: boolean | null;
+  category?: string | null;
 };
 
 type Topping = {
@@ -27,7 +28,15 @@ type CartItem = Product & {
   selectedToppings: Topping[];
   spicyLevel: string;
   itemNote: string;
-  itemTotal: number;
+};
+
+type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  last_address: string | null;
+  last_payment_method: string | null;
+  total_orders: number | null;
 };
 
 type ShippingZone = {
@@ -39,11 +48,13 @@ type ShippingZone = {
 };
 
 type ShopSettings = {
-  id: string;
+  id: number | string;
   shop_name: string;
-  is_open: boolean;
-  open_time: string;
-  close_time: string;
+  hotline?: string | null;
+  open_time?: string | null;
+  close_time?: string | null;
+  order_status?: string | null;
+  is_open?: boolean | null;
 };
 
 type Banner = {
@@ -72,6 +83,8 @@ type Coupon = {
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
 
 export default function DatMonNhanhPage() {
+  const router = useRouter();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [toppings, setToppings] = useState<Topping[]>([]);
   const [shippingZones, setShippingZones] = useState<ShippingZone[]>([]);
@@ -79,27 +92,31 @@ export default function DatMonNhanhPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
 
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedToppingIds, setSelectedToppingIds] = useState<string[]>([]);
   const [selectedSpicyLevel, setSelectedSpicyLevel] = useState("Cay vừa");
   const [itemNote, setItemNote] = useState("");
 
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [customerName, setCustomerName] = useState("");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [couponOpen, setCouponOpen] = useState(false);
+
+  const [customerId, setCustomerId] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [note, setNote] = useState("");
-
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
-  const [couponOpen, setCouponOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [checkingCustomer, setCheckingCustomer] = useState(false);
+  const [customerFoundMessage, setCustomerFoundMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
+  const [cartAnimate, setCartAnimate] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -120,12 +137,12 @@ export default function DatMonNhanhPage() {
 
   async function fetchInitialData() {
     const [
-      { data: productData },
-      { data: toppingData },
-      { data: zoneData },
-      { data: settingsData },
-      { data: bannerData },
-      { data: couponData },
+      productResult,
+      toppingResult,
+      zoneResult,
+      settingResult,
+      bannerResult,
+      couponResult,
     ] = await Promise.all([
       supabase
         .from("products")
@@ -158,13 +175,13 @@ export default function DatMonNhanhPage() {
       supabase.from("coupons").select("*"),
     ]);
 
-    setProducts((productData || []) as Product[]);
-    setToppings((toppingData || []) as Topping[]);
-    setShippingZones((zoneData || []) as ShippingZone[]);
-    setShopSettings((settingsData || null) as ShopSettings | null);
-    setBanners((bannerData || []) as Banner[]);
+    setProducts((productResult.data || []) as Product[]);
+    setToppings((toppingResult.data || []) as Topping[]);
+    setShippingZones((zoneResult.data || []) as ShippingZone[]);
+    setShopSettings((settingResult.data || null) as ShopSettings | null);
+    setBanners((bannerResult.data || []) as Banner[]);
 
-    const activeCoupons = ((couponData || []) as Coupon[]).filter(
+    const activeCoupons = ((couponResult.data || []) as Coupon[]).filter(
       (item) => item.is_active !== false
     );
     setCoupons(activeCoupons);
@@ -191,34 +208,139 @@ export default function DatMonNhanhPage() {
   }
 
   async function findCustomerByPhone(phone: string) {
-    try {
-      setCheckingCustomer(true);
+    const cleanPhone = phone.trim();
+    if (cleanPhone.length < 9) return;
 
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("phone", phone)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    setCheckingCustomer(true);
+    setCustomerFoundMessage("");
 
-      if (error) return;
+    const { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("phone", cleanPhone)
+      .maybeSingle();
 
-      if (data) {
-        if (data.name) setCustomerName(data.name);
-        if (data.last_address) setCustomerAddress(data.last_address);
-        if (data.last_payment_method) setPaymentMethod(data.last_payment_method);
+    if (!error && data) {
+      const customer = data as Customer;
 
-        showToast("Đã tìm thấy thông tin khách cũ");
-      }
-    } finally {
-      setCheckingCustomer(false);
+      setCustomerId(customer.id);
+      setCustomerName(customer.name || "");
+      setCustomerAddress(customer.last_address || "");
+      setPaymentMethod(customer.last_payment_method || "cod");
+
+      setCustomerFoundMessage("Đã tìm thấy thông tin cũ, hệ thống tự điền giúp bạn.");
+    } else {
+      setCustomerId("");
+      setCustomerFoundMessage("Khách mới, thông tin sẽ được lưu sau khi đặt.");
     }
+
+    setCheckingCustomer(false);
   }
 
   function showToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 1800);
+  }
+
+  function triggerCartAnimation() {
+    setCartAnimate(true);
+    window.setTimeout(() => setCartAnimate(false), 420);
+  }
+
+  function openProductOptions(product: Product) {
+    if (product.is_sold_out) {
+      showToast("Món này đang tạm hết");
+      return;
+    }
+
+    setSelectedProduct(product);
+    setSelectedToppingIds([]);
+    setSelectedSpicyLevel("Cay vừa");
+    setItemNote("");
+  }
+
+  function toggleTopping(toppingId: string) {
+    setSelectedToppingIds((prev) =>
+      prev.includes(toppingId)
+        ? prev.filter((id) => id !== toppingId)
+        : [...prev, toppingId]
+    );
+  }
+
+  function getItemUnitTotal(item: CartItem) {
+    const toppingTotal = item.selectedToppings.reduce(
+      (sum, topping) => sum + Number(topping.price),
+      0
+    );
+
+    return Number(item.price) + toppingTotal;
+  }
+
+  function addSelectedProductToCart() {
+    if (!selectedProduct) return;
+
+    const selectedToppings = toppings.filter((topping) =>
+      selectedToppingIds.includes(topping.id)
+    );
+
+    const cartKey = [
+      selectedProduct.id,
+      [...selectedToppingIds].sort().join("-"),
+      selectedSpicyLevel,
+      itemNote.trim(),
+    ].join("_");
+
+    setCart((prev) => {
+      const existing = prev.find((item) => item.cartKey === cartKey);
+
+      if (existing) {
+        return prev.map((item) =>
+          item.cartKey === cartKey
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          ...selectedProduct,
+          cartKey,
+          quantity: 1,
+          selectedToppings,
+          spicyLevel: selectedSpicyLevel,
+          itemNote,
+        },
+      ];
+    });
+
+    showToast(`Đã thêm ${selectedProduct.name} vào giỏ`);
+    triggerCartAnimation();
+    setSelectedProduct(null);
+  }
+
+  function increaseItem(cartKey: string) {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.cartKey === cartKey
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      )
+    );
+    triggerCartAnimation();
+  }
+
+  function decreaseItem(cartKey: string) {
+    setCart((prev) =>
+      prev
+        .map((item) =>
+          item.cartKey === cartKey
+            ? { ...item, quantity: item.quantity - 1 }
+            : item
+        )
+        .filter((item) => item.quantity > 0)
+    );
+    triggerCartAnimation();
   }
 
   const categories = useMemo(() => {
@@ -228,40 +350,34 @@ export default function DatMonNhanhPage() {
 
   const filteredProducts = useMemo(() => {
     if (selectedCategory === "Tất cả") return products;
+
     return products.filter(
       (item) => (item.category || "Món ngon") === selectedCategory
     );
   }, [products, selectedCategory]);
 
-  const selectedToppings = useMemo(() => {
-    return toppings.filter((item) => selectedToppingIds.includes(item.id));
-  }, [toppings, selectedToppingIds]);
-
-  const selectedItemTotal = useMemo(() => {
-    if (!selectedProduct) return 0;
-
-    const toppingTotal = selectedToppings.reduce(
-      (sum, item) => sum + Number(item.price),
+  const subtotal = useMemo(() => {
+    return cart.reduce(
+      (sum, item) => sum + getItemUnitTotal(item) * item.quantity,
       0
     );
+  }, [cart]);
 
-    return Number(selectedProduct.price) + toppingTotal;
-  }, [selectedProduct, selectedToppings]);
+  const cartCount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cart]);
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + item.itemTotal * item.quantity,
-    0
-  );
-
-  const shippingFee = useMemo(() => {
-    const zone = shippingZones.find(
-      (item) =>
-        deliveryDistanceKm >= Number(item.min_km) &&
-        deliveryDistanceKm <= Number(item.max_km)
+  const selectedShippingZone = useMemo(() => {
+    return (
+      shippingZones.find(
+        (zone) =>
+          deliveryDistanceKm >= Number(zone.min_km) &&
+          deliveryDistanceKm <= Number(zone.max_km)
+      ) || null
     );
-
-    return zone ? Number(zone.fee) : 0;
   }, [shippingZones, deliveryDistanceKm]);
+
+  const shippingFee = selectedShippingZone?.fee || 15000;
 
   function getCouponValue(coupon: Coupon) {
     return Number(coupon.discount_value || coupon.value || 0);
@@ -281,12 +397,12 @@ export default function DatMonNhanhPage() {
     const minOrder = getCouponMinOrder(coupon);
     if (subtotal < minOrder) return 0;
 
-    const couponType = getCouponType(coupon);
     const value = getCouponValue(coupon);
+    const type = getCouponType(coupon);
 
     let discount = 0;
 
-    if (couponType === "percent" || couponType === "percentage") {
+    if (type === "percent" || type === "percentage") {
       discount = Math.floor((subtotal * value) / 100);
 
       if (coupon.max_discount) {
@@ -302,49 +418,27 @@ export default function DatMonNhanhPage() {
   const discountAmount = calculateDiscount(selectedCoupon);
   const total = Math.max(0, subtotal + shippingFee - discountAmount);
 
-  function openProduct(product: Product) {
-    if (product.is_sold_out) {
-      showToast("Món này đang tạm hết");
-      return;
-    }
+  const selectedToppings = useMemo(() => {
+    return toppings.filter((item) => selectedToppingIds.includes(item.id));
+  }, [toppings, selectedToppingIds]);
 
-    setSelectedProduct(product);
-    setSelectedToppingIds([]);
-    setSelectedSpicyLevel("Cay vừa");
-    setItemNote("");
-  }
+  const selectedProductTotal = useMemo(() => {
+    if (!selectedProduct) return 0;
 
-  function addSelectedProductToCart() {
-    if (!selectedProduct) return;
-
-    const cartKey = `${selectedProduct.id}-${Date.now()}-${Math.random()}`;
-
-    const item: CartItem = {
-      ...selectedProduct,
-      cartKey,
-      quantity: 1,
-      selectedToppings,
-      spicyLevel: selectedSpicyLevel,
-      itemNote,
-      itemTotal: selectedItemTotal,
-    };
-
-    setCart((prev) => [...prev, item]);
-    setSelectedProduct(null);
-    showToast(`Đã thêm ${selectedProduct.name}`);
-  }
-
-  function changeQuantity(cartKey: string, amount: number) {
-    setCart((prev) =>
-      prev
-        .map((item) =>
-          item.cartKey === cartKey
-            ? { ...item, quantity: Math.max(0, item.quantity + amount) }
-            : item
-        )
-        .filter((item) => item.quantity > 0)
+    const toppingTotal = selectedToppings.reduce(
+      (sum, topping) => sum + Number(topping.price),
+      0
     );
-  }
+
+    return Number(selectedProduct.price) + toppingTotal;
+  }, [selectedProduct, selectedToppings]);
+
+  const isShopOpen =
+    shopSettings?.order_status === "closed" || shopSettings?.order_status === "paused"
+      ? false
+      : shopSettings?.is_open === false
+      ? false
+      : true;
 
   function applyCoupon(coupon: Coupon) {
     const minOrder = getCouponMinOrder(coupon);
@@ -361,18 +455,80 @@ export default function DatMonNhanhPage() {
     showToast("Đã áp dụng ưu đãi");
   }
 
-  function makeOrderCode() {
-    return `AVNT${Date.now().toString().slice(-6)}`;
+  async function upsertCustomer() {
+    const cleanPhone = customerPhone.trim();
+
+    if (customerId) {
+      const { data, error } = await supabase
+        .from("customers")
+        .update({
+          name: customerName.trim(),
+          last_address: customerAddress.trim(),
+          last_payment_method: paymentMethod,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", customerId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Customer;
+    }
+
+    const { data: existingCustomer } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("phone", cleanPhone)
+      .maybeSingle();
+
+    if (existingCustomer) {
+      const customer = existingCustomer as Customer;
+
+      const { data, error } = await supabase
+        .from("customers")
+        .update({
+          name: customerName.trim(),
+          last_address: customerAddress.trim(),
+          last_payment_method: paymentMethod,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", customer.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Customer;
+    }
+
+    const { data, error } = await supabase
+      .from("customers")
+      .insert({
+        name: customerName.trim(),
+        phone: cleanPhone,
+        last_address: customerAddress.trim(),
+        last_payment_method: paymentMethod,
+        total_orders: 0,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Customer;
   }
 
   async function submitOrder() {
+    if (!isShopOpen) {
+      alert("Hiện tại quán chưa nhận đơn. Anh quay lại sau giúp em nha.");
+      return;
+    }
+
     if (cart.length === 0) {
-      alert("Bạn chưa chọn món.");
+      alert("Anh chọn ít nhất 1 món trước khi đặt nha.");
       return;
     }
 
     if (!customerPhone.trim() || !customerName.trim() || !customerAddress.trim()) {
-      alert("Nhập đầy đủ số điện thoại, tên và địa chỉ.");
+      alert("Anh nhập đủ số điện thoại, tên và địa chỉ giúp em nha.");
       return;
     }
 
@@ -381,66 +537,68 @@ export default function DatMonNhanhPage() {
     try {
       saveCustomerLocal();
 
-      const orderCode = makeOrderCode();
+      const customer = await upsertCustomer();
+      const orderCode = `AVNT${Date.now().toString().slice(-6)}`;
 
-      const { data: customerData } = await supabase
-        .from("customers")
-        .upsert(
-          {
-            name: customerName.trim(),
-            phone: customerPhone.trim(),
-            last_address: customerAddress.trim(),
-            last_payment_method: paymentMethod,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: "phone",
-          }
-        )
-        .select()
-        .single();
+      const orderPayload = {
+        order_code: orderCode,
+        customer_id: customer.id,
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+        customer_address: customerAddress.trim(),
+        note: note.trim(),
+        subtotal,
+        shipping_fee: shippingFee,
+        discount_amount: discountAmount,
+        coupon_code: selectedCoupon?.code || null,
+        total,
+        status: paymentMethod === "momo" ? "waiting_payment" : "new",
+        source: "website",
+        payment_method: paymentMethod,
+        payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
+        delivery_distance_km: deliveryDistanceKm,
+        delivery_area: selectedShippingZone?.name || "Quán xác nhận",
+        delivery_status: "pending",
+      };
 
-      const { data: orderData, error: orderError } = await supabase
+      const { data: order, error: orderError } = await supabase
         .from("orders")
-        .insert({
-          order_code: orderCode,
-          customer_id: customerData?.id || null,
-          customer_name: customerName.trim(),
-          customer_phone: customerPhone.trim(),
-          customer_address: customerAddress.trim(),
-          subtotal,
-          shipping_fee: shippingFee,
-          discount_amount: discountAmount,
-          coupon_code: selectedCoupon?.code || null,
-          total,
-          status: paymentMethod === "cod" ? "new" : "waiting_payment",
-          source: "website",
-          payment_method: paymentMethod,
-          payment_status: paymentMethod === "cod" ? "cod" : "pending",
-          note: note.trim(),
-        })
+        .insert(orderPayload)
         .select()
         .single();
 
-      if (orderError) throw orderError;
+      if (orderError || !order) throw orderError;
 
       const orderItems = cart.map((item) => ({
-        order_id: orderData.id,
+        order_id: order.id,
         product_id: item.id,
         product_name: item.name,
         quantity: item.quantity,
-        unit_price: item.price,
-        total: item.itemTotal * item.quantity,
-        toppings: item.selectedToppings,
+        price: getItemUnitTotal(item),
+        unit_price: getItemUnitTotal(item),
+        total: getItemUnitTotal(item) * item.quantity,
+        note: item.itemNote || null,
         spicy_level: item.spicyLevel,
-        note: item.itemNote,
+        toppings: item.selectedToppings.map((topping) => ({
+          id: topping.id,
+          name: topping.name,
+          price: topping.price,
+        })),
       }));
 
-      const { error: itemError } = await supabase
+      const { error: itemsError } = await supabase
         .from("order_items")
         .insert(orderItems);
 
-      if (itemError) throw itemError;
+      if (itemsError) throw itemsError;
+
+      await supabase
+        .from("customers")
+        .update({
+          total_orders: (customer.total_orders || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", customer.id);
 
       await fetch("/api/notify-new-order", {
         method: "POST",
@@ -451,18 +609,19 @@ export default function DatMonNhanhPage() {
           orderCode,
           total,
           paymentMethod,
-          status: paymentMethod === "cod" ? "new" : "waiting_payment",
+          status: paymentMethod === "momo" ? "waiting_payment" : "new",
         }),
       });
 
       setCart([]);
       setNote("");
       setSelectedCoupon(null);
+      setCheckoutOpen(false);
 
-      alert(`Đặt món thành công. Mã đơn: ${orderCode}`);
+      router.push(`/tra-cuu-don?code=${orderCode}`);
     } catch (error) {
       console.error(error);
-      alert("Đặt món thất bại. Kiểm tra lại dữ liệu hoặc Supabase.");
+      alert("Lỗi tạo đơn hàng. Anh thử lại giúp em.");
     } finally {
       setSubmitting(false);
     }
@@ -477,10 +636,10 @@ export default function DatMonNhanhPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F5FFF8] pb-44">
+    <main className="min-h-screen bg-[#F5FFF8] pb-36">
       {toast && (
-        <div className="fixed left-4 top-24 z-[9999] rounded-2xl bg-white px-5 py-4 text-sm font-black text-[#06113C] shadow-2xl">
-          {toast}
+        <div className="fixed left-1/2 top-4 z-[1000] w-[92%] max-w-sm -translate-x-1/2 rounded-2xl bg-[#06113C] px-5 py-4 text-center text-sm font-black text-white shadow-2xl">
+          ✅ {toast}
         </div>
       )}
 
@@ -524,7 +683,7 @@ export default function DatMonNhanhPage() {
                 </span>
 
                 <span className="rounded-full bg-[#E8FFF1] px-3 py-1 text-xs font-black text-[#00B14F]">
-                  {shopSettings?.is_open ? "Đang bán" : "Tạm đóng"}
+                  {isShopOpen ? "Đang bán" : "Tạm đóng"}
                 </span>
 
                 <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-black text-neutral-600">
@@ -559,6 +718,7 @@ export default function DatMonNhanhPage() {
 
                 <div className="p-4">
                   <p className="font-black text-[#06113C]">{banner.title}</p>
+
                   {banner.description && (
                     <p className="mt-1 line-clamp-2 text-sm font-semibold text-neutral-500">
                       {banner.description}
@@ -605,7 +765,7 @@ export default function DatMonNhanhPage() {
               }`}
             >
               <button
-                onClick={() => openProduct(product)}
+                onClick={() => openProductOptions(product)}
                 className="block w-full text-left"
               >
                 <div className="relative h-40 bg-[#E8FFF1] md:h-48">
@@ -655,208 +815,385 @@ export default function DatMonNhanhPage() {
         </div>
       </section>
 
-      <section id="cart-section" className="mx-auto mt-8 max-w-6xl px-4">
-        <div className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
-          <h2 className="text-4xl font-black text-[#06113C]">Giỏ hàng</h2>
+      {cart.length > 0 && (
+        <div className="fixed bottom-[78px] left-0 right-0 z-[900] px-4 md:bottom-5 md:left-1/2 md:max-w-xl md:-translate-x-1/2">
+          <button
+            onClick={() => setCheckoutOpen(true)}
+            className={`flex w-full items-center justify-between rounded-[24px] bg-[#06113C] px-5 py-4 text-white shadow-2xl shadow-black/25 transition active:scale-95 ${
+              cartAnimate ? "scale-[1.02]" : ""
+            }`}
+          >
+            <div className="text-left">
+              <p className="text-xs font-black text-white/60">Giỏ hàng</p>
+              <p className="text-sm font-black">
+                🛒 {cartCount} món · {total.toLocaleString("vi-VN")}đ
+              </p>
+            </div>
 
-          {cart.length === 0 ? (
-            <p className="mt-4 font-semibold text-neutral-500">
-              Chưa có món nào trong giỏ.
-            </p>
-          ) : (
-            <div className="mt-4 space-y-4">
+            <div className="rounded-2xl bg-[#00B14F] px-4 py-2 text-sm font-black">
+              Xem giỏ
+            </div>
+          </button>
+        </div>
+      )}
+
+      {selectedProduct && (
+        <div className="fixed inset-0 z-[999] flex items-end bg-black/50 p-3 backdrop-blur-sm md:items-center md:justify-center">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-[32px] bg-white p-5 shadow-2xl md:max-w-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black text-[#00B14F]">Tùy chọn món</p>
+                <h2 className="mt-1 text-2xl font-black text-[#06113C]">
+                  {selectedProduct.name}
+                </h2>
+                <p className="mt-2 text-xl font-black text-[#00B14F]">
+                  {Number(selectedProduct.price).toLocaleString("vi-VN")}đ
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedProduct(null)}
+                className="rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
+              >
+                ✕
+              </button>
+            </div>
+
+            {selectedProduct.description && (
+              <p className="mt-4 text-sm font-semibold leading-6 text-neutral-600">
+                {selectedProduct.description}
+              </p>
+            )}
+
+            <div className="mt-6">
+              <p className="font-black text-[#06113C]">Chọn topping</p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {toppings.map((topping) => {
+                  const active = selectedToppingIds.includes(topping.id);
+
+                  return (
+                    <button
+                      key={topping.id}
+                      type="button"
+                      onClick={() => toggleTopping(topping.id)}
+                      className={`rounded-2xl border px-4 py-4 text-left font-black ${
+                        active
+                          ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
+                          : "border-black/10 bg-white text-[#06113C]"
+                      }`}
+                    >
+                      <span>{topping.name}</span>
+                      <span className="block text-sm text-neutral-500">
+                        +{Number(topping.price).toLocaleString("vi-VN")}đ
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="font-black text-[#06113C]">Độ cay</p>
+
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {spicyOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setSelectedSpicyLevel(option)}
+                    className={`rounded-2xl px-4 py-3 text-sm font-black ${
+                      selectedSpicyLevel === option
+                        ? "bg-[#00B14F] text-white"
+                        : "bg-[#F5FFF8] text-[#06113C]"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <textarea
+              value={itemNote}
+              onChange={(e) => setItemNote(e.target.value)}
+              placeholder="Ghi chú riêng cho món này"
+              rows={3}
+              className="mt-6 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+            />
+
+            <button
+              onClick={addSelectedProductToCart}
+              className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white"
+            >
+              Thêm vào giỏ · {selectedProductTotal.toLocaleString("vi-VN")}đ
+            </button>
+          </div>
+        </div>
+      )}
+
+      {checkoutOpen && (
+        <div className="fixed inset-0 z-[999] flex items-end bg-black/50 backdrop-blur-sm md:items-center md:justify-center">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 shadow-2xl md:max-w-2xl md:rounded-[32px]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-black text-[#00B14F]">Đơn hàng</p>
+                <h2 className="mt-1 text-3xl font-black text-[#06113C]">
+                  Giỏ món của bạn
+                </h2>
+              </div>
+
+              <button
+                onClick={() => setCheckoutOpen(false)}
+                className="rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-3">
               {cart.map((item) => (
-                <div
-                  key={item.cartKey}
-                  className="flex gap-3 rounded-2xl bg-[#F5FFF8] p-3"
-                >
-                  <div className="h-20 w-20 overflow-hidden rounded-xl bg-white">
-                    {item.image_url && (
-                      <img
-                        src={item.image_url}
-                        alt={item.name}
-                        className="h-full w-full object-cover"
-                      />
-                    )}
-                  </div>
+                <div key={item.cartKey} className="rounded-3xl bg-[#F5FFF8] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="font-black text-[#06113C]">{item.name}</p>
 
-                  <div className="flex-1">
-                    <p className="font-black text-[#06113C]">{item.name}</p>
+                      {item.selectedToppings.length > 0 && (
+                        <p className="mt-1 text-xs font-bold text-neutral-500">
+                          Topping:{" "}
+                          {item.selectedToppings
+                            .map((topping) => topping.name)
+                            .join(", ")}
+                        </p>
+                      )}
 
-                    {item.selectedToppings.length > 0 && (
-                      <p className="mt-1 text-xs font-semibold text-neutral-500">
-                        Topping:{" "}
-                        {item.selectedToppings.map((top) => top.name).join(", ")}
+                      <p className="mt-1 text-xs font-bold text-neutral-500">
+                        Độ cay: {item.spicyLevel}
                       </p>
-                    )}
 
-                    <p className="mt-1 text-xs font-semibold text-neutral-500">
-                      {item.spicyLevel}
-                      {item.itemNote ? ` · ${item.itemNote}` : ""}
-                    </p>
+                      {item.itemNote && (
+                        <p className="mt-1 text-xs font-bold text-neutral-500">
+                          Ghi chú: {item.itemNote}
+                        </p>
+                      )}
 
-                    <p className="mt-2 font-black text-[#00B14F]">
-                      {(item.itemTotal * item.quantity).toLocaleString("vi-VN")}đ
-                    </p>
-                  </div>
+                      <p className="mt-1 text-sm font-bold text-[#00B14F]">
+                        {(getItemUnitTotal(item) * item.quantity).toLocaleString(
+                          "vi-VN"
+                        )}
+                        đ
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => changeQuantity(item.cartKey, -1)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white font-black"
-                    >
-                      -
-                    </button>
-                    <span className="font-black">{item.quantity}</span>
-                    <button
-                      onClick={() => changeQuantity(item.cartKey, 1)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00B14F] font-black text-white"
-                    >
-                      +
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => decreaseItem(item.cartKey)}
+                        className="h-8 w-8 rounded-full bg-white font-black"
+                      >
+                        -
+                      </button>
+
+                      <span className="font-black">{item.quantity}</span>
+
+                      <button
+                        onClick={() => increaseItem(item.cartKey)}
+                        className="h-8 w-8 rounded-full bg-[#00B14F] font-black text-white"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-          )}
 
-          <div className="mt-6">
-            <p className="text-2xl font-black text-[#06113C]">
-              Áp dụng ưu đãi và giảm giá
-            </p>
+            <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
+              <p className="text-xl font-black text-[#06113C]">
+                Áp dụng ưu đãi và giảm giá
+              </p>
 
-            <button
-              type="button"
-              onClick={() => setCouponOpen(true)}
-              className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-4 text-left shadow-sm ring-1 ring-black/10"
-            >
-              <div>
-                <p className="font-black text-[#06113C]">
-                  🎟️{" "}
-                  {selectedCoupon
-                    ? selectedCoupon.title ||
-                      selectedCoupon.name ||
-                      selectedCoupon.code
-                    : "Áp dụng ưu đãi để được giảm giá"}
-                </p>
+              <button
+                type="button"
+                onClick={() => setCouponOpen(true)}
+                className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-4 text-left shadow-sm ring-1 ring-black/10"
+              >
+                <div>
+                  <p className="font-black text-[#06113C]">
+                    🎟️{" "}
+                    {selectedCoupon
+                      ? selectedCoupon.title ||
+                        selectedCoupon.name ||
+                        selectedCoupon.code
+                      : "Áp dụng ưu đãi để được giảm giá"}
+                  </p>
 
-                {selectedCoupon && (
-                  <p className="mt-1 text-sm font-bold text-[#00B14F]">
-                    Giảm {discountAmount.toLocaleString("vi-VN")}đ
+                  {selectedCoupon && (
+                    <p className="mt-1 text-sm font-bold text-[#00B14F]">
+                      Giảm {discountAmount.toLocaleString("vi-VN")}đ
+                    </p>
+                  )}
+                </div>
+
+                <span className="text-2xl font-black">›</span>
+              </button>
+            </div>
+
+            <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
+              <p className="font-black text-[#06113C]">Thông tin khách</p>
+
+              <div className="mt-4 space-y-3">
+                <input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="Số điện thoại"
+                  type="tel"
+                  inputMode="numeric"
+                  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+                />
+
+                {checkingCustomer && (
+                  <p className="text-xs font-black text-neutral-500">
+                    Đang kiểm tra khách cũ...
                   </p>
                 )}
+
+                {customerFoundMessage && (
+                  <p className="rounded-2xl bg-[#E8FFF1] px-4 py-3 text-xs font-black text-[#00B14F]">
+                    {customerFoundMessage}
+                  </p>
+                )}
+
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Tên khách hàng"
+                  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+                />
+
+                <textarea
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  placeholder="Địa chỉ giao hàng"
+                  rows={3}
+                  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
+              <p className="font-black text-[#06113C]">Giao hàng & thanh toán</p>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <select
+                  value={deliveryDistanceKm}
+                  onChange={(e) => setDeliveryDistanceKm(Number(e.target.value))}
+                  className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+                >
+                  <option value={1}>Dưới 2km</option>
+                  <option value={3}>2 - 5km</option>
+                  <option value={6}>5 - 8km</option>
+                  <option value={9}>Trên 8km</option>
+                </select>
+
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+                >
+                  <option value="cod">COD</option>
+                  <option value="momo">Momo/CK</option>
+                </select>
               </div>
 
-              <span className="text-2xl font-black">›</span>
-            </button>
-          </div>
+              {paymentMethod === "momo" && (
+                <div className="mt-4 rounded-[24px] bg-white p-4">
+                  <p className="text-center text-lg font-black text-[#06113C]">
+                    Quét mã để chuyển khoản
+                  </p>
 
-          <div className="mt-6 grid gap-3">
-            <input
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              placeholder="Số điện thoại"
-              type="tel"
-              inputMode="numeric"
-              className="rounded-2xl border border-black/10 px-4 py-4 font-bold"
-            />
+                  <div className="mt-4 flex justify-center">
+                    <img
+                      src="/images/payment-qr.jpg"
+                      alt="QR thanh toán Ăn Vặt Ngọc Trinh"
+                      className="w-full max-w-[320px] rounded-3xl border border-black/10 shadow-lg"
+                    />
+                  </div>
 
-            {checkingCustomer && (
-              <p className="text-sm font-bold text-[#00B14F]">
-                Đang kiểm tra khách cũ...
-              </p>
-            )}
+                  <div className="mt-5 rounded-2xl bg-[#F5FFF8] p-4">
+                    <p className="font-black text-[#06113C]">Nội dung CK:</p>
 
-            <input
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Tên khách"
-              className="rounded-2xl border border-black/10 px-4 py-4 font-bold"
-            />
+                    <p className="mt-1 text-xl font-black text-[#00B14F]">
+                      AVNT {customerPhone || "SDT"}
+                    </p>
 
-            <textarea
-              value={customerAddress}
-              onChange={(e) => setCustomerAddress(e.target.value)}
-              placeholder="Địa chỉ giao hàng"
-              rows={3}
-              className="rounded-2xl border border-black/10 px-4 py-4 font-bold"
-            />
+                    <p className="mt-4 font-black text-[#06113C]">Số tiền:</p>
 
-            <div className="grid grid-cols-2 gap-3">
-              <select
-                value={deliveryDistanceKm}
-                onChange={(e) => setDeliveryDistanceKm(Number(e.target.value))}
-                className="rounded-2xl border border-black/10 px-4 py-4 font-bold"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((km) => (
-                  <option key={km} value={km}>
-                    {km}km
-                  </option>
-                ))}
-              </select>
+                    <p className="mt-1 text-2xl font-black text-[#00B14F]">
+                      {total.toLocaleString("vi-VN")}đ
+                    </p>
+                  </div>
 
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="rounded-2xl border border-black/10 px-4 py-4 font-bold"
-              >
-                <option value="cod">COD</option>
-                <option value="momo">Chuyển khoản</option>
-              </select>
+                  <p className="mt-4 text-center text-xs font-semibold text-neutral-500">
+                    Sau khi chuyển khoản, quán sẽ kiểm tra và xác nhận đơn hàng.
+                  </p>
+                </div>
+              )}
+
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Ghi chú chung cho đơn hàng"
+                rows={3}
+                className="mt-4 w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+              />
             </div>
 
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ghi chú đơn hàng"
-              rows={3}
-              className="rounded-2xl border border-black/10 px-4 py-4 font-bold"
-            />
-          </div>
-
-          <div className="mt-8 border-t border-black/10 pt-5">
-            <div className="flex justify-between text-lg font-bold text-neutral-600">
-              <span>Tạm tính</span>
-              <span>{subtotal.toLocaleString("vi-VN")}đ</span>
-            </div>
-
-            <div className="mt-2 flex justify-between text-lg font-bold text-neutral-600">
-              <span>Phí ship</span>
-              <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
-            </div>
-
-            {discountAmount > 0 && (
-              <div className="mt-2 flex justify-between text-lg font-bold text-[#00B14F]">
-                <span>Giảm giá</span>
-                <span>-{discountAmount.toLocaleString("vi-VN")}đ</span>
+            <div className="mt-6 rounded-3xl bg-[#06113C] p-5 text-white">
+              <div className="flex justify-between text-sm font-bold text-white/70">
+                <span>Tạm tính</span>
+                <span>{subtotal.toLocaleString("vi-VN")}đ</span>
               </div>
-            )}
 
-            <div className="mt-3 flex justify-between text-2xl font-black text-[#06113C]">
-              <span>Tổng cộng</span>
-              <span>{total.toLocaleString("vi-VN")}đ</span>
+              <div className="mt-3 flex justify-between text-sm font-bold text-white/70">
+                <span>Ship {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}</span>
+                <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
+              </div>
+
+              {discountAmount > 0 && (
+                <div className="mt-3 flex justify-between text-sm font-bold text-[#00B14F]">
+                  <span>Giảm giá</span>
+                  <span>-{discountAmount.toLocaleString("vi-VN")}đ</span>
+                </div>
+              )}
+
+              <div className="mt-4 border-t border-white/20 pt-4">
+                <div className="flex justify-between text-xl font-black">
+                  <span>Tổng cộng</span>
+                  <span>{total.toLocaleString("vi-VN")}đ</span>
+                </div>
+              </div>
             </div>
 
             <button
               onClick={submitOrder}
-              disabled={submitting || cart.length === 0}
-              className="mt-6 w-full rounded-2xl bg-[#00B14F] px-6 py-5 text-xl font-black text-white disabled:opacity-50"
+              disabled={submitting || !isShopOpen}
+              className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white disabled:opacity-60"
             >
               {submitting
-                ? "Đang gửi..."
-                : `Đặt hàng · ${total.toLocaleString("vi-VN")}đ`}
+                ? "Đang gửi đơn..."
+                : isShopOpen
+                ? `Đặt hàng · ${total.toLocaleString("vi-VN")}đ`
+                : "Quán đang tạm ngưng"}
             </button>
           </div>
         </div>
-      </section>
+      )}
 
       {couponOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-end bg-black/50 md:items-center md:justify-center">
+        <div className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:items-center md:justify-center">
           <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-black text-[#06113C]">
-                Chọn ưu đãi
-              </h2>
+              <h2 className="text-2xl font-black text-[#06113C]">Chọn ưu đãi</h2>
 
               <button
                 onClick={() => setCouponOpen(false)}
@@ -895,9 +1232,7 @@ export default function DatMonNhanhPage() {
                       <p className="mt-1 text-sm font-bold text-[#00B14F]">
                         {getCouponType(coupon).includes("percent")
                           ? `Giảm ${getCouponValue(coupon)}%`
-                          : `Giảm ${getCouponValue(coupon).toLocaleString(
-                              "vi-VN"
-                            )}đ`}
+                          : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`}
                       </p>
 
                       {minOrder > 0 && (
@@ -922,118 +1257,6 @@ export default function DatMonNhanhPage() {
                 Bỏ mã giảm giá
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {selectedProduct && (
-        <div className="fixed inset-0 z-[9999] flex items-end bg-black/50 md:items-center md:justify-center">
-          <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
-            <div className="flex gap-4">
-              <div className="h-24 w-24 overflow-hidden rounded-2xl bg-[#E8FFF1]">
-                {selectedProduct.image_url && (
-                  <img
-                    src={selectedProduct.image_url}
-                    alt={selectedProduct.name}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-              </div>
-
-              <div className="flex-1">
-                <h2 className="text-2xl font-black text-[#06113C]">
-                  {selectedProduct.name}
-                </h2>
-
-                <p className="mt-2 font-black text-[#00B14F]">
-                  {selectedProduct.price.toLocaleString("vi-VN")}đ
-                </p>
-              </div>
-            </div>
-
-            {selectedProduct.description && (
-              <p className="mt-4 text-sm font-semibold leading-6 text-neutral-600">
-                {selectedProduct.description}
-              </p>
-            )}
-
-            <div className="mt-5">
-              <p className="font-black text-[#06113C]">Topping</p>
-
-              <div className="mt-3 space-y-2">
-                {toppings.map((top) => (
-                  <label
-                    key={top.id}
-                    className="flex items-center justify-between rounded-2xl bg-[#F5FFF8] px-4 py-3"
-                  >
-                    <span className="font-bold text-[#06113C]">
-                      {top.name}{" "}
-                      <span className="text-[#00B14F]">
-                        +{top.price.toLocaleString("vi-VN")}đ
-                      </span>
-                    </span>
-
-                    <input
-                      type="checkbox"
-                      checked={selectedToppingIds.includes(top.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedToppingIds((prev) => [...prev, top.id]);
-                        } else {
-                          setSelectedToppingIds((prev) =>
-                            prev.filter((id) => id !== top.id)
-                          );
-                        }
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <p className="font-black text-[#06113C]">Độ cay</p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {spicyOptions.map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => setSelectedSpicyLevel(item)}
-                    className={`rounded-full px-4 py-2 text-sm font-black ${
-                      selectedSpicyLevel === item
-                        ? "bg-[#00B14F] text-white"
-                        : "bg-[#F5FFF8] text-[#06113C]"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <textarea
-              value={itemNote}
-              onChange={(e) => setItemNote(e.target.value)}
-              placeholder="Ghi chú cho món này"
-              rows={3}
-              className="mt-5 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold"
-            />
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="rounded-2xl bg-neutral-100 px-5 py-4 text-sm font-black text-[#06113C]"
-              >
-                Hủy
-              </button>
-
-              <button
-                onClick={addSelectedProductToCart}
-                className="rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white"
-              >
-                Thêm · {selectedItemTotal.toLocaleString("vi-VN")}đ
-              </button>
-            </div>
           </div>
         </div>
       )}

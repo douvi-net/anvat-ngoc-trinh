@@ -131,11 +131,54 @@ export default function DatMonNhanhPage() {
   const [cartAnimate, setCartAnimate] = useState(false);
 
   useEffect(() => {
-    localStorage.getItem("avnt_reorder_items")
+    localStorage.getItem("avnt_reorder_items");
     fetchInitialData();
     loadSavedCustomer();
   }, []);
-
+  useEffect(() => {
+    if (!products.length) return;
+  
+    const raw = localStorage.getItem("avnt_reorder_items");
+    if (!raw) return;
+  
+    try {
+      const reorderItems = JSON.parse(raw);
+  
+      const newCartItems = reorderItems
+        .map((oldItem: any) => {
+          const product = products.find(
+            (item) =>
+              item.name.trim().toLowerCase() ===
+              oldItem.product_name.trim().toLowerCase()
+          );
+  
+          if (!product || product.is_sold_out) return null;
+  
+          const cartKey = `${product.id}_${Date.now()}_${Math.random()}`;
+  
+          return {
+            ...product,
+            cartKey,
+            quantity: Number(oldItem.quantity || 1),
+            selectedToppings: [],
+            spicyLevel: oldItem.spicy_level || "Cay vừa",
+            itemNote: oldItem.note || "",
+          };
+        })
+        .filter(Boolean);
+  
+      if (newCartItems.length > 0) {
+        setCart(newCartItems);
+        setCheckoutOpen(true);
+        showToast("Đã thêm món từ đơn cũ vào giỏ");
+      }
+  
+      localStorage.removeItem("avnt_reorder_items");
+    } catch (error) {
+      console.error("REORDER ERROR:", error);
+      localStorage.removeItem("avnt_reorder_items");
+    }
+  }, [products]);
   useEffect(() => {
     const phone = customerPhone.trim();
 

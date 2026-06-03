@@ -115,8 +115,8 @@ const comboSuggestions: Record<
   {
     product: string;
     discount: number;
-  }
-[]> = {
+  }[]
+> = {
   "Cuốn đỏ sốt me": [
     {
       product: "Trà đào",

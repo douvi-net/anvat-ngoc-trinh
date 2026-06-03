@@ -477,7 +477,7 @@ const shippingDiscount = bestShippingPromotion?.discountAmount || 0;
 const finalShippingFee = Math.max(0, shippingFee - shippingDiscount);
 
 const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
-
+const rewardPoints = Math.floor(total / 10000);
   const selectedToppings = useMemo(() => {
     return toppings.filter((item) => selectedToppingIds.includes(item.id));
   }, [toppings, selectedToppingIds]);
@@ -1284,6 +1284,9 @@ discount_amount: discountAmount + shippingDiscount,
                   <span>Tổng cộng</span>
                   <span>{total.toLocaleString("vi-VN")}đ</span>
                 </div>
+                <div className="rounded-2xl bg-[#FFF7E8] p-3 text-sm font-black text-[#06113C]">
+  🪙 Bạn sẽ nhận {rewardPoints} Xu Ăn Vặt sau khi đơn hoàn thành
+</div>
               </div>
             </div>
 

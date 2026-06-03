@@ -121,7 +121,8 @@ export default function DatMonNhanhPage() {
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [note, setNote] = useState("");
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
-
+  const [customerPoints, setCustomerPoints] = useState(0);
+  const [usePointsDiscount, setUsePointsDiscount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [checkingCustomer, setCheckingCustomer] = useState(false);
   const [customerFoundMessage, setCustomerFoundMessage] = useState("");
@@ -246,11 +247,16 @@ export default function DatMonNhanhPage() {
       setCustomerName(customer.name || "");
       setCustomerAddress(customer.last_address || "");
       setPaymentMethod(customer.last_payment_method || "cod");
-
+      setCustomerPoints(Number((customer as any).total_points || 0));
+      if (Number((customer as any).total_points || 0) < 50) {
+        setUsePointsDiscount(0);
+      }
       setCustomerFoundMessage(
         "Đã tìm thấy thông tin cũ, hệ thống tự điền giúp bạn."
       );
     } else {
+      setCustomerPoints(0);
+setUsePointsDiscount(0);
       setCustomerId("");
       setCustomerFoundMessage("Khách mới, thông tin sẽ được lưu sau khi đặt.");
     }
@@ -477,7 +483,15 @@ const shippingDiscount = bestShippingPromotion?.discountAmount || 0;
 const finalShippingFee = Math.max(0, shippingFee - shippingDiscount);
 
 const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
-const rewardPoints = Math.floor(total / 10000);
+
+
+const totalAfterPoints = Math.max(
+  0,
+  total - usePointsDiscount
+);
+
+const rewardPoints = Math.floor(totalAfterPoints / 10000);
+
   const selectedToppings = useMemo(() => {
     return toppings.filter((item) => selectedToppingIds.includes(item.id));
   }, [toppings, selectedToppingIds]);
@@ -559,7 +573,15 @@ const rewardPoints = Math.floor(total / 10000);
 
     if (existingCustomer) {
       const customer = existingCustomer as Customer;
-
+      const { data: rewardData } = await supabase
+      .from("customers")
+      .select("total_points")
+      .eq("phone", cleanPhone)
+      .maybeSingle();
+    
+    setCustomerPoints(
+      Number(rewardData?.total_points || 0)
+    );
       const { data, error } = await supabase
         .from("customers")
         .update({
@@ -627,9 +649,19 @@ const rewardPoints = Math.floor(total / 10000);
           note: note.trim(),
           subtotal,
           shipping_fee: finalShippingFee,
-discount_amount: discountAmount + shippingDiscount,
+          discount_amount: discountAmount + shippingDiscount + usePointsDiscount,
+
+          points_used:
+            usePointsDiscount === 10000
+              ? 100
+              : usePointsDiscount === 5000
+              ? 50
+              : 0,
+          
+          points_discount: usePointsDiscount,
+          
           coupon_code: selectedCoupon?.code || null,
-          total,
+          total: totalAfterPoints,
           status: paymentMethod === "momo" ? "waiting_payment" : "new",
           source: "website",
           payment_method: paymentMethod,
@@ -1280,9 +1312,51 @@ discount_amount: discountAmount + shippingDiscount,
               )}
 
               <div className="mt-4 border-t border-white/20 pt-4">
+              <div className="rounded-2xl bg-[#FFF7E8] p-3">
+  <div className="font-black text-[#06113C]">
+    🪙 Xu Ăn Vặt: {customerPoints}
+  </div>
+
+  {customerPoints >= 50 && (
+    <button
+      type="button"
+      onClick={() =>
+        setUsePointsDiscount(
+          usePointsDiscount === 5000 ? 0 : 5000
+        )
+      }
+      className="mt-2 block rounded-xl border px-3 py-2 text-sm font-bold"
+    >
+      {usePointsDiscount === 5000
+        ? "✓ Đang dùng 50 Xu giảm 5.000đ"
+        : "Dùng 50 Xu giảm 5.000đ"}
+    </button>
+  )}
+
+  {customerPoints >= 100 && (
+    <button
+      type="button"
+      onClick={() =>
+        setUsePointsDiscount(
+          usePointsDiscount === 10000 ? 0 : 10000
+        )
+      }
+      className="mt-2 block rounded-xl border px-3 py-2 text-sm font-bold"
+    >
+      {usePointsDiscount === 10000
+        ? "✓ Đang dùng 100 Xu giảm 10.000đ"
+        : "Dùng 100 Xu giảm 10.000đ"}
+    </button>
+  )}
+</div>{usePointsDiscount > 0 && (
+  <div className="mt-3 flex justify-between text-sm font-bold text-amber-600">
+    <span>Giảm Xu</span>
+    <span>-{usePointsDiscount.toLocaleString("vi-VN")}đ</span>
+  </div>
+)}
                 <div className="flex justify-between text-xl font-black">
                   <span>Tổng cộng</span>
-                  <span>{total.toLocaleString("vi-VN")}đ</span>
+                  <span>{totalAfterPoints.toLocaleString("vi-VN")}đ</span>
                 </div>
                 <div className="rounded-2xl bg-[#FFF7E8] p-3 text-sm font-black text-[#06113C]">
   🪙 Bạn sẽ nhận {rewardPoints} Xu Ăn Vặt sau khi đơn hoàn thành
@@ -1298,7 +1372,7 @@ discount_amount: discountAmount + shippingDiscount,
               {submitting
                 ? "Đang gửi đơn..."
                 : isShopOpen
-                ? `Đặt hàng · ${total.toLocaleString("vi-VN")}đ`
+                ? `Đặt hàng · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
                 : "Quán đang tạm ngưng"}
             </button>
           </div>

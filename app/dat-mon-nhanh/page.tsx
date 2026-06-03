@@ -1553,9 +1553,7 @@ const amountToNextShippingPromo = nextShippingPromotion
         />
       </div>
 
-      <span className="text-[11px] font-black text-[#00B14F]">
-        {shippingProgress}%
-      </span>
+     
     </div>
   </div>
 )}

@@ -786,7 +786,7 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-black text-yellow-700">
-                  ⭐ 4.8
+                  ⭐ 5.0
                 </span>
 
                 <span className="rounded-full bg-[#E8FFF1] px-3 py-1 text-xs font-black text-[#00B14F]">
@@ -1311,10 +1311,10 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
                 </div>
               )}
 
-              <div className="mt-4 border-t border-white/20 pt-4">
+        
               
               <div className="mt-4 border-t border-white/20 pt-4">
-  <div className="rounded-2xl bg-white/10 p-3">
+  <div className="rounded-2xl bg-white/10 px-3 py-2">
     <div className="flex items-center justify-between">
       <div>
         <p className="text-sm font-black text-white">
@@ -1379,14 +1379,14 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
     </div>
   )}
 
-  <div className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white/70">
+  <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white/70">
     🪙 Hoàn thành đơn này nhận thêm{" "}
     <span className="text-[#FBBF24]">
       {rewardPoints} xu
     </span>
   </div>
-</div>
-                <div className="flex justify-between text-xl font-black">
+
+  <div className="mt-2 flex justify-between text-2xl font-black">
                   <span>Tổng cộng</span>
                   <span>{totalAfterPoints.toLocaleString("vi-VN")}đ</span>
                 </div>

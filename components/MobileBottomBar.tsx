@@ -17,13 +17,13 @@ export default function MobileBottomBar() {
           Đặt món
         </Link>
 
-        <Link href="/tra-cuu-don-hang" className="rounded-2xl px-1 py-2">
+        <Link href="/tra-cuu-don" className="rounded-2xl px-1 py-2">
           <div className="text-xl">📦</div>
           Tra cứu
         </Link>
 
-        <Link href="/bai-viet" className="rounded-2xl px-1 py-2">
-          <div className="text-xl">📝</div>
+        <Link href="/lien-he" className="rounded-2xl px-1 py-2">
+          <div className="text-xl">📍</div>
           Bài viết
         </Link>
       </div>

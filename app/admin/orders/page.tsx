@@ -230,6 +230,8 @@ export default function AdminOrdersPage() {
   }
 
   async function updateOrderStatus(orderId: string, status: string) {
+    const currentOrder = orders.find((item) => item.id === orderId);
+  
     const updateData =
       status === "new"
         ? {
@@ -242,22 +244,81 @@ export default function AdminOrdersPage() {
             status,
             updated_at: new Date().toISOString(),
           };
-
+  
     const { error } = await supabase
       .from("orders")
       .update(updateData)
       .eq("id", orderId);
-
+  
     if (error) {
       alert("Không cập nhật được trạng thái đơn.");
       console.error(error);
       return;
     }
-
+  
+    if (
+      currentOrder &&
+      status === "completed" &&
+      currentOrder.status !== "completed"
+    ) {
+      const phone = currentOrder.customer_phone?.trim();
+      const pointsEarned = Math.floor(Number(currentOrder.total || 0) / 10000);
+  
+      if (phone && pointsEarned > 0) {
+        const { data: existingHistory } = await supabase
+          .from("points_history")
+          .select("id")
+          .eq("order_id", orderId)
+          .eq("type", "earn")
+          .maybeSingle();
+  
+        if (!existingHistory) {
+          const { data: existingCustomer } = await supabase
+            .from("customers")
+            .select("*")
+            .eq("phone", phone)
+            .maybeSingle();
+  
+          if (existingCustomer) {
+            await supabase
+              .from("customers")
+              .update({
+                name: currentOrder.customer_name,
+                total_points:
+                  Number(existingCustomer.total_points || 0) + pointsEarned,
+                total_orders:
+                  Number(existingCustomer.total_orders || 0) + 1,
+                total_spent:
+                  Number(existingCustomer.total_spent || 0) +
+                  Number(currentOrder.total || 0),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("phone", phone);
+          } else {
+            await supabase.from("customers").insert({
+              phone,
+              name: currentOrder.customer_name,
+              total_points: pointsEarned,
+              total_orders: 1,
+              total_spent: Number(currentOrder.total || 0),
+            });
+          }
+  
+          await supabase.from("points_history").insert({
+            customer_phone: phone,
+            order_id: orderId,
+            points: pointsEarned,
+            type: "earn",
+            note: `Cộng ${pointsEarned} xu từ đơn ${currentOrder.order_code}`,
+          });
+        }
+      }
+    }
+  
     if (status === "making" || status === "cancelled" || status === "new") {
       stopOrderSound();
     }
-
+  
     fetchOrders();
   }
 

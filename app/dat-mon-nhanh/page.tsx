@@ -1324,6 +1324,13 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
         <p className="text-xs text-white/60">
           Bạn đang có {customerPoints} xu
         </p>
+        {usePointsDiscount > 0 && (
+  <p className="mt-1 text-xs font-bold text-[#FBBF24]">
+    Đang dùng{" "}
+    {usePointsDiscount === 10000 ? 100 : 50} xu để giảm{" "}
+    {usePointsDiscount.toLocaleString("vi-VN")}đ
+  </p>
+)}
       </div>
 
       <div className="rounded-full bg-[#FFF7E8] px-3 py-1 text-xs font-black text-[#B45309]">

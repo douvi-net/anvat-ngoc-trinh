@@ -193,8 +193,6 @@ setLoading(false);
             </button>
           </div>
         </div>
-
-        <div className="mt-6 space-y-5">
         {customerReward && (
   <div className="mt-6 rounded-[28px] bg-[#06113C] p-5 text-white shadow-xl">
     <p className="text-sm font-black text-[#00B14F]">Xu Ăn Vặt</p>
@@ -227,6 +225,8 @@ setLoading(false);
     </p>
   </div>
 )}
+        <div className="mt-6 space-y-5">
+        
           {searched && !loading && orders.length === 0 && (
             <div className="rounded-[28px] bg-white p-6 text-center font-bold text-neutral-500 shadow-xl shadow-neutral-950/5">
               Không tìm thấy đơn hàng phù hợp.

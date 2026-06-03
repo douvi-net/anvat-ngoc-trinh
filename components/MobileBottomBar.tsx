@@ -24,7 +24,7 @@ export default function MobileBottomBar() {
 
         <Link href="/lien-he" className="rounded-2xl px-1 py-2">
           <div className="text-xl">📍</div>
-          Bài viết
+          Liên hệ
         </Link>
       </div>
     </nav>

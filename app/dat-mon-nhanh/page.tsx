@@ -110,6 +110,27 @@ const frequentlyBoughtTogether: Record<string, string[]> = {
     "Cuốn đỏ sốt me",
   ],
 };
+const comboSuggestions: Record<
+  string,
+  {
+    product: string;
+    discount: number;
+  }
+[]> = {
+  "Cuốn đỏ sốt me": [
+    {
+      product: "Trà đào",
+      discount: 5000,
+    },
+  ],
+
+  "Cuốn trứng chấm me": [
+    {
+      product: "Trà sữa truyền thống",
+      discount: 5000,
+    },
+  ],
+};
 export default function DatMonNhanhPage() {
   const router = useRouter();
 
@@ -468,6 +489,27 @@ setUsePointsDiscount(0);
       suggestedNames.includes(product.name)
     );
   }, [cart, products]);
+  const comboProduct = useMemo(() => {
+    if (!cart.length) return null;
+  
+    const firstProduct = cart[0]?.name;
+  
+    const combo =
+      comboSuggestions[firstProduct]?.[0];
+  
+    if (!combo) return null;
+  
+    const product = products.find(
+      (item) => item.name === combo.product
+    );
+  
+    if (!product) return null;
+  
+    return {
+      ...product,
+      discount: combo.discount,
+    };
+  }, [cart, products]);
   const selectedShippingZone = useMemo(() => {
     return (
       shippingZones.find(
@@ -594,6 +636,14 @@ const amountToNextPoint =
 const amountToNextShippingPromo = nextShippingPromotion
   ? Number(nextShippingPromotion.min_order_value) - subtotal
   : 0;
+  const shippingProgress = nextShippingPromotion
+  ? Math.min(
+      100,
+      Math.round(
+        (subtotal / Number(nextShippingPromotion.min_order_value || 1)) * 100
+      )
+    )
+  : 100;
   const selectedToppings = useMemo(() => {
     return toppings.filter((item) => selectedToppingIds.includes(item.id));
   }, [toppings, selectedToppingIds]);
@@ -613,7 +663,7 @@ const amountToNextShippingPromo = nextShippingPromotion
 
   const selectedProductTotal = useMemo(() => {
     if (!selectedProduct) return 0;
-
+  
     const toppingTotal = selectedToppings.reduce(
       (sum, topping) => sum + Number(topping.price),
       0
@@ -1374,6 +1424,39 @@ const amountToNextShippingPromo = nextShippingPromotion
             </div>
             {suggestedProducts.length > 0 && (
   <div className="mt-4 rounded-2xl bg-white/10 p-3">
+    {comboProduct && (
+  <div className="mb-4 rounded-2xl border border-[#00B14F]/20 bg-[#E8FFF1] p-4">
+    <p className="text-sm font-black text-[#00B14F]">
+      🔥 Combo đề xuất
+    </p>
+
+    <p className="mt-2 font-black text-[#06113C]">
+      {cart[0]?.name}
+    </p>
+
+    <p className="text-center text-xl font-black text-[#00B14F]">
+      +
+    </p>
+
+    <p className="font-black text-[#06113C]">
+      {comboProduct.name}
+    </p>
+
+    <p className="mt-2 text-sm font-black text-[#00B14F]">
+      Tiết kiệm {comboProduct.discount.toLocaleString("vi-VN")}đ
+    </p>
+
+    <button
+      type="button"
+      onClick={() =>
+        openProductOptions(comboProduct)
+      }
+      className="mt-3 w-full rounded-xl bg-[#00B14F] px-4 py-3 text-sm font-black text-white"
+    >
+      Thêm combo
+    </button>
+  </div>
+)}
     <p className="text-sm font-black text-white">
       🔥 Khách thường mua thêm
     </p>
@@ -1547,6 +1630,24 @@ const amountToNextShippingPromo = nextShippingPromotion
       "vi-VN"
     )}đ để nhận ưu đãi:
     {nextShippingPromotion.name}
+  </div>
+)}
+{nextShippingPromotion &&
+ amountToNextShippingPromo > 0 && (
+  <div className="mt-2">
+    <div className="mb-1 flex justify-between text-xs font-bold text-[#00B14F]">
+      <span>Tiến độ nhận ưu đãi</span>
+      <span>{shippingProgress}%</span>
+    </div>
+
+    <div className="h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
+      <div
+        className="h-full rounded-full bg-[#00B14F]"
+        style={{
+          width: `${shippingProgress}%`,
+        }}
+      />
+    </div>
   </div>
 )}
               </div>

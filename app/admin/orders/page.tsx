@@ -37,6 +37,8 @@ type Order = {
   promotion_name: string | null;
   promotion_discount: number | null;
   order_items: OrderItem[];
+  points_used?: number | null;
+points_discount?: number | null;
 };
 
 const columns = [
@@ -262,14 +264,16 @@ export default function AdminOrdersPage() {
       currentOrder.status !== "completed"
     ) {
       const phone = currentOrder.customer_phone?.trim();
-      const pointsEarned = Math.floor(Number(currentOrder.total || 0) / 10000);
+      const orderTotal = Number(currentOrder.total || 0);
+      const pointsUsed = Number(currentOrder.points_used || 0);
+      const pointsEarned = Math.floor(orderTotal / 10000);
   
-      if (phone && pointsEarned > 0) {
+      if (phone) {
         const { data: existingHistory } = await supabase
           .from("points_history")
           .select("id")
           .eq("order_id", orderId)
-          .eq("type", "earn")
+          .eq("type", "complete")
           .maybeSingle();
   
         if (!existingHistory) {
@@ -279,18 +283,20 @@ export default function AdminOrdersPage() {
             .eq("phone", phone)
             .maybeSingle();
   
+          const oldPoints = Number(existingCustomer?.total_points || 0);
+          const oldOrders = Number(existingCustomer?.total_orders || 0);
+          const oldSpent = Number(existingCustomer?.total_spent || 0);
+  
+          const newPoints = Math.max(0, oldPoints - pointsUsed + pointsEarned);
+  
           if (existingCustomer) {
             await supabase
               .from("customers")
               .update({
                 name: currentOrder.customer_name,
-                total_points:
-                  Number(existingCustomer.total_points || 0) + pointsEarned,
-                total_orders:
-                  Number(existingCustomer.total_orders || 0) + 1,
-                total_spent:
-                  Number(existingCustomer.total_spent || 0) +
-                  Number(currentOrder.total || 0),
+                total_points: newPoints,
+                total_orders: oldOrders + 1,
+                total_spent: oldSpent + orderTotal,
                 updated_at: new Date().toISOString(),
               })
               .eq("phone", phone);
@@ -298,18 +304,38 @@ export default function AdminOrdersPage() {
             await supabase.from("customers").insert({
               phone,
               name: currentOrder.customer_name,
-              total_points: pointsEarned,
+              total_points: Math.max(0, pointsEarned - pointsUsed),
               total_orders: 1,
-              total_spent: Number(currentOrder.total || 0),
+              total_spent: orderTotal,
+            });
+          }
+  
+          if (pointsUsed > 0) {
+            await supabase.from("points_history").insert({
+              customer_phone: phone,
+              order_id: orderId,
+              points: -pointsUsed,
+              type: "redeem",
+              note: `Dùng ${pointsUsed} xu cho đơn ${currentOrder.order_code}`,
+            });
+          }
+  
+          if (pointsEarned > 0) {
+            await supabase.from("points_history").insert({
+              customer_phone: phone,
+              order_id: orderId,
+              points: pointsEarned,
+              type: "earn",
+              note: `Cộng ${pointsEarned} xu từ đơn ${currentOrder.order_code}`,
             });
           }
   
           await supabase.from("points_history").insert({
             customer_phone: phone,
             order_id: orderId,
-            points: pointsEarned,
-            type: "earn",
-            note: `Cộng ${pointsEarned} xu từ đơn ${currentOrder.order_code}`,
+            points: pointsEarned - pointsUsed,
+            type: "complete",
+            note: `Hoàn thành đơn ${currentOrder.order_code}`,
           });
         }
       }

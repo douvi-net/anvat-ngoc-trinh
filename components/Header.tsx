@@ -29,12 +29,7 @@ export default function Header() {
           ))}
         </nav>
 
-        <Link
-          href="/tra-cuu-don"
-          className="hidden rounded-2xl bg-[#E8FFF1] px-4 py-2 text-sm font-black text-[#00B14F] md:block"
-        >
-          📦 Tra cứu đơn
-        </Link>
+      
 
         <Link
           href="/dat-mon-nhanh"

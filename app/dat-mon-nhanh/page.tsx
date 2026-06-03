@@ -131,6 +131,7 @@ export default function DatMonNhanhPage() {
   const [cartAnimate, setCartAnimate] = useState(false);
 
   useEffect(() => {
+    localStorage.getItem("avnt_reorder_items")
     fetchInitialData();
     loadSavedCustomer();
   }, []);

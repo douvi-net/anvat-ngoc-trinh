@@ -140,6 +140,18 @@ if (phoneForReward) {
 
 setLoading(false);
   }
+  function reorder(order: Order) {
+    const reorderItems = order.order_items.map((item) => ({
+      product_name: item.product_name,
+      quantity: item.quantity,
+      spicy_level: item.spicy_level || "Cay vừa",
+      note: item.note || "",
+      toppings: item.toppings || [],
+    }));
+  
+    localStorage.setItem("avnt_reorder_items", JSON.stringify(reorderItems));
+    window.location.href = "/dat-mon-nhanh?reorder=1";
+  }
   async function markCustomerSentPayment(orderId: string) {
     const { error } = await supabase
       .from("orders")
@@ -340,6 +352,13 @@ setLoading(false);
                     Thanh toán:{" "}
                     {order.payment_method === "momo" ? "Momo/Chuyển khoản" : "COD"}
                   </p>
+                  <button
+  type="button"
+  onClick={() => reorder(order)}
+  className="mt-4 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#00B14F]/25"
+>
+  Mua lại đơn này
+</button>
                   {order.status === "waiting_payment" &&
  order.payment_method === "momo" && (
   <div className="mt-5 rounded-3xl bg-white p-5 text-[#06113C]">

@@ -1545,16 +1545,6 @@ const amountToNextShippingPromo = nextShippingPromotion
       {nextShippingPromotion.name}
     </div>
 
-    <div className="mt-2 flex items-center gap-2">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white">
-        <div
-          className="h-full rounded-full bg-[#00B14F]"
-          style={{ width: `${shippingProgress}%` }}
-        />
-      </div>
-
-     
-    </div>
   </div>
 )}
 {nextShippingPromotion &&

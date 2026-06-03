@@ -1312,55 +1312,85 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
               )}
 
               <div className="mt-4 border-t border-white/20 pt-4">
-              <div className="rounded-2xl bg-[#FFF7E8] p-3">
-  <div className="font-black text-[#06113C]">
-    🪙 Xu Ăn Vặt: {customerPoints}
+              
+              <div className="mt-4 border-t border-white/20 pt-4">
+  <div className="rounded-2xl bg-white/10 p-3">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-black text-white">
+          🪙 Xu Ăn Vặt
+        </p>
+
+        <p className="text-xs text-white/60">
+          Bạn đang có {customerPoints} xu
+        </p>
+      </div>
+
+      <div className="rounded-full bg-[#FFF7E8] px-3 py-1 text-xs font-black text-[#B45309]">
+        {customerPoints} xu
+      </div>
+    </div>
+
+    <div className="mt-3 flex gap-2">
+      {customerPoints >= 50 && (
+        <button
+          type="button"
+          onClick={() =>
+            setUsePointsDiscount(
+              usePointsDiscount === 5000 ? 0 : 5000
+            )
+          }
+          className={`rounded-xl px-3 py-2 text-xs font-black ${
+            usePointsDiscount === 5000
+              ? "bg-[#00B14F] text-white"
+              : "bg-white/10 text-white"
+          }`}
+        >
+          50 xu -5k
+        </button>
+      )}
+
+      {customerPoints >= 100 && (
+        <button
+          type="button"
+          onClick={() =>
+            setUsePointsDiscount(
+              usePointsDiscount === 10000 ? 0 : 10000
+            )
+          }
+          className={`rounded-xl px-3 py-2 text-xs font-black ${
+            usePointsDiscount === 10000
+              ? "bg-[#00B14F] text-white"
+              : "bg-white/10 text-white"
+          }`}
+        >
+          100 xu -10k
+        </button>
+      )}
+    </div>
   </div>
 
-  {customerPoints >= 50 && (
-    <button
-      type="button"
-      onClick={() =>
-        setUsePointsDiscount(
-          usePointsDiscount === 5000 ? 0 : 5000
-        )
-      }
-      className="mt-2 block rounded-xl border px-3 py-2 text-sm font-bold"
-    >
-      {usePointsDiscount === 5000
-        ? "✓ Đang dùng 50 Xu giảm 5.000đ"
-        : "Dùng 50 Xu giảm 5.000đ"}
-    </button>
+  {usePointsDiscount > 0 && (
+    <div className="mt-3 flex justify-between text-sm font-bold text-[#FBBF24]">
+      <span>Giảm Xu</span>
+      <span>
+        -{usePointsDiscount.toLocaleString("vi-VN")}đ
+      </span>
+    </div>
   )}
 
-  {customerPoints >= 100 && (
-    <button
-      type="button"
-      onClick={() =>
-        setUsePointsDiscount(
-          usePointsDiscount === 10000 ? 0 : 10000
-        )
-      }
-      className="mt-2 block rounded-xl border px-3 py-2 text-sm font-bold"
-    >
-      {usePointsDiscount === 10000
-        ? "✓ Đang dùng 100 Xu giảm 10.000đ"
-        : "Dùng 100 Xu giảm 10.000đ"}
-    </button>
-  )}
-</div>{usePointsDiscount > 0 && (
-  <div className="mt-3 flex justify-between text-sm font-bold text-amber-600">
-    <span>Giảm Xu</span>
-    <span>-{usePointsDiscount.toLocaleString("vi-VN")}đ</span>
+  <div className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white/70">
+    🪙 Hoàn thành đơn này nhận thêm{" "}
+    <span className="text-[#FBBF24]">
+      {rewardPoints} xu
+    </span>
   </div>
-)}
+</div>
                 <div className="flex justify-between text-xl font-black">
                   <span>Tổng cộng</span>
                   <span>{totalAfterPoints.toLocaleString("vi-VN")}đ</span>
                 </div>
-                <div className="rounded-2xl bg-[#FFF7E8] p-3 text-sm font-black text-[#06113C]">
-  🪙 Bạn sẽ nhận {rewardPoints} Xu Ăn Vặt sau khi đơn hoàn thành
-</div>
+      
               </div>
             </div>
 

@@ -30,7 +30,13 @@ type Order = {
 promotion_discount: number | null;
   order_items: OrderItem[];
 };
-
+type CustomerReward = {
+  phone: string;
+  name: string | null;
+  total_points: number;
+  total_orders: number;
+  total_spent: number;
+};
 const statusMap: Record<string, { label: string; color: string; desc: string }> = {
   waiting_payment: {
     label: "Chờ thanh toán",
@@ -64,7 +70,7 @@ export default function TrackOrderPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-
+  const [customerReward, setCustomerReward] = useState<CustomerReward | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
@@ -109,8 +115,30 @@ export default function TrackOrderPage() {
       return;
     }
 
-    setOrders((data || []) as Order[]);
-    setLoading(false);
+    const foundOrders = (data || []) as Order[];
+setOrders(foundOrders);
+
+let phoneForReward = "";
+
+if (isOrderCode && foundOrders.length > 0) {
+  phoneForReward = foundOrders[0].customer_phone;
+} else {
+  phoneForReward = q;
+}
+
+if (phoneForReward) {
+  const { data: customerData } = await supabase
+    .from("customers")
+    .select("phone,name,total_points,total_orders,total_spent")
+    .eq("phone", phoneForReward)
+    .maybeSingle();
+
+  setCustomerReward((customerData || null) as CustomerReward | null);
+} else {
+  setCustomerReward(null);
+}
+
+setLoading(false);
   }
   async function markCustomerSentPayment(orderId: string) {
     const { error } = await supabase
@@ -167,6 +195,38 @@ export default function TrackOrderPage() {
         </div>
 
         <div className="mt-6 space-y-5">
+        {customerReward && (
+  <div className="mt-6 rounded-[28px] bg-[#06113C] p-5 text-white shadow-xl">
+    <p className="text-sm font-black text-[#00B14F]">Xu Ăn Vặt</p>
+
+    <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-2xl font-black">
+          {customerReward.total_points || 0}
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Xu hiện có</p>
+      </div>
+
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-2xl font-black">
+          {customerReward.total_orders || 0}
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Đơn đã mua</p>
+      </div>
+
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-lg font-black">
+          {Number(customerReward.total_spent || 0).toLocaleString("vi-VN")}đ
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Đã chi tiêu</p>
+      </div>
+    </div>
+
+    <p className="mt-4 rounded-2xl bg-white/10 p-3 text-xs font-bold text-white/70">
+      10 Xu = giảm 1.000đ. Xu chỉ được cộng khi đơn hoàn thành.
+    </p>
+  </div>
+)}
           {searched && !loading && orders.length === 0 && (
             <div className="rounded-[28px] bg-white p-6 text-center font-bold text-neutral-500 shadow-xl shadow-neutral-950/5">
               Không tìm thấy đơn hàng phù hợp.

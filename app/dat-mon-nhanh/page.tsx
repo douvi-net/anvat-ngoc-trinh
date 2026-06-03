@@ -1537,14 +1537,26 @@ const amountToNextShippingPromo = nextShippingPromotion
   </div>
 )}
 
-{nextShippingPromotion &&
- amountToNextShippingPromo > 0 && (
+{nextShippingPromotion && amountToNextShippingPromo > 0 && (
   <div className="mt-2 rounded-xl bg-[#E8FFF1] px-3 py-2 text-xs font-bold text-[#00B14F]">
-    🎁 Mua thêm{" "}
-    {amountToNextShippingPromo.toLocaleString(
-      "vi-VN"
-    )}đ để nhận ưu đãi:
-    {nextShippingPromotion.name}
+    <div>
+      🎁 Mua thêm{" "}
+      {amountToNextShippingPromo.toLocaleString("vi-VN")}đ để nhận ưu đãi:{" "}
+      {nextShippingPromotion.name}
+    </div>
+
+    <div className="mt-2 flex items-center gap-2">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white">
+        <div
+          className="h-full rounded-full bg-[#00B14F]"
+          style={{ width: `${shippingProgress}%` }}
+        />
+      </div>
+
+      <span className="text-[11px] font-black text-[#00B14F]">
+        {shippingProgress}%
+      </span>
+    </div>
   </div>
 )}
 {nextShippingPromotion &&

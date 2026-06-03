@@ -92,7 +92,24 @@ type Coupon = {
 };
 
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
+const frequentlyBoughtTogether: Record<string, string[]> = {
+  "Cuốn đỏ sốt me": [
+    "Trà sữa truyền thống",
+    "Cuốn trứng chấm me",
+    "Bánh tráng trộn",
+  ],
 
+  "Bánh tráng trộn": [
+    "Trà đào",
+    "Cuốn đỏ sốt me",
+    "Bánh tráng cuốn",
+  ],
+
+  "Cuốn trứng chấm me": [
+    "Trà sữa truyền thống",
+    "Cuốn đỏ sốt me",
+  ],
+};
 export default function DatMonNhanhPage() {
   const router = useRouter();
 
@@ -437,7 +454,20 @@ setUsePointsDiscount(0);
   const cartCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
-
+  const suggestedProducts = useMemo(() => {
+    if (!cart.length) return [];
+  
+    const firstProduct = cart[0]?.name;
+  
+    if (!firstProduct) return [];
+  
+    const suggestedNames =
+      frequentlyBoughtTogether[firstProduct] || [];
+  
+    return products.filter((product) =>
+      suggestedNames.includes(product.name)
+    );
+  }, [cart, products]);
   const selectedShippingZone = useMemo(() => {
     return (
       shippingZones.find(
@@ -535,7 +565,27 @@ const totalAfterPoints = Math.max(
 );
 
 const rewardPoints = Math.floor(totalAfterPoints / 10000);
+const nextPointTarget =
+  Math.ceil(totalAfterPoints / 10000) * 10000;
 
+const amountToNextPoint =
+  nextPointTarget - totalAfterPoints;
+
+  const nextShippingPromotion = shippingPromotions
+  .filter(
+    (promo) =>
+      promo.is_active &&
+      Number(promo.min_order_value || 0) > subtotal
+  )
+  .sort(
+    (a, b) =>
+      Number(a.min_order_value || 0) -
+      Number(b.min_order_value || 0)
+  )[0];
+
+const amountToNextShippingPromo = nextShippingPromotion
+  ? Number(nextShippingPromotion.min_order_value) - subtotal
+  : 0;
   const selectedToppings = useMemo(() => {
     return toppings.filter((item) => selectedToppingIds.includes(item.id));
   }, [toppings, selectedToppingIds]);
@@ -1314,7 +1364,38 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
                 className="mt-4 w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
               />
             </div>
+            {suggestedProducts.length > 0 && (
+  <div className="mt-4 rounded-2xl bg-white/10 p-3">
+    <p className="text-sm font-black text-white">
+      🔥 Khách thường mua thêm
+    </p>
 
+    <div className="mt-3 space-y-2">
+      {suggestedProducts.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => openProductOptions(item)}
+          className="flex w-full items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-left"
+        >
+          <div>
+            <p className="text-sm font-bold text-white">
+              {item.name}
+            </p>
+
+            <p className="text-xs text-white/60">
+              {Number(item.price).toLocaleString("vi-VN")}đ
+            </p>
+          </div>
+
+          <span className="rounded-lg bg-[#00B14F] px-3 py-1 text-xs font-black text-white">
+            + Thêm
+          </span>
+        </button>
+      ))}
+    </div>
+  </div>
+)}
             <div className="mt-6 rounded-3xl bg-[#06113C] p-5 text-white">
               <div className="flex justify-between text-sm font-bold text-white/70">
                 <span>Tạm tính</span>
@@ -1441,7 +1522,25 @@ const rewardPoints = Math.floor(totalAfterPoints / 10000);
                   <span>Tổng cộng</span>
                   <span>{totalAfterPoints.toLocaleString("vi-VN")}đ</span>
                 </div>
-      
+                {amountToNextPoint > 0 &&
+ amountToNextPoint < 10000 && (
+  <div className="mt-3 rounded-xl bg-[#FFF7E8] px-3 py-2 text-xs font-bold text-[#B45309]">
+    🎁 Mua thêm{" "}
+    {amountToNextPoint.toLocaleString("vi-VN")}đ
+    để nhận thêm 1 Xu
+  </div>
+)}
+
+{nextShippingPromotion &&
+ amountToNextShippingPromo > 0 && (
+  <div className="mt-2 rounded-xl bg-[#E8FFF1] px-3 py-2 text-xs font-bold text-[#00B14F]">
+    🎁 Mua thêm{" "}
+    {amountToNextShippingPromo.toLocaleString(
+      "vi-VN"
+    )}đ để nhận ưu đãi:
+    {nextShippingPromotion.name}
+  </div>
+)}
               </div>
             </div>
 

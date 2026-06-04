@@ -13,6 +13,10 @@ const beVietnam = Be_Vietnam_Pro({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://anvatngoctrinh.vn"),
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
   title: {
     default: "Ăn Vặt Ngọc Trinh - Bánh tráng & ăn vặt Quận 6",
     template: "%s | Ăn Vặt Ngọc Trinh",

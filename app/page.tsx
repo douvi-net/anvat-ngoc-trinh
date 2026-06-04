@@ -114,7 +114,7 @@ export default function HomePage() {
             href="/dat-mon-nhanh"
             className="rounded-full bg-[#00B14F] px-4 py-2 text-xs font-black text-white"
           >
-            Xem tất cả
+            Xem thêm
           </Link>
         </div>
 

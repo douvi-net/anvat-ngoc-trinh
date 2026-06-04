@@ -1,79 +1,113 @@
 import Link from "next/link";
 
-const videos = [
+type VideoItem = {
+  title: string;
+  description: string;
+  youtubeId: string;
+  badge: string;
+};
+
+const videos: VideoItem[] = [
   {
-    title: "POV: khách thấy 1 món, tụi mình thấy 20 bill 😵",
-    platform: "TikTok",
-    url: "https://www.tiktok.com/@anvatngoctrinh",
+    title: "POV: Em hỏi áo trắng hay áo đen",
+    description: "Một góc vui về tuyển dụng và không khí thật tại quán.",
+    youtubeId: "5zKY0V9GmYw",
+    badge: "POV quán",
   },
   {
-    title: "Một ngày làm bánh tráng ở quán ăn vặt Quận 6",
-    platform: "Facebook",
-    url: "https://www.facebook.com/anvatngoctrinhq1",
+    title: "Bánh tráng núp hẻm Quận 6",
+    description: "Những món best seller được khách hỏi nhiều tại quán.",
+    youtubeId: "xI-FEMx3YTw",
+    badge: "Best seller",
   },
   {
     title: "Cuốn đỏ mỡ hành khách hỏi mỗi ngày",
-    platform: "YouTube",
-    url: "https://www.youtube.com/@anvatngoctrinh",
+    description: "Món cuốn đỏ chấm sốt, cay nhẹ, ăn là dễ ghiền.",
+    youtubeId: "k2hlvSVa-WY",
+    badge: "Món hot",
   },
 ];
 
 export default function SocialVideoSection() {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-      <div className="rounded-[40px] bg-[#E8FFF1] p-5 md:p-10">
+    <section className="mx-auto max-w-7xl px-4 py-8 md:px-8">
+      <div className="overflow-hidden rounded-[32px] bg-[#E8FFF1] p-5 md:p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-wide text-[#00B14F]">
+            <div className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-[#00B14F] shadow-sm">
               Video thật từ quán
-            </p>
-            <h2 className="mt-2 text-4xl font-black tracking-tight text-[#06113C]">
-              Xem quán làm món mỗi ngày
+            </div>
+
+            <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight text-[#06113C] md:text-4xl">
+              Xem món thật trước khi đặt
             </h2>
-            <p className="mt-3 max-w-2xl text-sm font-semibold leading-7 text-neutral-600">
-              TikTok, Facebook và YouTube là nơi quán đăng video POV làm món,
-              bill nổ đơn và các món đang được khách hỏi nhiều.
+
+            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-neutral-600">
+              Video Shorts giúp khách xem món, xem cách quán làm và cảm nhận
+              không khí thật trước khi bấm đặt hàng.
             </p>
           </div>
 
           <Link
             href="/dat-mon-nhanh"
-            className="w-fit rounded-2xl bg-[#00B14F] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#00B14F]/20"
+            className="inline-flex w-fit items-center justify-center rounded-2xl bg-[#00B14F] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#00B14F]/20 transition hover:-translate-y-0.5"
           >
-            Đặt hàng trên web
+            Đặt món ngay
           </Link>
         </div>
 
-        <div className="mt-7 flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible">
-          {videos.map((video) => (
-            <a
-              key={video.title}
-              href={video.url}
-              target="_blank"
-              rel="noreferrer"
-              className="min-w-[260px] rounded-[32px] bg-white p-3 text-[#06113C] shadow-xl shadow-neutral-950/5 md:min-w-0"
+        <div className="mt-6 flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible">
+          {videos.map((video, index) => (
+            <article
+              key={video.youtubeId}
+              className="min-w-[280px] overflow-hidden rounded-[28px] bg-white text-[#06113C] shadow-xl shadow-neutral-950/5 md:min-w-0"
             >
-              <div className="flex aspect-[9/16] items-center justify-center rounded-[26px] bg-gradient-to-br from-[#00B14F] to-[#E8FFF1] text-center">
-                <div className="px-4">
-                  <p className="text-6xl">▶️</p>
-                  <p className="mt-4 text-sm font-black text-white">
-                    {video.platform}
-                  </p>
-                  <p className="mt-2 text-xs font-bold text-white/80">
-                    Thêm link video thật tại đây
-                  </p>
+              <div className="relative aspect-[9/16] overflow-hidden bg-black">
+                <iframe
+                  className="h-full w-full"
+                  src={`https://www.youtube.com/embed/${video.youtubeId}?rel=0&modestbranding=1&playsinline=1`}
+                  title={video.title}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+
+                <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-black text-white backdrop-blur">
+                  {video.badge}
                 </div>
               </div>
 
-              <h3 className="mt-4 line-clamp-2 text-base font-black leading-6">
-                {video.title}
-              </h3>
+              <div className="p-4">
+                <h3 className="line-clamp-2 text-base font-black leading-6">
+                  {video.title}
+                </h3>
 
-              <p className="mt-2 text-sm font-black text-[#00B14F]">
-                Xem video →
-              </p>
-            </a>
+                <p className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-neutral-500">
+                  {video.description}
+                </p>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <a
+                    href={`https://youtube.com/shorts/${video.youtubeId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-black text-[#00B14F]"
+                  >
+                    Xem trên YouTube →
+                  </a>
+
+                  <span className="rounded-full bg-[#E8FFF1] px-3 py-1 text-[11px] font-black text-[#00B14F]">
+                    Shorts
+                  </span>
+                </div>
+              </div>
+            </article>
           ))}
+        </div>
+
+        <div className="mt-5 rounded-2xl bg-white/70 px-4 py-3 text-xs font-bold leading-5 text-neutral-600">
+          🎥 Mẹo: nên thay video định kỳ bằng những clip đang có nhiều lượt xem
+          nhất để giữ khách ở lại trang lâu hơn.
         </div>
       </div>
     </section>

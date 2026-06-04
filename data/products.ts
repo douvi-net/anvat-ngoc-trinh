@@ -35,10 +35,10 @@ export const products = [
     badge: "KHÁCH HỎI NHIỀU",
   },
   {
-    name: "Trà sữa",
+    name: "Trà đào",
     price: 25000,
-    image: "/images/tra-sua.jpg",
-    description: "Trà sữa uống kèm bánh tráng, hợp đặt combo ăn vặt.",
+    image: "/images/tra-dao.jpg",
+    description: "Trà đào uống kèm bánh tráng, hợp đặt combo ăn vặt.",
     badge: "NƯỚC UỐNG",
   },
   {

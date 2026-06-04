@@ -21,7 +21,7 @@ const videos: VideoItem[] = [
     badge: "Best seller",
   },
   {
-    title: "Cuốn đỏ mỡ hành khách hỏi mỗi ngày",
+    title: "Cuốn đỏ chấm sốt me khách hỏi mỗi ngày",
     description: "Món cuốn đỏ chấm sốt, cay nhẹ, ăn là dễ ghiền.",
     youtubeId: "k2hlvSVa-WY",
     badge: "Món hot",
@@ -35,16 +35,15 @@ export default function SocialVideoSection() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-[#00B14F] shadow-sm">
-              Video thật từ quán
+            🔥 Video món thật mỗi ngày
             </div>
 
             <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight text-[#06113C] md:text-4xl">
-              Xem món thật trước khi đặt
+            🎥 Xem quán làm món mỗi ngày
             </h2>
 
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-neutral-600">
-              Video Shorts giúp khách xem món, xem cách quán làm và cảm nhận
-              không khí thật trước khi bấm đặt hàng.
+            Xem cách quán làm món, đóng đơn và những món đang được khách yêu thích nhất trước khi đặt hàng.
             </p>
           </div>
 
@@ -106,8 +105,7 @@ export default function SocialVideoSection() {
         </div>
 
         <div className="mt-5 rounded-2xl bg-white/70 px-4 py-3 text-xs font-bold leading-5 text-neutral-600">
-          🎥 Mẹo: nên thay video định kỳ bằng những clip đang có nhiều lượt xem
-          nhất để giữ khách ở lại trang lâu hơn.
+        ⭐ Video được quay trực tiếp tại quán, món ăn và hình ảnh giống thực tế khi nhận hàng.
         </div>
       </div>
     </section>

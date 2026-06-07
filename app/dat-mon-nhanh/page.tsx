@@ -1571,7 +1571,7 @@ const amountToNextShippingPromo = nextShippingPromotion
 
               <div className="mt-3 flex justify-between text-sm font-bold text-white/70">
                 <span>
-                  Ship{" "}
+                  Phí ship{" "}
                   {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}
                 </span>
                 {shippingDiscount > 0 ? (
@@ -1605,34 +1605,8 @@ const amountToNextShippingPromo = nextShippingPromotion
   </div>
 )}
 
-{nextShippingPromotion && amountToNextShippingPromo > 0 && (
-  <div className="mt-2 rounded-xl bg-[#E8FFF1] px-3 py-2 text-xs font-bold text-[#00B14F]">
-    <div>
-      🎁 Mua thêm{" "}
-      {amountToNextShippingPromo.toLocaleString("vi-VN")}đ để nhận ưu đãi:{" "}
-      {nextShippingPromotion.name}
-    </div>
 
-  </div>
-)}
-{nextShippingPromotion &&
- amountToNextShippingPromo > 0 && (
-  <div className="mt-2">
-    <div className="mb-1 flex justify-between text-xs font-bold text-[#00B14F]">
-      <span>Tiến độ nhận ưu đãi</span>
-      <span>{shippingProgress}%</span>
-    </div>
 
-    <div className="h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
-      <div
-        className="h-full rounded-full bg-[#00B14F]"
-        style={{
-          width: `${shippingProgress}%`,
-        }}
-      />
-    </div>
-  </div>
-)}
               <div className="mt-4 border-t border-white/20 pt-4">
   <div className="rounded-2xl bg-white/10 px-3 py-2">
     <div className="flex items-center justify-between">

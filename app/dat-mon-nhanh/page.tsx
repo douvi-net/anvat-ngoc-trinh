@@ -1096,106 +1096,143 @@ const amountToNextShippingPromo = nextShippingPromotion
         </div>
       )}
 
-      {selectedProduct && (
-        <div className="fixed inset-0 z-[999] flex items-end bg-black/50 p-3 backdrop-blur-sm md:items-center md:justify-center">
-          <div className="max-h-[92vh] w-full overflow-y-auto rounded-[32px] bg-white p-5 shadow-2xl md:max-w-xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-black text-[#00B14F]">Tùy chọn món</p>
-                <h2 className="mt-1 text-2xl font-black text-[#06113C]">
-                  {selectedProduct.name}
-                </h2>
-                <p className="mt-2 text-xl font-black text-[#00B14F]">
-                  {Number(selectedProduct.price).toLocaleString("vi-VN")}đ
-                </p>
-              </div>
-
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
-              >
-                ✕
-              </button>
+{selectedProduct && (
+  <div className="fixed inset-0 z-[999] flex items-end bg-black/50 p-3 backdrop-blur-sm md:items-center md:justify-center">
+    <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl md:max-w-xl">
+      <div className="overflow-y-auto p-5 pb-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 gap-3">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-[#E8FFF1]">
+              <img
+                src={selectedProduct.image_url || "/images/hero.jpg"}
+                alt={selectedProduct.name}
+                className="h-full w-full object-cover"
+              />
             </div>
 
-            {selectedProduct.description && (
-              <p className="mt-4 text-sm font-semibold leading-6 text-neutral-600">
-                {selectedProduct.description}
+            <div className="min-w-0">
+              <p className="text-xs font-black text-[#00B14F]">Tùy chọn món</p>
+
+              <h2 className="mt-1 line-clamp-2 text-xl font-black leading-tight text-[#06113C]">
+                {selectedProduct.name}
+              </h2>
+
+              <p className="mt-1 text-lg font-black text-[#00B14F]">
+                {Number(selectedProduct.price).toLocaleString("vi-VN")}đ
               </p>
-            )}
-
-            <div className="mt-6">
-              <p className="font-black text-[#06113C]">Chọn topping</p>
-
-              {visibleToppings.length === 0 ? (
-                <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
-                  Món này chưa có topping phù hợp.
-                </p>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {visibleToppings.map((topping) => {
-                    const active = selectedToppingIds.includes(topping.id);
-
-                    return (
-                      <button
-                        key={topping.id}
-                        type="button"
-                        onClick={() => toggleTopping(topping.id)}
-                        className={`rounded-2xl border px-4 py-4 text-left font-black ${
-                          active
-                            ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
-                            : "border-black/10 bg-white text-[#06113C]"
-                        }`}
-                      >
-                        <span>{topping.name}</span>
-                        <span className="block text-sm text-neutral-500">
-                          +{Number(topping.price).toLocaleString("vi-VN")}đ
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
+          </div>
 
-            <div className="mt-6">
-              <p className="font-black text-[#06113C]">Độ cay</p>
+          <button
+            onClick={() => setSelectedProduct(null)}
+            className="shrink-0 rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
+          >
+            ✕
+          </button>
+        </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                {spicyOptions.map((option) => (
+        {selectedProduct.description && (
+          <p className="mt-4 line-clamp-2 text-sm font-semibold leading-6 text-neutral-600">
+            {selectedProduct.description}
+          </p>
+        )}
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-black text-[#06113C]">Chọn topping</p>
+
+            <p className="text-xs font-bold text-neutral-400">
+              Chọn thêm nếu muốn
+            </p>
+          </div>
+
+          {visibleToppings.length === 0 ? (
+            <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
+              Món này chưa có topping phù hợp.
+            </p>
+          ) : (
+            <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+              {visibleToppings.map((topping) => {
+                const active = selectedToppingIds.includes(topping.id);
+
+                return (
                   <button
-                    key={option}
+                    key={topping.id}
                     type="button"
-                    onClick={() => setSelectedSpicyLevel(option)}
-                    className={`rounded-2xl px-4 py-3 text-sm font-black ${
-                      selectedSpicyLevel === option
-                        ? "bg-[#00B14F] text-white"
-                        : "bg-[#F5FFF8] text-[#06113C]"
+                    onClick={() => toggleTopping(topping.id)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left font-black ${
+                      active
+                        ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
+                        : "border-black/10 bg-white text-[#06113C]"
                     }`}
                   >
-                    {option}
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm">
+                        {topping.name}
+                      </span>
+
+                      <span className="block text-xs text-neutral-500">
+                        +{Number(topping.price).toLocaleString("vi-VN")}đ
+                      </span>
+                    </div>
+
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${
+                        active
+                          ? "border-[#00B14F] bg-[#00B14F] text-white"
+                          : "border-neutral-300 text-transparent"
+                      }`}
+                    >
+                      ✓
+                    </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
+          )}
+        </div>
 
-            <textarea
-              value={itemNote}
-              onChange={(e) => setItemNote(e.target.value)}
-              placeholder="Ghi chú riêng cho món này"
-              rows={3}
-              className="mt-6 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-            />
+        <div className="mt-5">
+          <p className="font-black text-[#06113C]">Độ cay</p>
 
-            <button
-              onClick={addSelectedProductToCart}
-              className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white"
-            >
-              Thêm vào giỏ · {selectedProductTotal.toLocaleString("vi-VN")}đ
-            </button>
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {spicyOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setSelectedSpicyLevel(option)}
+                className={`rounded-xl px-2 py-3 text-xs font-black ${
+                  selectedSpicyLevel === option
+                    ? "bg-[#00B14F] text-white"
+                    : "bg-[#F5FFF8] text-[#06113C]"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
           </div>
         </div>
-      )}
+
+        <textarea
+          value={itemNote}
+          onChange={(e) => setItemNote(e.target.value)}
+          placeholder="Ghi chú riêng cho món này"
+          rows={2}
+          className="mt-5 w-full rounded-2xl border border-black/10 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+        />
+      </div>
+
+      <div className="border-t border-black/10 bg-white p-4">
+        <button
+          onClick={addSelectedProductToCart}
+          className="w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white"
+        >
+          Thêm vào giỏ · {selectedProductTotal.toLocaleString("vi-VN")}đ
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {checkoutOpen && (
         <div className="fixed inset-0 z-[999] flex items-end bg-black/50 backdrop-blur-sm md:items-center md:justify-center">

@@ -1320,35 +1320,74 @@ const amountToNextShippingPromo = nextShippingPromotion
             </div>
 
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
-              <p className="text-xl font-black text-[#06113C]">
-                Áp dụng ưu đãi và giảm giá
-              </p>
+  <p className="text-xl font-black text-[#06113C]">
+    Ưu đãi & giảm giá
+  </p>
 
-              <button
-                type="button"
-                onClick={() => setCouponOpen(true)}
-                className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-4 text-left shadow-sm ring-1 ring-black/10"
-              >
-                <div>
-                  <p className="font-black text-[#06113C]">
-                    🎟️{" "}
-                    {selectedCoupon
-                      ? selectedCoupon.title ||
-                        selectedCoupon.name ||
-                        selectedCoupon.code
-                      : "Áp dụng ưu đãi để được giảm giá"}
-                  </p>
+  {bestShippingPromotion && shippingDiscount > 0 ? (
+    <div className="mt-4 rounded-2xl border border-[#00B14F]/30 bg-[#E8FFF1] p-4">
+      <p className="font-black text-[#06113C]">
+        🎁 Đã tự động áp dụng
+      </p>
 
-                  {selectedCoupon && (
-                    <p className="mt-1 text-sm font-bold text-[#00B14F]">
-                      Giảm {discountAmount.toLocaleString("vi-VN")}đ
-                    </p>
-                  )}
-                </div>
+      <p className="mt-1 text-sm font-bold text-[#00B14F]">
+        {bestShippingPromotion.name}
+      </p>
 
-                <span className="text-2xl font-black">›</span>
-              </button>
-            </div>
+      <p className="mt-1 text-sm font-bold text-neutral-500">
+        Giảm {shippingDiscount.toLocaleString("vi-VN")}đ phí ship
+      </p>
+    </div>
+  ) : nextShippingPromotion && amountToNextShippingPromo > 0 ? (
+    <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-black/10">
+      <p className="font-black text-[#06113C]">
+        🎁 Sắp nhận ưu đãi
+      </p>
+
+      <p className="mt-1 text-sm font-bold text-neutral-500">
+        Mua thêm {amountToNextShippingPromo.toLocaleString("vi-VN")}đ để nhận:
+      </p>
+
+      <p className="mt-1 text-sm font-black text-[#00B14F]">
+        {nextShippingPromotion.name}
+      </p>
+
+      <div className="mt-3 h-3 overflow-hidden rounded-full bg-neutral-100">
+        <div
+          className="h-full rounded-full bg-[#00B14F]"
+          style={{ width: `${shippingProgress}%` }}
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="mt-4 rounded-2xl bg-white p-4 text-sm font-bold text-neutral-500 ring-1 ring-black/10">
+      Chưa có ưu đãi vận chuyển phù hợp.
+    </div>
+  )}
+
+  <button
+    type="button"
+    onClick={() => setCouponOpen(true)}
+    className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-4 text-left shadow-sm ring-1 ring-black/10"
+  >
+    <div>
+      <p className="font-black text-[#06113C]">
+        🎟️{" "}
+        {selectedCoupon
+          ? selectedCoupon.title || selectedCoupon.name || selectedCoupon.code
+          : "Chọn thêm mã giảm giá"}
+      </p>
+
+      {selectedCoupon && (
+        <p className="mt-1 text-sm font-bold text-[#00B14F]">
+          Giảm {discountAmount.toLocaleString("vi-VN")}đ
+        </p>
+      )}
+    </div>
+
+    <span className="text-2xl font-black">›</span>
+  </button>
+</div>
 
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
               <p className="font-black text-[#06113C]">Thông tin khách</p>

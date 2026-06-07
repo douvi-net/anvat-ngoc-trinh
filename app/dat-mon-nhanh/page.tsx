@@ -1374,8 +1374,8 @@ const amountToNextShippingPromo = nextShippingPromotion
       <p className="font-black text-[#06113C]">
         🎟️{" "}
         {selectedCoupon
-          ? selectedCoupon.title || selectedCoupon.name || selectedCoupon.code
-          : "Chọn thêm mã giảm giá"}
+  ? selectedCoupon.title || selectedCoupon.name || selectedCoupon.code
+  : "Chọn mã giảm giá nếu có"}
       </p>
 
       {selectedCoupon && (
@@ -1587,15 +1587,7 @@ const amountToNextShippingPromo = nextShippingPromotion
   <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
 )}
               </div>
-              {bestShippingPromotion && shippingDiscount > 0 && (
-  <div className="mt-3 rounded-2xl border border-[#00B14F]/30 bg-[#00B14F]/10 p-3 text-sm font-bold text-[#00B14F]">
-    <div>🎁 Đã áp dụng ưu đãi tốt nhất</div>
-    <div className="mt-1 text-white/80">
-      {bestShippingPromotion.name} - Giảm{" "}
-      {shippingDiscount.toLocaleString("vi-VN")}đ phí ship
-    </div>
-  </div>
-)}
+  
               {discountAmount > 0 && (
                 <div className="mt-3 flex justify-between text-sm font-bold text-[#00B14F]">
                   <span>Giảm giá</span>
@@ -1744,112 +1736,107 @@ const amountToNextShippingPromo = nextShippingPromotion
         </div>
       )}
 
-      {couponOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:items-center md:justify-center">
-          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-black text-[#06113C]">
-                Chọn ưu đãi
-              </h2>
+{couponOpen && (
+  <div className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:items-center md:justify-center">
+    <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black text-[#06113C]">
+          Chọn mã giảm giá
+        </h2>
 
-              <button
-                onClick={() => setCouponOpen(false)}
-                className="rounded-full bg-neutral-100 px-4 py-2 font-black"
-              >
-                Đóng
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-3">
-  {coupons.length === 0 && availableShippingPromotions.length === 0 ? (
-    <p className="font-semibold text-neutral-500">
-      Hiện chưa có ưu đãi phù hợp.
-    </p>
-  ) : (
-    <>
-      {availableShippingPromotions.map((promo) => (
-        <div
-          key={promo.id}
-          className="rounded-2xl border border-[#00B14F]/20 bg-[#E8FFF1] p-4"
+        <button
+          onClick={() => setCouponOpen(false)}
+          className="rounded-full bg-neutral-100 px-4 py-2 font-black"
         >
-          <p className="font-black text-[#06113C]">🎁 {promo.name}</p>
+          Đóng
+        </button>
+      </div>
 
-          <p className="mt-1 text-sm font-bold text-neutral-600">
-            Đơn từ{" "}
-            {Number(promo.min_order_value || 0).toLocaleString("vi-VN")}đ ·
-            dưới {Number(promo.max_distance_km || 0)}km
+      <p className="mt-2 text-sm font-bold text-neutral-500">
+        Khuyến mãi freeship sẽ được hệ thống tự áp dụng nếu đơn đủ điều kiện.
+      </p>
+
+      <div className="mt-5 space-y-3">
+        {coupons.length === 0 ? (
+          <p className="font-semibold text-neutral-500">
+            Hiện chưa có mã giảm giá.
           </p>
+        ) : (
+          coupons.map((coupon) => {
+            const minOrder = getCouponMinOrder(coupon);
+            const canUse = subtotal >= minOrder;
+            const isSelected = selectedCoupon?.id === coupon.id;
 
-          <p className="mt-2 text-sm font-black text-[#00B14F]">
-            {promo.promotion_type === "free_ship"
-              ? "Freeship"
-              : promo.promotion_type === "ship_percent"
-              ? `Giảm ${promo.discount_value}% phí ship`
-              : `Giảm ${Number(promo.discount_value || 0).toLocaleString(
-                  "vi-VN"
-                )}đ phí ship`}
-          </p>
-
-          {bestShippingPromotion?.id === promo.id && (
-            <p className="mt-2 inline-flex rounded-full bg-[#00B14F] px-3 py-1 text-xs font-black text-white">
-              Đang tự áp dụng
-            </p>
-          )}
-        </div>
-      ))}
-
-      {coupons.map((coupon) => {
-        const minOrder = getCouponMinOrder(coupon);
-        const canUse = subtotal >= minOrder;
-
-        return (
-          <button
-            key={coupon.id}
-            onClick={() => applyCoupon(coupon)}
-            className={`w-full rounded-2xl p-4 text-left ring-1 ring-black/10 ${
-              canUse ? "bg-[#F5FFF8]" : "bg-neutral-100 opacity-60"
-            }`}
-          >
-            <p className="font-black text-[#06113C]">
-              🎟️ {coupon.title || coupon.name || coupon.code}
-            </p>
-
-            <p className="mt-1 text-sm font-bold text-neutral-600">
-              Mã: {coupon.code}
-            </p>
-
-            <p className="mt-1 text-sm font-bold text-[#00B14F]">
-              {getCouponType(coupon).includes("percent")
-                ? `Giảm ${getCouponValue(coupon)}%`
-                : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`}
-            </p>
-
-            {minOrder > 0 && (
-              <p className="mt-1 text-xs font-bold text-neutral-500">
-                Đơn tối thiểu {minOrder.toLocaleString("vi-VN")}đ
-              </p>
-            )}
-          </button>
-        );
-      })}
-    </>
-  )}
-</div>
-
-            {selectedCoupon && (
+            return (
               <button
-                onClick={() => {
-                  setSelectedCoupon(null);
-                  setCouponOpen(false);
-                }}
-                className="mt-5 w-full rounded-2xl bg-red-50 px-5 py-4 font-black text-red-600"
+                key={coupon.id}
+                onClick={() => applyCoupon(coupon)}
+                disabled={!canUse}
+                className={`w-full rounded-2xl p-4 text-left ring-1 ring-black/10 ${
+                  isSelected
+                    ? "bg-[#E8FFF1] ring-[#00B14F]"
+                    : canUse
+                    ? "bg-white"
+                    : "bg-neutral-100 opacity-60"
+                }`}
               >
-                Bỏ mã giảm giá
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-black text-[#06113C]">
+                      🎟️ {coupon.title || coupon.name || coupon.code}
+                    </p>
+
+                    <p className="mt-1 text-sm font-bold text-neutral-600">
+                      Mã: {coupon.code}
+                    </p>
+
+                    <p className="mt-1 text-sm font-black text-[#00B14F]">
+                      {getCouponType(coupon).includes("percent")
+                        ? `Giảm ${getCouponValue(coupon)}%`
+                        : `Giảm ${getCouponValue(coupon).toLocaleString(
+                            "vi-VN"
+                          )}đ`}
+                    </p>
+
+                    {minOrder > 0 && (
+                      <p className="mt-1 text-xs font-bold text-neutral-500">
+                        Đơn tối thiểu {minOrder.toLocaleString("vi-VN")}đ
+                      </p>
+                    )}
+                  </div>
+
+                  {isSelected && (
+                    <span className="rounded-full bg-[#00B14F] px-3 py-1 text-xs font-black text-white">
+                      Đã chọn
+                    </span>
+                  )}
+                </div>
+
+                {!canUse && (
+                  <p className="mt-2 text-xs font-bold text-red-500">
+                    Chưa đủ điều kiện áp dụng
+                  </p>
+                )}
               </button>
-            )}
-          </div>
-        </div>
+            );
+          })
+        )}
+      </div>
+
+      {selectedCoupon && (
+        <button
+          onClick={() => {
+            setSelectedCoupon(null);
+            setCouponOpen(false);
+          }}
+          className="mt-5 w-full rounded-2xl bg-red-50 px-5 py-4 font-black text-red-600"
+        >
+          Bỏ mã giảm giá
+        </button>
       )}
+    </div>
+  </div>
+)}  
     </main>
   );
 }

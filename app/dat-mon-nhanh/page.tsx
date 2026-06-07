@@ -299,7 +299,19 @@ export default function DatMonNhanhPage() {
     setCustomerAddress(localStorage.getItem("avnt_customer_address") || "");
     setPaymentMethod(localStorage.getItem("avnt_payment_method") || "cod");
   }
-
+  function playSound(type: "add" | "open" | "success") {
+    if (typeof window === "undefined") return;
+  
+    const soundMap = {
+      add: "/sounds/add-to-cart.wav",
+      open: "/sounds/open-cart.wav",
+      success: "/sounds/order-success.wav",
+    };
+  
+    const audio = new Audio(soundMap[type]);
+    audio.volume = 0.35;
+    audio.play().catch(() => {});
+  }
   function saveCustomerLocal() {
     if (typeof window === "undefined") return;
 
@@ -424,6 +436,7 @@ setUsePointsDiscount(0);
     });
 
     showToast(`Đã thêm ${selectedProduct.name} vào giỏ`);
+    playSound("add");
     triggerCartAnimation();
     setSelectedProduct(null);
   }
@@ -876,7 +889,7 @@ const amountToNextShippingPromo = nextShippingPromotion
       setNote("");
       setSelectedCoupon(null);
       setCheckoutOpen(false);
-
+      playSound("success");
       router.push(`/tra-cuu-don?code=${orderCode}`);
     } catch (error) {
       console.error("CREATE ORDER ERROR:", error);
@@ -1077,7 +1090,10 @@ const amountToNextShippingPromo = nextShippingPromotion
       {cart.length > 0 && (
         <div className="fixed bottom-[78px] left-0 right-0 z-[900] px-4 md:bottom-5 md:left-1/2 md:max-w-xl md:-translate-x-1/2">
           <button
-            onClick={() => setCheckoutOpen(true)}
+            onClick={() => {
+              playSound("open");
+              setCheckoutOpen(true);
+            }}
             className={`flex w-full items-center justify-between rounded-[24px] bg-[#06113C] px-5 py-4 text-white shadow-2xl shadow-black/25 transition active:scale-95 ${
               cartAnimate ? "scale-[1.02]" : ""
             }`}

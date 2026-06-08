@@ -11,7 +11,7 @@ const phone = "0392496220";
 const jobs = [
   {
     title: "Nhân viên làm món",
-    salary: "25.000 - 30.000đ/giờ",
+    salary: "25.500 - 30.000đ/giờ",
     icon: "🥢",
     description:
       "Phù hợp với bạn nhanh nhẹn, sạch sẽ, chịu được môi trường bếp hơi nóng và muốn làm việc lâu dài.",
@@ -43,7 +43,7 @@ const shifts = [
   {
     title: "Full-time",
     time: "11h - 22h",
-    note: "Thu nhập khoảng 8 - 9 triệu/tháng",
+    note: "Thu nhập khoảng 9 - 10 triệu/tháng",
   },
   {
     title: "Ca 8 tiếng",

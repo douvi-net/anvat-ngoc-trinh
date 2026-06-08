@@ -60,10 +60,6 @@
   }
 
   export async function POST(request: NextRequest) {
-    return NextResponse.json({
-      ok: false,
-      message: "TEST MAPS HAVERSINE API",
-    });
     try {
       const body = (await request.json()) as RouteRequestBody;
 

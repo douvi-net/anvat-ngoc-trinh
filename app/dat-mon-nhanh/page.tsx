@@ -642,7 +642,7 @@ const totalAfterPoints = Math.max(
   0,
   total - usePointsDiscount
 );
-
+const estimatedReceive = getEstimatedReceiveTime();
 const rewardPoints = Math.floor(totalAfterPoints / 10000);
 const nextPointTarget =
   Math.ceil(totalAfterPoints / 10000) * 10000;
@@ -920,7 +920,46 @@ const amountToNextShippingPromo = nextShippingPromotion
       setRouteLoading(false);
     }
   }
- 
+  function estimatePreparationMinutes(itemCount: number) {
+    if (itemCount <= 2) return 10;
+    if (itemCount <= 5) return 15;
+    if (itemCount <= 10) return 20;
+    return 30;
+  }
+  
+  function estimateDeliveryMinutes(distanceKm: number) {
+    if (distanceKm <= 2) return 10;
+    if (distanceKm <= 5) return 15;
+    if (distanceKm <= 8) return 20;
+    return 30;
+  }
+  
+  function formatTime(date: Date) {
+    return date.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  
+  function getEstimatedReceiveTime() {
+    const prepMinutes = estimatePreparationMinutes(cartCount);
+    const deliveryMinutes = estimateDeliveryMinutes(deliveryDistanceKm);
+  
+    const now = new Date();
+  
+    const from = new Date(
+      now.getTime() + (prepMinutes + deliveryMinutes) * 60 * 1000
+    );
+  
+    const to = new Date(from.getTime() + 10 * 60 * 1000);
+  
+    return {
+      prepMinutes,
+      deliveryMinutes,
+      fromText: formatTime(from),
+      toText: formatTime(to),
+    };
+  }
   async function submitOrder() {
     if (!isShopOpen) {
       alert("Hiện tại quán chưa nhận đơn. Anh quay lại sau giúp em nha.");
@@ -1843,6 +1882,27 @@ const amountToNextShippingPromo = nextShippingPromotion
     </div>
   </div>
 )}
+<div className="mt-6 rounded-[28px] bg-[#E8FFF1] p-4">
+  <p className="text-lg font-black text-[#06113C]">
+    ⏱️ Thời gian dự kiến
+  </p>
+
+  {googleShippingFee === null ? (
+    <p className="mt-2 text-sm font-bold text-yellow-700">
+      ⚠️ Địa chỉ ngoài khu vực giao tự động. Quán sẽ gọi xác nhận thời gian giao
+      trước khi làm món.
+    </p>
+  ) : (
+    <div className="mt-3 space-y-2 text-sm font-bold text-[#06113C]">
+      <p>🍳 Làm món: khoảng {estimatedReceive.prepMinutes} phút</p>
+      <p>🛵 Giao hàng: khoảng {estimatedReceive.deliveryMinutes} phút</p>
+      <p className="text-base font-black text-[#00B14F]">
+        📦 Dự kiến nhận món: {estimatedReceive.fromText} -{" "}
+        {estimatedReceive.toText}
+      </p>
+    </div>
+  )}
+</div>
             <div className="mt-6 rounded-3xl bg-[#06113C] p-5 text-white">
               <div className="flex justify-between text-sm font-bold text-white/70">
                 <span>Tạm tính</span>

@@ -249,7 +249,17 @@ export default function AdminOrdersPage() {
     return 30;
   }
   async function updateOrderStatus(orderId: string, status: string) {
-    const currentOrder = orders.find((item) => item.id === orderId);
+    let currentOrder = orders.find((item) => item.id === orderId);
+
+if (!currentOrder) {
+  const { data } = await supabase
+    .from("orders")
+    .select("*, order_items (*)")
+    .eq("id", orderId)
+    .single();
+
+  currentOrder = data as Order;
+}
   
     const now = new Date();
 

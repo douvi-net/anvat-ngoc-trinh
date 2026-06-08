@@ -4,6 +4,7 @@ const navItems = [
   { label: "Trang chủ", href: "/" },
   { label: "Giới thiệu", href: "/gioi-thieu" },
   { label: "Bài viết", href: "/bai-viet" },
+  { label: "Tuyển dụng", href: "/tuyen-dung" },
   { label: "Liên hệ", href: "/lien-he" },
 ];
 

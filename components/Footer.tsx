@@ -8,6 +8,7 @@ const quickLinks = [
   { label: "Đặt món", href: "/dat-mon-nhanh" },
   { label: "Tra cứu đơn", href: "/tra-cuu-don" },
   { label: "Bài viết", href: "/bai-viet" },
+  { label: "Tuyển dụng", href: "/tuyen-dung" },
   { label: "Liên hệ", href: "/lien-he" },
 ];
 
@@ -105,7 +106,7 @@ export default function Footer() {
               </a>
 
               <a
-                href="https://www.tiktok.com/"
+                href="https://www.tiktok.com/@anvatngoctrinh"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-black text-white ring-1 ring-white/10 transition hover:bg-white/15"

@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
 type Product = {
   id: string;
   name: string;
@@ -155,6 +159,9 @@ export default function DatMonNhanhPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
+const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -176,6 +183,61 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
     fetchInitialData();
     loadSavedCustomer();
   }, []);
+  useEffect(() => {
+    if (!checkoutOpen) return;
+  
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  
+    if (!apiKey || !addressInputRef.current) return;
+  
+    const scriptId = "google-maps-script";
+  
+    function initAutocomplete() {
+      if (!window.google || !addressInputRef.current) return;
+  
+      const autocomplete = new window.google.maps.places.Autocomplete(
+        addressInputRef.current,
+        {
+          componentRestrictions: { country: "vn" },
+          fields: ["formatted_address", "geometry", "name"],
+        }
+      );
+  
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace();
+  
+        const lat = place.geometry?.location?.lat();
+        const lng = place.geometry?.location?.lng();
+  
+        if (!lat || !lng) {
+          setRouteMessage("Không lấy được tọa độ địa chỉ.");
+          return;
+        }
+  
+        const fullAddress = place.formatted_address || place.name || "";
+  
+        setCustomerAddress(fullAddress);
+        setDeliveryLat(lat);
+        setDeliveryLng(lng);
+  
+        calculateRouteByLatLng(lat, lng);
+      });
+    }
+  
+    if (document.getElementById(scriptId)) {
+      initAutocomplete();
+      return;
+    }
+  
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=vi&region=VN`;
+    script.async = true;
+    script.defer = true;
+    script.onload = initAutocomplete;
+  
+    document.body.appendChild(script);
+  }, [checkoutOpen]);
   useEffect(() => {
     if (!products.length) return;
   
@@ -784,6 +846,47 @@ const amountToNextShippingPromo = nextShippingPromotion
     if (error) throw error;
     return data as Customer;
   }
+  async function calculateRouteByLatLng(lat: number, lng: number) {
+    setRouteLoading(true);
+    setRouteMessage("");
+  
+    try {
+      const res = await fetch("/api/maps", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ lat, lng }),
+      });
+  
+      const data = await res.json();
+  
+      if (!data.ok) {
+        setRouteMessage(data.message || "Không tính được phí ship.");
+        setGoogleShippingFee(null);
+        return;
+      }
+  
+      setDeliveryDistanceKm(Number(data.distance_km || 0));
+      setGoogleShippingFee(
+        data.shipping_fee === null ? null : Number(data.shipping_fee)
+      );
+  
+      setRouteMessage(
+        `${data.distance_text} - ${data.duration_text}. Phí ship: ${
+          data.shipping_fee === null
+            ? "quán xác nhận"
+            : Number(data.shipping_fee).toLocaleString("vi-VN") + "đ"
+        }`
+      );
+    } catch (error) {
+      console.error("MAP ROUTE ERROR:", error);
+      setRouteMessage("Lỗi khi tính phí ship.");
+      setGoogleShippingFee(null);
+    } finally {
+      setRouteLoading(false);
+    }
+  }
   async function calculateRouteFromCurrentLocation() {
     if (!navigator.geolocation) {
       alert("Trình duyệt không hỗ trợ lấy vị trí.");
@@ -854,7 +957,10 @@ const amountToNextShippingPromo = nextShippingPromotion
       alert("Anh nhập đủ số điện thoại, tên và địa chỉ giúp em nha.");
       return;
     }
-
+    if (!deliveryLat || !deliveryLng || googleShippingFee === null) {
+      alert("Anh chọn địa chỉ từ gợi ý Google để quán tính phí ship chính xác nha.");
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -1525,13 +1631,19 @@ const amountToNextShippingPromo = nextShippingPromotion
                   className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
 
-                <textarea
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                  placeholder="Địa chỉ giao hàng"
-                  rows={3}
-                  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-                />
+<input
+  ref={addressInputRef}
+  value={customerAddress}
+  onChange={(e) => {
+    setCustomerAddress(e.target.value);
+    setDeliveryLat(null);
+    setDeliveryLng(null);
+    setGoogleShippingFee(null);
+    setRouteMessage("");
+  }}
+  placeholder="Nhập địa chỉ giao hàng"
+  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+/>
               </div>
             </div>
 
@@ -1552,7 +1664,14 @@ const amountToNextShippingPromo = nextShippingPromotion
 
 <button
   type="button"
-  onClick={calculateRouteFromCurrentLocation}
+  onClick={() => {
+    if (!deliveryLat || !deliveryLng) {
+      alert("Anh chọn địa chỉ từ gợi ý Google trước nha.");
+      return;
+    }
+  
+    calculateRouteByLatLng(deliveryLat, deliveryLng);
+  }}
   disabled={routeLoading}
   className="col-span-2 rounded-2xl bg-[#00B14F] px-4 py-4 font-black text-white disabled:opacity-60"
 >

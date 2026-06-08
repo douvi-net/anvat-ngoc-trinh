@@ -936,8 +936,18 @@ const amountToNextShippingPromo = nextShippingPromotion
       alert("Anh nhập đủ số điện thoại, tên và địa chỉ giúp em nha.");
       return;
     }
-    if (!deliveryLat || !deliveryLng || googleShippingFee === null) {
-      alert("Anh chọn địa chỉ từ gợi ý Google để quán tính phí ship chính xác nha.");
+    if (!deliveryLat || !deliveryLng) {
+      alert("Anh/chị vui lòng chọn địa chỉ từ danh sách gợi ý Google.");
+      return;
+    }
+    
+    if (routeLoading) {
+      alert("Hệ thống đang tính phí ship, anh/chị chờ vài giây nha.");
+      return;
+    }
+    
+    if (!routeMessage) {
+      alert("Anh/chị bấm tính lại phí ship trước khi đặt hàng nha.");
       return;
     }
     setSubmitting(true);
@@ -1701,9 +1711,28 @@ const amountToNextShippingPromo = nextShippingPromotion
 {routeLoading ? "Đang tính phí ship..." : "🚚 Tính lại phí ship"}
 </button>
 {routeMessage && (
-  <p className="col-span-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#06113C]">
-    {routeMessage}
-  </p>
+  <div
+    className={`col-span-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+      googleShippingFee === null
+        ? "border border-yellow-300 bg-yellow-50 text-yellow-700"
+        : "bg-white text-[#06113C]"
+    }`}
+  >
+    {googleShippingFee === null ? (
+      <>
+        <p className="font-black">
+          ⚠️ Địa chỉ nằm ngoài khu vực giao tự động.
+        </p>
+        <p className="mt-1">
+          Quán sẽ liên hệ xác nhận phí ship trước khi làm món. Anh/chị vẫn có
+          thể đặt hàng bình thường.
+        </p>
+        <p className="mt-1">{routeMessage}</p>
+      </>
+    ) : (
+      routeMessage
+    )}
+  </div>
 )}
               </div>
 
@@ -1835,7 +1864,11 @@ const amountToNextShippingPromo = nextShippingPromotion
     </div>
   </div>
 ) : (
-  <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
+<span>
+  {googleShippingFee === null
+    ? "Quán xác nhận"
+    : `${shippingFee.toLocaleString("vi-VN")}đ`}
+</span>
 )}
               </div>
   

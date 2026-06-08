@@ -1539,25 +1539,12 @@ const amountToNextShippingPromo = nextShippingPromotion
               <p className="font-black text-[#06113C]">Giao hàng & thanh toán</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-              <select
-  value={deliveryDistanceKm}
-  onChange={(e) => {
-    setDeliveryDistanceKm(Number(e.target.value));
-    setGoogleShippingFee(null);
-    setRouteMessage("");
-  }}
-  className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
->
-  <option value={1}>Dưới 2km</option>
-  <option value={3}>2 - 5km</option>
-  <option value={6}>5 - 8km</option>
-  <option value={9}>Trên 8km</option>
-</select>
+        
 
 <select
   value={paymentMethod}
   onChange={(e) => setPaymentMethod(e.target.value)}
-  className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+ className="col-span-2 rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
 >
   <option value="cod">COD</option>
   <option value="momo">Momo/CK</option>
@@ -1571,6 +1558,11 @@ const amountToNextShippingPromo = nextShippingPromotion
 >
   {routeLoading ? "Đang tính phí ship..." : "📍 Tính phí ship tự động"}
 </button>
+{routeMessage && (
+  <p className="col-span-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#06113C]">
+    {routeMessage}
+  </p>
+)}
               </div>
 
               {paymentMethod === "momo" && (

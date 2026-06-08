@@ -73,9 +73,9 @@ export async function POST(request: NextRequest) {
         {
           ok: false,
           message:
-            data?.error_message ||
-            data?.status ||
-            "Không tính được tuyến đường từ Google Maps.",
+  data?.error_message ||
+  JSON.stringify(data) ||
+  "Không tính được tuyến đường từ Google Maps.",
           error: data,
         },
         { status: googleResponse.ok ? 400 : googleResponse.status }

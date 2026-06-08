@@ -50,75 +50,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const params = new URLSearchParams({
+      origins: `${SHOP_LOCATION.lat},${SHOP_LOCATION.lng}`,
+      destinations: `${lat},${lng}`,
+      mode: "driving",
+      language: "vi",
+      units: "metric",
+      key: apiKey,
+    });
+
     const googleResponse = await fetch(
-      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask":
-            "routes.distanceMeters,routes.duration,routes.localizedValues",
-        },
-        body: JSON.stringify({
-          origin: {
-            location: {
-              latLng: {
-                latitude: SHOP_LOCATION.lat,
-                longitude: SHOP_LOCATION.lng,
-              },
-            },
-          },
-          destination: {
-            location: {
-              latLng: {
-                latitude: lat,
-                longitude: lng,
-              },
-            },
-          },
-          travelMode: "DRIVE",
-          routingPreference: "TRAFFIC_AWARE",
-          languageCode: "vi-VN",
-          units: "METRIC",
-        }),
+        method: "GET",
       }
     );
 
     const data = await googleResponse.json();
 
-    if (!googleResponse.ok) {
+    if (!googleResponse.ok || data.status !== "OK") {
       return NextResponse.json(
         {
           ok: false,
           message:
-  data?.error?.message ||
-  "Không tính được tuyến đường từ Google Maps.",
-error: data,
+            data?.error_message ||
+            data?.status ||
+            "Không tính được tuyến đường từ Google Maps.",
+          error: data,
         },
-        { status: googleResponse.status }
+        { status: googleResponse.ok ? 400 : googleResponse.status }
       );
     }
 
-    const route = data?.routes?.[0];
+    const element = data?.rows?.[0]?.elements?.[0];
 
-    if (!route) {
+    if (!element || element.status !== "OK") {
       return NextResponse.json(
-        { ok: false, message: "Không tìm thấy tuyến đường phù hợp." },
-        { status: 404 }
+        {
+          ok: false,
+          message:
+            element?.status === "ZERO_RESULTS"
+              ? "Không tìm thấy tuyến đường phù hợp."
+              : element?.status || "Không tính được khoảng cách giao hàng.",
+          error: data,
+        },
+        { status: 400 }
       );
     }
 
-    const distanceMeters = Number(route.distanceMeters || 0);
+    const distanceMeters = Number(element.distance?.value || 0);
     const distanceKm = Number((distanceMeters / 1000).toFixed(2));
 
-    const durationText =
-      route.localizedValues?.duration?.text ||
-      route.duration?.replace("s", " giây") ||
-      "";
-
-    const distanceText =
-      route.localizedValues?.distance?.text || `${distanceKm} km`;
+    const durationText = element.duration?.text || "";
+    const distanceText = element.distance?.text || `${distanceKm} km`;
 
     const shippingFee = calculateShippingFee(distanceKm);
 
@@ -134,7 +118,7 @@ error: data,
       message:
         shippingFee === null
           ? "Khoảng cách ngoài khu vực giao hàng tự động. Quán sẽ xác nhận phí ship."
-          : "Đã tính phí ship theo Google Maps.",
+          : "Đã tính phí ship theo Google Distance Matrix.",
     });
   } catch (error) {
     return NextResponse.json(

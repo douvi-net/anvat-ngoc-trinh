@@ -188,7 +188,15 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
   
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   
-    if (!apiKey || !addressInputRef.current) return;
+    if (!apiKey) {
+      console.error("Thiếu NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
+      return;
+    }
+    
+    if (!addressInputRef.current) {
+      console.error("Chưa tìm thấy ô nhập địa chỉ");
+      return;
+    }
   
     const scriptId = "google-maps-script";
   
@@ -231,10 +239,17 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
   
     const script = document.createElement("script");
     script.id = scriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=vi&region=VN`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=vi&region=VN&callback=Function.prototype`;
     script.async = true;
     script.defer = true;
-    script.onload = initAutocomplete;
+    script.onload = () => {
+      console.log("Google Maps script loaded", window.google);
+      initAutocomplete();
+    };
+    
+    script.onerror = () => {
+      console.error("Không load được Google Maps script");
+    };
   
     document.body.appendChild(script);
   }, [checkoutOpen]);

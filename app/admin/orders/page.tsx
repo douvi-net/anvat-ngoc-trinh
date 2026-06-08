@@ -34,6 +34,11 @@ type Order = {
   delivery_distance_km: number | null;
   delivery_area: string | null;
   delivery_status: string | null;
+  confirmed_at?: string | null;
+preparation_minutes?: number | null;
+delivery_minutes?: number | null;
+estimated_delivery_from?: string | null;
+estimated_delivery_to?: string | null;
   promotion_name: string | null;
   promotion_discount: number | null;
   order_items: OrderItem[];
@@ -230,22 +235,64 @@ export default function AdminOrdersPage() {
         alert("Trình duyệt chưa cho phát âm thanh. Anh bấm lại lần nữa.");
       });
   }
-
+  function estimatePreparationMinutes(itemCount: number) {
+    if (itemCount <= 2) return 10;
+    if (itemCount <= 5) return 15;
+    if (itemCount <= 10) return 20;
+    return 30;
+  }
+  
+  function estimateDeliveryMinutes(distanceKm: number) {
+    if (distanceKm <= 2) return 10;
+    if (distanceKm <= 5) return 15;
+    if (distanceKm <= 8) return 20;
+    return 30;
+  }
   async function updateOrderStatus(orderId: string, status: string) {
     const currentOrder = orders.find((item) => item.id === orderId);
   
-    const updateData =
+    const now = new Date();
+
+    let updateData: Record<string, any> =
       status === "new"
         ? {
             status,
             payment_status: "paid",
-            payment_confirmed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            payment_confirmed_at: now.toISOString(),
+            updated_at: now.toISOString(),
           }
         : {
             status,
-            updated_at: new Date().toISOString(),
+            updated_at: now.toISOString(),
           };
+    
+    if (currentOrder && status === "making") {
+      const itemCount =
+        currentOrder.order_items?.reduce(
+          (sum, item) => sum + Number(item.quantity || 0),
+          0
+        ) || 1;
+    
+      const distanceKm = Number(currentOrder.delivery_distance_km || 2);
+    
+      const preparationMinutes = estimatePreparationMinutes(itemCount);
+      const deliveryMinutes = estimateDeliveryMinutes(distanceKm);
+    
+      const estimatedFrom = new Date(
+        now.getTime() + (preparationMinutes + deliveryMinutes) * 60 * 1000
+      );
+    
+      const estimatedTo = new Date(estimatedFrom.getTime() + 10 * 60 * 1000);
+    
+      updateData = {
+        ...updateData,
+        confirmed_at: now.toISOString(),
+        preparation_minutes: preparationMinutes,
+        delivery_minutes: deliveryMinutes,
+        estimated_delivery_from: estimatedFrom.toISOString(),
+        estimated_delivery_to: estimatedTo.toISOString(),
+      };
+    }
   
     const { error } = await supabase
       .from("orders")

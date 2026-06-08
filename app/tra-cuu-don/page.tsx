@@ -26,7 +26,12 @@ type Order = {
   payment_method: string | null;
   payment_status: string | null;
   created_at: string;
-  promotion_name: string | null;
+confirmed_at?: string | null;
+preparation_minutes?: number | null;
+delivery_minutes?: number | null;
+estimated_delivery_from?: string | null;
+estimated_delivery_to?: string | null;
+promotion_name: string | null;
 promotion_discount: number | null;
   order_items: OrderItem[];
 };
@@ -171,11 +176,19 @@ setLoading(false);
   
     searchOrders();
   }
+  function formatTime(value?: string | null) {
+    if (!value) return "";
+  
+    return new Date(value).toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
   return (
     <main className="min-h-screen bg-[#F5FFF8] px-4 py-10 md:px-8">
       <section className="mx-auto max-w-3xl">
         <div className="rounded-[36px] bg-white p-6 shadow-2xl shadow-neutral-950/10 md:p-8">
-          <p className="font-black text-[#00B14F]">Ăn Vặt Ngọc Trinh</p>
+        
 
           <h1 className="mt-2 text-4xl font-black text-[#06113C]">
             Tra cứu đơn hàng
@@ -275,7 +288,31 @@ setLoading(false);
                 <p className="mt-4 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-600">
                   {status.desc}
                 </p>
+                <div className="mt-4 rounded-2xl bg-[#E8FFF1] p-4">
+  <p className="text-sm font-black text-[#06113C]">
+    ⏱️ Thời gian dự kiến
+  </p>
 
+  {!order.confirmed_at ? (
+    <p className="mt-2 text-sm font-bold text-neutral-600">
+      Quán đang chờ xác nhận đơn. Thời gian nhận món sẽ được cập nhật sau khi
+      quán xác nhận.
+    </p>
+  ) : order.estimated_delivery_from && order.estimated_delivery_to ? (
+    <div className="mt-3 space-y-2 text-sm font-bold text-[#06113C]">
+      <p>🍳 Làm món: khoảng {order.preparation_minutes || 0} phút</p>
+      <p>🛵 Giao hàng: khoảng {order.delivery_minutes || 0} phút</p>
+      <p className="text-base font-black text-[#00B14F]">
+        📦 Dự kiến nhận món: {formatTime(order.estimated_delivery_from)} -{" "}
+        {formatTime(order.estimated_delivery_to)}
+      </p>
+    </div>
+  ) : (
+    <p className="mt-2 text-sm font-bold text-yellow-700">
+      Quán đã xác nhận đơn. Thời gian giao sẽ được cập nhật trong ít phút.
+    </p>
+  )}
+</div>
                 <div className="mt-5 rounded-2xl bg-[#F5FFF8] p-4">
                   <p className="text-xs font-black text-neutral-400">
                     Món đã đặt

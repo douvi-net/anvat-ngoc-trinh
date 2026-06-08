@@ -91,8 +91,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          message: "Không tính được tuyến đường từ Google Maps.",
-          error: data,
+          message:
+  data?.error?.message ||
+  "Không tính được tuyến đường từ Google Maps.",
+error: data,
         },
         { status: googleResponse.status }
       );

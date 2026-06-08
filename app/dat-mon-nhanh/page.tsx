@@ -924,7 +924,7 @@ const amountToNextShippingPromo = nextShippingPromotion
     />
   ) : (
     <img
-      src="/images/background.png"
+      src="/images/og-back.png"
       alt="Ăn Vặt Ngọc Trinh"
       className="h-full w-full object-cover"
     />

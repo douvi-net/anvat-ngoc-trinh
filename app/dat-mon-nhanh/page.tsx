@@ -915,26 +915,30 @@ const amountToNextShippingPromo = nextShippingPromotion
         </div>
       )}
 
-      <section className="relative h-52 overflow-hidden bg-[#00B14F]">
-        {banners[0]?.image_url ? (
-          <img
-            src={banners[0].image_url}
-            alt={banners[0].title}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-br from-[#00B14F] to-[#06113C]" />
-        )}
+<section className="relative h-56 overflow-hidden">
+  {banners[0]?.image_url ? (
+    <img
+      src={banners[0].image_url}
+      alt={banners[0].title || "Banner"}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <img
+      src="/images/background.png"
+      alt="Ăn Vặt Ngọc Trinh"
+      className="h-full w-full object-cover"
+    />
+  )}
 
-        <div className="absolute inset-0 bg-black/35" />
-      </section>
+  <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/35 to-black/60" />
+</section>
 
       <section className="relative z-10 mx-auto -mt-16 max-w-6xl px-4">
         <div className="rounded-[32px] bg-white p-5 shadow-2xl shadow-neutral-950/10">
           <div className="flex gap-4">
             <div className="h-24 w-24 shrink-0 overflow-hidden rounded-3xl bg-[#E8FFF1]">
               <img
-                src="/images/og-image.png"
+                src="/images/hero.png"
                 alt="Ăn Vặt Ngọc Trinh"
                 className="h-full w-full object-cover"
               />

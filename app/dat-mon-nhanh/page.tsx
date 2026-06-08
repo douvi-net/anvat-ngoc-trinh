@@ -91,6 +91,16 @@ type Coupon = {
   is_active?: boolean | null;
 };
 
+type DeliveryRoute = {
+  ok: boolean;
+  distance_km: number;
+  distance_text: string;
+  duration_text: string;
+  shipping_fee: number | null;
+  is_supported_area: boolean;
+  message?: string;
+};
+
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
 const frequentlyBoughtTogether: Record<string, string[]> = {
   "Cuốn đỏ sốt me": [
@@ -157,6 +167,9 @@ export default function DatMonNhanhPage() {
   const [customerAddress, setCustomerAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
+  const [deliveryRoute, setDeliveryRoute] = useState<DeliveryRoute | null>(null);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [deliveryError, setDeliveryError] = useState("");
   const [note, setNote] = useState("");
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
   const [customerPoints, setCustomerPoints] = useState(0);
@@ -173,6 +186,23 @@ export default function DatMonNhanhPage() {
     fetchInitialData();
     loadSavedCustomer();
   }, []);
+
+  useEffect(() => {
+    if (!checkoutOpen) return;
+
+    const address = customerAddress.trim();
+
+    setDeliveryRoute(null);
+    setDeliveryError("");
+
+    if (address.length < 10) return;
+
+    const timer = window.setTimeout(() => {
+      calculateDeliveryRoute(address);
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [checkoutOpen, customerAddress]);
   useEffect(() => {
     if (!products.length) return;
   
@@ -299,19 +329,7 @@ export default function DatMonNhanhPage() {
     setCustomerAddress(localStorage.getItem("avnt_customer_address") || "");
     setPaymentMethod(localStorage.getItem("avnt_payment_method") || "cod");
   }
-  function playSound(type: "add" | "open" | "success") {
-    if (typeof window === "undefined") return;
-  
-    const soundMap = {
-      add: "/sounds/add-to-cart.wav",
-      open: "/sounds/open-cart.wav",
-      success: "/sounds/order-success.wav",
-    };
-  
-    const audio = new Audio(soundMap[type]);
-    audio.volume = 0.35;
-    audio.play().catch(() => {});
-  }
+
   function saveCustomerLocal() {
     if (typeof window === "undefined") return;
 
@@ -436,7 +454,6 @@ setUsePointsDiscount(0);
     });
 
     showToast(`Đã thêm ${selectedProduct.name} vào giỏ`);
-    playSound("add");
     triggerCartAnimation();
     setSelectedProduct(null);
   }
@@ -533,7 +550,20 @@ setUsePointsDiscount(0);
     );
   }, [shippingZones, deliveryDistanceKm]);
 
-  const shippingFee = selectedShippingZone?.fee || 15000;
+  const hasGoogleRoute = deliveryRoute !== null;
+  const googleShippingFee =
+    hasGoogleRoute && deliveryRoute.is_supported_area
+      ? Number(deliveryRoute.shipping_fee || 0)
+      : null;
+
+  const shippingFee = hasGoogleRoute
+    ? googleShippingFee ?? 0
+    : selectedShippingZone?.fee || 15000;
+
+  const deliveryDistanceForPromo =
+    hasGoogleRoute && Number.isFinite(Number(deliveryRoute?.distance_km))
+      ? Number(deliveryRoute?.distance_km)
+      : deliveryDistanceKm;
 
   function getCouponValue(coupon: Coupon) {
     return Number(coupon.discount_value || coupon.value || 0);
@@ -578,7 +608,7 @@ const validShippingPromotions = shippingPromotions.filter((promo) => {
 
   return (
     subtotal >= Number(promo.min_order_value || 0) &&
-    (maxDistance <= 0 || deliveryDistanceKm <= maxDistance)
+    (maxDistance <= 0 || deliveryDistanceForPromo <= maxDistance)
   );
 });
 
@@ -613,7 +643,7 @@ const bestShippingPromotion =
       return (
         promo.is_active &&
         subtotal >= Number(promo.min_order_value || 0) &&
-        (maxDistance <= 0 || deliveryDistanceKm <= maxDistance)
+        (maxDistance <= 0 || deliveryDistanceForPromo <= maxDistance)
       );
     });
 const shippingDiscount = bestShippingPromotion?.discountAmount || 0;
@@ -710,6 +740,55 @@ const amountToNextShippingPromo = nextShippingPromotion
     showToast("Đã áp dụng ưu đãi");
   }
 
+  async function calculateDeliveryRoute(addressValue = customerAddress.trim()) {
+    const address = addressValue.trim();
+
+    if (address.length < 10) {
+      setDeliveryRoute(null);
+      setDeliveryError("Anh nhập địa chỉ giao hàng rõ hơn giúp em nha.");
+      return null;
+    }
+
+    setDeliveryLoading(true);
+    setDeliveryError("");
+
+    try {
+      const response = await fetch("/api/maps/route", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address,
+        }),
+      });
+
+      const data = (await response.json()) as DeliveryRoute & {
+        message?: string;
+      };
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || "Không tính được phí ship.");
+      }
+
+      setDeliveryRoute(data);
+      setDeliveryDistanceKm(Number(data.distance_km || 0));
+
+      return data;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Không tính được phí ship. Anh kiểm tra lại địa chỉ giúp em nha.";
+
+      setDeliveryRoute(null);
+      setDeliveryError(message);
+      return null;
+    } finally {
+      setDeliveryLoading(false);
+    }
+  }
+
   async function upsertCustomer() {
     const cleanPhone = customerPhone.trim();
 
@@ -795,6 +874,21 @@ const amountToNextShippingPromo = nextShippingPromotion
       return;
     }
 
+    const routeInfo =
+      deliveryRoute || (await calculateDeliveryRoute(customerAddress.trim()));
+
+    if (!routeInfo) {
+      alert("Chưa tính được phí ship. Anh kiểm tra lại địa chỉ giúp em nha.");
+      return;
+    }
+
+    if (!routeInfo.is_supported_area) {
+      alert(
+        "Địa chỉ này đang ngoài khu vực giao hàng tự động. Anh nhắn Zalo quán để được xác nhận phí ship giúp em nha."
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -831,8 +925,8 @@ const amountToNextShippingPromo = nextShippingPromotion
           source: "website",
           payment_method: paymentMethod,
           payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
-          delivery_distance_km: deliveryDistanceKm,
-          delivery_area: selectedShippingZone?.name || "Quán xác nhận",
+          delivery_distance_km: routeInfo.distance_km,
+          delivery_area: `${routeInfo.distance_text} • ${routeInfo.duration_text}`,
           delivery_status: "pending",
         })
         .select()
@@ -889,7 +983,7 @@ const amountToNextShippingPromo = nextShippingPromotion
       setNote("");
       setSelectedCoupon(null);
       setCheckoutOpen(false);
-      playSound("success");
+
       router.push(`/tra-cuu-don?code=${orderCode}`);
     } catch (error) {
       console.error("CREATE ORDER ERROR:", error);
@@ -915,23 +1009,19 @@ const amountToNextShippingPromo = nextShippingPromotion
         </div>
       )}
 
-<section className="relative h-56 overflow-hidden">
-  {banners[0]?.image_url ? (
-    <img
-      src={banners[0].image_url}
-      alt={banners[0].title || "Banner"}
-      className="h-full w-full object-cover"
-    />
-  ) : (
-    <img
-      src="/images/og-back.png"
-      alt="Ăn Vặt Ngọc Trinh"
-      className="h-full w-full object-cover"
-    />
-  )}
+      <section className="relative h-52 overflow-hidden bg-[#00B14F]">
+        {banners[0]?.image_url ? (
+          <img
+            src={banners[0].image_url}
+            alt={banners[0].title}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-[#00B14F] to-[#06113C]" />
+        )}
 
-  <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/35 to-black/60" />
-</section>
+        <div className="absolute inset-0 bg-black/35" />
+      </section>
 
       <section className="relative z-10 mx-auto -mt-16 max-w-6xl px-4">
         <div className="rounded-[32px] bg-white p-5 shadow-2xl shadow-neutral-950/10">
@@ -1006,30 +1096,6 @@ const amountToNextShippingPromo = nextShippingPromotion
           </div>
         </section>
       )}
-     
-
-{!isShopOpen && (
-  <section className="mx-auto mt-6 max-w-6xl px-4">
-    <div
-      className={`rounded-[28px] p-5 ${
-        shopSettings?.order_status === "closed"
-          ? "bg-red-50 text-red-700"
-          : "bg-yellow-50 text-yellow-700"
-      }`}
-    >
-      <p className="text-xl font-black">
-        {shopSettings?.order_status === "closed"
-          ? "Quán hiện đang đóng cửa"
-          : "Quán đang tạm ngưng nhận đơn"}
-      </p>
-
-      <p className="mt-2 text-sm font-bold">
-        Khách vẫn có thể xem menu, nhưng hiện tại chưa thể gửi đơn mới.
-      </p>
-    </div>
-  </section>
-)}
-
 
       <section className="sticky top-0 z-40 mt-6 bg-[#F5FFF8]/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-6xl overflow-x-auto">
@@ -1118,10 +1184,7 @@ const amountToNextShippingPromo = nextShippingPromotion
       {cart.length > 0 && (
         <div className="fixed bottom-[78px] left-0 right-0 z-[900] px-4 md:bottom-5 md:left-1/2 md:max-w-xl md:-translate-x-1/2">
           <button
-            onClick={() => {
-              playSound("open");
-              setCheckoutOpen(true);
-            }}
+            onClick={() => setCheckoutOpen(true)}
             className={`flex w-full items-center justify-between rounded-[24px] bg-[#06113C] px-5 py-4 text-white shadow-2xl shadow-black/25 transition active:scale-95 ${
               cartAnimate ? "scale-[1.02]" : ""
             }`}
@@ -1140,143 +1203,106 @@ const amountToNextShippingPromo = nextShippingPromotion
         </div>
       )}
 
-{selectedProduct && (
-  <div className="fixed inset-0 z-[999] flex items-end bg-black/50 p-3 backdrop-blur-sm md:items-center md:justify-center">
-    <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl md:max-w-xl">
-      <div className="overflow-y-auto p-5 pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 gap-3">
-            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-[#E8FFF1]">
-              <img
-                src={selectedProduct.image_url || "/images/hero.jpg"}
-                alt={selectedProduct.name}
-                className="h-full w-full object-cover"
-              />
+      {selectedProduct && (
+        <div className="fixed inset-0 z-[999] flex items-end bg-black/50 p-3 backdrop-blur-sm md:items-center md:justify-center">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-[32px] bg-white p-5 shadow-2xl md:max-w-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black text-[#00B14F]">Tùy chọn món</p>
+                <h2 className="mt-1 text-2xl font-black text-[#06113C]">
+                  {selectedProduct.name}
+                </h2>
+                <p className="mt-2 text-xl font-black text-[#00B14F]">
+                  {Number(selectedProduct.price).toLocaleString("vi-VN")}đ
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedProduct(null)}
+                className="rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="min-w-0">
-              <p className="text-xs font-black text-[#00B14F]">Tùy chọn món</p>
-
-              <h2 className="mt-1 line-clamp-2 text-xl font-black leading-tight text-[#06113C]">
-                {selectedProduct.name}
-              </h2>
-
-              <p className="mt-1 text-lg font-black text-[#00B14F]">
-                {Number(selectedProduct.price).toLocaleString("vi-VN")}đ
+            {selectedProduct.description && (
+              <p className="mt-4 text-sm font-semibold leading-6 text-neutral-600">
+                {selectedProduct.description}
               </p>
+            )}
+
+            <div className="mt-6">
+              <p className="font-black text-[#06113C]">Chọn topping</p>
+
+              {visibleToppings.length === 0 ? (
+                <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
+                  Món này chưa có topping phù hợp.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {visibleToppings.map((topping) => {
+                    const active = selectedToppingIds.includes(topping.id);
+
+                    return (
+                      <button
+                        key={topping.id}
+                        type="button"
+                        onClick={() => toggleTopping(topping.id)}
+                        className={`rounded-2xl border px-4 py-4 text-left font-black ${
+                          active
+                            ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
+                            : "border-black/10 bg-white text-[#06113C]"
+                        }`}
+                      >
+                        <span>{topping.name}</span>
+                        <span className="block text-sm text-neutral-500">
+                          +{Number(topping.price).toLocaleString("vi-VN")}đ
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
 
-          <button
-            onClick={() => setSelectedProduct(null)}
-            className="shrink-0 rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
-          >
-            ✕
-          </button>
-        </div>
+            <div className="mt-6">
+              <p className="font-black text-[#06113C]">Độ cay</p>
 
-        {selectedProduct.description && (
-          <p className="mt-4 line-clamp-2 text-sm font-semibold leading-6 text-neutral-600">
-            {selectedProduct.description}
-          </p>
-        )}
-
-        <div className="mt-5">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-black text-[#06113C]">Chọn topping</p>
-
-            <p className="text-xs font-bold text-neutral-400">
-              Chọn thêm nếu muốn
-            </p>
-          </div>
-
-          {visibleToppings.length === 0 ? (
-            <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
-              Món này chưa có topping phù hợp.
-            </p>
-          ) : (
-            <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
-              {visibleToppings.map((topping) => {
-                const active = selectedToppingIds.includes(topping.id);
-
-                return (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {spicyOptions.map((option) => (
                   <button
-                    key={topping.id}
+                    key={option}
                     type="button"
-                    onClick={() => toggleTopping(topping.id)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left font-black ${
-                      active
-                        ? "border-[#00B14F] bg-[#E8FFF1] text-[#00B14F]"
-                        : "border-black/10 bg-white text-[#06113C]"
+                    onClick={() => setSelectedSpicyLevel(option)}
+                    className={`rounded-2xl px-4 py-3 text-sm font-black ${
+                      selectedSpicyLevel === option
+                        ? "bg-[#00B14F] text-white"
+                        : "bg-[#F5FFF8] text-[#06113C]"
                     }`}
                   >
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm">
-                        {topping.name}
-                      </span>
-
-                      <span className="block text-xs text-neutral-500">
-                        +{Number(topping.price).toLocaleString("vi-VN")}đ
-                      </span>
-                    </div>
-
-                    <span
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${
-                        active
-                          ? "border-[#00B14F] bg-[#00B14F] text-white"
-                          : "border-neutral-300 text-transparent"
-                      }`}
-                    >
-                      ✓
-                    </span>
+                    {option}
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          )}
-        </div>
 
-        <div className="mt-5">
-          <p className="font-black text-[#06113C]">Độ cay</p>
+            <textarea
+              value={itemNote}
+              onChange={(e) => setItemNote(e.target.value)}
+              placeholder="Ghi chú riêng cho món này"
+              rows={3}
+              className="mt-6 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+            />
 
-          <div className="mt-3 grid grid-cols-4 gap-2">
-            {spicyOptions.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setSelectedSpicyLevel(option)}
-                className={`rounded-xl px-2 py-3 text-xs font-black ${
-                  selectedSpicyLevel === option
-                    ? "bg-[#00B14F] text-white"
-                    : "bg-[#F5FFF8] text-[#06113C]"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
+            <button
+              onClick={addSelectedProductToCart}
+              className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white"
+            >
+              Thêm vào giỏ · {selectedProductTotal.toLocaleString("vi-VN")}đ
+            </button>
           </div>
         </div>
-
-        <textarea
-          value={itemNote}
-          onChange={(e) => setItemNote(e.target.value)}
-          placeholder="Ghi chú riêng cho món này"
-          rows={2}
-          className="mt-5 w-full rounded-2xl border border-black/10 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
-        />
-      </div>
-
-      <div className="border-t border-black/10 bg-white p-4">
-        <button
-          onClick={addSelectedProductToCart}
-          className="w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white"
-        >
-          Thêm vào giỏ · {selectedProductTotal.toLocaleString("vi-VN")}đ
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       {checkoutOpen && (
         <div className="fixed inset-0 z-[999] flex items-end bg-black/50 backdrop-blur-sm md:items-center md:justify-center">
@@ -1364,74 +1390,35 @@ const amountToNextShippingPromo = nextShippingPromotion
             </div>
 
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
-  <p className="text-xl font-black text-[#06113C]">
-    Ưu đãi & giảm giá
-  </p>
+              <p className="text-xl font-black text-[#06113C]">
+                Áp dụng ưu đãi và giảm giá
+              </p>
 
-  {bestShippingPromotion && shippingDiscount > 0 ? (
-    <div className="mt-4 rounded-2xl border border-[#00B14F]/30 bg-[#E8FFF1] p-4">
-      <p className="font-black text-[#06113C]">
-        🎁 Đã tự động áp dụng
-      </p>
+              <button
+                type="button"
+                onClick={() => setCouponOpen(true)}
+                className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-4 text-left shadow-sm ring-1 ring-black/10"
+              >
+                <div>
+                  <p className="font-black text-[#06113C]">
+                    🎟️{" "}
+                    {selectedCoupon
+                      ? selectedCoupon.title ||
+                        selectedCoupon.name ||
+                        selectedCoupon.code
+                      : "Áp dụng ưu đãi để được giảm giá"}
+                  </p>
 
-      <p className="mt-1 text-sm font-bold text-[#00B14F]">
-        {bestShippingPromotion.name}
-      </p>
+                  {selectedCoupon && (
+                    <p className="mt-1 text-sm font-bold text-[#00B14F]">
+                      Giảm {discountAmount.toLocaleString("vi-VN")}đ
+                    </p>
+                  )}
+                </div>
 
-      <p className="mt-1 text-sm font-bold text-neutral-500">
-        Giảm {shippingDiscount.toLocaleString("vi-VN")}đ phí ship
-      </p>
-    </div>
-  ) : nextShippingPromotion && amountToNextShippingPromo > 0 ? (
-    <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-black/10">
-      <p className="font-black text-[#06113C]">
-        🎁 Sắp nhận ưu đãi
-      </p>
-
-      <p className="mt-1 text-sm font-bold text-neutral-500">
-        Mua thêm {amountToNextShippingPromo.toLocaleString("vi-VN")}đ để nhận:
-      </p>
-
-      <p className="mt-1 text-sm font-black text-[#00B14F]">
-        {nextShippingPromotion.name}
-      </p>
-
-      <div className="mt-3 h-3 overflow-hidden rounded-full bg-neutral-100">
-        <div
-          className="h-full rounded-full bg-[#00B14F]"
-          style={{ width: `${shippingProgress}%` }}
-        />
-      </div>
-    </div>
-  ) : (
-    <div className="mt-4 rounded-2xl bg-white p-4 text-sm font-bold text-neutral-500 ring-1 ring-black/10">
-      Chưa có ưu đãi vận chuyển phù hợp.
-    </div>
-  )}
-
-  <button
-    type="button"
-    onClick={() => setCouponOpen(true)}
-    className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-4 text-left shadow-sm ring-1 ring-black/10"
-  >
-    <div>
-      <p className="font-black text-[#06113C]">
-        🎟️{" "}
-        {selectedCoupon
-  ? selectedCoupon.title || selectedCoupon.name || selectedCoupon.code
-  : "Chọn mã giảm giá nếu có"}
-      </p>
-
-      {selectedCoupon && (
-        <p className="mt-1 text-sm font-bold text-[#00B14F]">
-          Giảm {discountAmount.toLocaleString("vi-VN")}đ
-        </p>
-      )}
-    </div>
-
-    <span className="text-2xl font-black">›</span>
-  </button>
-</div>
+                <span className="text-2xl font-black">›</span>
+              </button>
+            </div>
 
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
               <p className="font-black text-[#06113C]">Thông tin khách</p>
@@ -1478,27 +1465,69 @@ const amountToNextShippingPromo = nextShippingPromotion
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
               <p className="font-black text-[#06113C]">Giao hàng & thanh toán</p>
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <select
-                  value={deliveryDistanceKm}
-                  onChange={(e) => setDeliveryDistanceKm(Number(e.target.value))}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-                >
-                  <option value={1}>Dưới 2km</option>
-                  <option value={3}>2 - 5km</option>
-                  <option value={6}>5 - 8km</option>
-                  <option value={9}>Trên 8km</option>
-                </select>
+              <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-black/10">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-[#06113C]">
+                      📍 Phí ship theo Google Maps
+                    </p>
 
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-                >
-                  <option value="cod">COD</option>
-                  <option value="momo">Momo/CK</option>
-                </select>
+                    {deliveryLoading ? (
+                      <p className="mt-1 text-sm font-bold text-neutral-500">
+                        Đang tính quãng đường thật...
+                      </p>
+                    ) : deliveryRoute ? (
+                      <div className="mt-1 space-y-1">
+                        <p className="text-sm font-bold text-neutral-600">
+                          {deliveryRoute.distance_text} • {deliveryRoute.duration_text}
+                        </p>
+
+                        <p
+                          className={`text-sm font-black ${
+                            deliveryRoute.is_supported_area
+                              ? "text-[#00B14F]"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {deliveryRoute.is_supported_area
+                            ? `Phí ship: ${Number(
+                                deliveryRoute.shipping_fee || 0
+                              ).toLocaleString("vi-VN")}đ`
+                            : "Ngoài khu vực giao hàng tự động"}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm font-bold text-neutral-500">
+                        Nhập địa chỉ, hệ thống sẽ tự tính km và phí ship.
+                      </p>
+                    )}
+
+                    {deliveryError && (
+                      <p className="mt-2 text-xs font-bold text-red-600">
+                        {deliveryError}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => calculateDeliveryRoute()}
+                    disabled={deliveryLoading}
+                    className="shrink-0 rounded-xl bg-[#E8FFF1] px-3 py-2 text-xs font-black text-[#00B14F] disabled:opacity-50"
+                  >
+                    Tính lại
+                  </button>
+                </div>
               </div>
+
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="mt-3 w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+              >
+                <option value="cod">COD</option>
+                <option value="momo">Momo/CK</option>
+              </select>
 
               {paymentMethod === "momo" && (
                 <div className="mt-4 rounded-[24px] bg-white p-4">
@@ -1615,7 +1644,7 @@ const amountToNextShippingPromo = nextShippingPromotion
 
               <div className="mt-3 flex justify-between text-sm font-bold text-white/70">
                 <span>
-                  Phí ship{" "}
+                  Ship{" "}
                   {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}
                 </span>
                 {shippingDiscount > 0 ? (
@@ -1631,7 +1660,15 @@ const amountToNextShippingPromo = nextShippingPromotion
   <span>{shippingFee.toLocaleString("vi-VN")}đ</span>
 )}
               </div>
-  
+              {bestShippingPromotion && shippingDiscount > 0 && (
+  <div className="mt-3 rounded-2xl border border-[#00B14F]/30 bg-[#00B14F]/10 p-3 text-sm font-bold text-[#00B14F]">
+    <div>🎁 Đã áp dụng ưu đãi tốt nhất</div>
+    <div className="mt-1 text-white/80">
+      {bestShippingPromotion.name} - Giảm{" "}
+      {shippingDiscount.toLocaleString("vi-VN")}đ phí ship
+    </div>
+  </div>
+)}
               {discountAmount > 0 && (
                 <div className="mt-3 flex justify-between text-sm font-bold text-[#00B14F]">
                   <span>Giảm giá</span>
@@ -1649,8 +1686,34 @@ const amountToNextShippingPromo = nextShippingPromotion
   </div>
 )}
 
+{nextShippingPromotion && amountToNextShippingPromo > 0 && (
+  <div className="mt-2 rounded-xl bg-[#E8FFF1] px-3 py-2 text-xs font-bold text-[#00B14F]">
+    <div>
+      🎁 Mua thêm{" "}
+      {amountToNextShippingPromo.toLocaleString("vi-VN")}đ để nhận ưu đãi:{" "}
+      {nextShippingPromotion.name}
+    </div>
 
+  </div>
+)}
+{nextShippingPromotion &&
+ amountToNextShippingPromo > 0 && (
+  <div className="mt-2">
+    <div className="mb-1 flex justify-between text-xs font-bold text-[#00B14F]">
+      <span>Tiến độ nhận ưu đãi</span>
+      <span>{shippingProgress}%</span>
+    </div>
 
+    <div className="h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
+      <div
+        className="h-full rounded-full bg-[#00B14F]"
+        style={{
+          width: `${shippingProgress}%`,
+        }}
+      />
+    </div>
+  </div>
+)}
               <div className="mt-4 border-t border-white/20 pt-4">
   <div className="rounded-2xl bg-white/10 px-3 py-2">
     <div className="flex items-center justify-between">
@@ -1754,107 +1817,112 @@ const amountToNextShippingPromo = nextShippingPromotion
         </div>
       )}
 
-{couponOpen && (
-  <div className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:items-center md:justify-center">
-    <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-black text-[#06113C]">
-          Chọn mã giảm giá
-        </h2>
+      {couponOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:items-center md:justify-center">
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-black text-[#06113C]">
+                Chọn ưu đãi
+              </h2>
 
-        <button
-          onClick={() => setCouponOpen(false)}
-          className="rounded-full bg-neutral-100 px-4 py-2 font-black"
-        >
-          Đóng
-        </button>
-      </div>
-
-      <p className="mt-2 text-sm font-bold text-neutral-500">
-        Khuyến mãi freeship sẽ được hệ thống tự áp dụng nếu đơn đủ điều kiện.
-      </p>
-
-      <div className="mt-5 space-y-3">
-        {coupons.length === 0 ? (
-          <p className="font-semibold text-neutral-500">
-            Hiện chưa có mã giảm giá.
-          </p>
-        ) : (
-          coupons.map((coupon) => {
-            const minOrder = getCouponMinOrder(coupon);
-            const canUse = subtotal >= minOrder;
-            const isSelected = selectedCoupon?.id === coupon.id;
-
-            return (
               <button
-                key={coupon.id}
-                onClick={() => applyCoupon(coupon)}
-                disabled={!canUse}
-                className={`w-full rounded-2xl p-4 text-left ring-1 ring-black/10 ${
-                  isSelected
-                    ? "bg-[#E8FFF1] ring-[#00B14F]"
-                    : canUse
-                    ? "bg-white"
-                    : "bg-neutral-100 opacity-60"
-                }`}
+                onClick={() => setCouponOpen(false)}
+                className="rounded-full bg-neutral-100 px-4 py-2 font-black"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-black text-[#06113C]">
-                      🎟️ {coupon.title || coupon.name || coupon.code}
-                    </p>
-
-                    <p className="mt-1 text-sm font-bold text-neutral-600">
-                      Mã: {coupon.code}
-                    </p>
-
-                    <p className="mt-1 text-sm font-black text-[#00B14F]">
-                      {getCouponType(coupon).includes("percent")
-                        ? `Giảm ${getCouponValue(coupon)}%`
-                        : `Giảm ${getCouponValue(coupon).toLocaleString(
-                            "vi-VN"
-                          )}đ`}
-                    </p>
-
-                    {minOrder > 0 && (
-                      <p className="mt-1 text-xs font-bold text-neutral-500">
-                        Đơn tối thiểu {minOrder.toLocaleString("vi-VN")}đ
-                      </p>
-                    )}
-                  </div>
-
-                  {isSelected && (
-                    <span className="rounded-full bg-[#00B14F] px-3 py-1 text-xs font-black text-white">
-                      Đã chọn
-                    </span>
-                  )}
-                </div>
-
-                {!canUse && (
-                  <p className="mt-2 text-xs font-bold text-red-500">
-                    Chưa đủ điều kiện áp dụng
-                  </p>
-                )}
+                Đóng
               </button>
-            );
-          })
-        )}
-      </div>
+            </div>
 
-      {selectedCoupon && (
-        <button
-          onClick={() => {
-            setSelectedCoupon(null);
-            setCouponOpen(false);
-          }}
-          className="mt-5 w-full rounded-2xl bg-red-50 px-5 py-4 font-black text-red-600"
+            <div className="mt-5 space-y-3">
+  {coupons.length === 0 && availableShippingPromotions.length === 0 ? (
+    <p className="font-semibold text-neutral-500">
+      Hiện chưa có ưu đãi phù hợp.
+    </p>
+  ) : (
+    <>
+      {availableShippingPromotions.map((promo) => (
+        <div
+          key={promo.id}
+          className="rounded-2xl border border-[#00B14F]/20 bg-[#E8FFF1] p-4"
         >
-          Bỏ mã giảm giá
-        </button>
+          <p className="font-black text-[#06113C]">🎁 {promo.name}</p>
+
+          <p className="mt-1 text-sm font-bold text-neutral-600">
+            Đơn từ{" "}
+            {Number(promo.min_order_value || 0).toLocaleString("vi-VN")}đ ·
+            dưới {Number(promo.max_distance_km || 0)}km
+          </p>
+
+          <p className="mt-2 text-sm font-black text-[#00B14F]">
+            {promo.promotion_type === "free_ship"
+              ? "Freeship"
+              : promo.promotion_type === "ship_percent"
+              ? `Giảm ${promo.discount_value}% phí ship`
+              : `Giảm ${Number(promo.discount_value || 0).toLocaleString(
+                  "vi-VN"
+                )}đ phí ship`}
+          </p>
+
+          {bestShippingPromotion?.id === promo.id && (
+            <p className="mt-2 inline-flex rounded-full bg-[#00B14F] px-3 py-1 text-xs font-black text-white">
+              Đang tự áp dụng
+            </p>
+          )}
+        </div>
+      ))}
+
+      {coupons.map((coupon) => {
+        const minOrder = getCouponMinOrder(coupon);
+        const canUse = subtotal >= minOrder;
+
+        return (
+          <button
+            key={coupon.id}
+            onClick={() => applyCoupon(coupon)}
+            className={`w-full rounded-2xl p-4 text-left ring-1 ring-black/10 ${
+              canUse ? "bg-[#F5FFF8]" : "bg-neutral-100 opacity-60"
+            }`}
+          >
+            <p className="font-black text-[#06113C]">
+              🎟️ {coupon.title || coupon.name || coupon.code}
+            </p>
+
+            <p className="mt-1 text-sm font-bold text-neutral-600">
+              Mã: {coupon.code}
+            </p>
+
+            <p className="mt-1 text-sm font-bold text-[#00B14F]">
+              {getCouponType(coupon).includes("percent")
+                ? `Giảm ${getCouponValue(coupon)}%`
+                : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`}
+            </p>
+
+            {minOrder > 0 && (
+              <p className="mt-1 text-xs font-bold text-neutral-500">
+                Đơn tối thiểu {minOrder.toLocaleString("vi-VN")}đ
+              </p>
+            )}
+          </button>
+        );
+      })}
+    </>
+  )}
+</div>
+
+            {selectedCoupon && (
+              <button
+                onClick={() => {
+                  setSelectedCoupon(null);
+                  setCouponOpen(false);
+                }}
+                className="mt-5 w-full rounded-2xl bg-red-50 px-5 py-4 font-black text-red-600"
+              >
+                Bỏ mã giảm giá
+              </button>
+            )}
+          </div>
+        </div>
       )}
-    </div>
-  </div>
-)}  
     </main>
   );
 }

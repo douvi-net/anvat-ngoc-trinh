@@ -1,122 +1,193 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Tuyển dụng nhân viên quận 6 | Ăn Vặt Ngọc Trinh",
+  title: "Tuyển dụng nhân viên Quận 6 | Ăn Vặt Ngọc Trinh",
   description:
-    "Tuyển nhân viên làm món, order và đóng gói tại Quận 6. Thu nhập hấp dẫn, môi trường trẻ trung, hỗ trợ đào tạo.",
+    "Ăn Vặt Ngọc Trinh tuyển nhân viên làm món, order và đóng gói tại Quận 6. Lương theo giờ, được hướng dẫn từ đầu, thử việc có lương.",
 };
 
-const positions = [
+const phone = "0392496220";
+
+const jobs = [
   {
     title: "Nhân viên làm món",
-    salary: "25.000đ - 30.000đ/giờ",
-    shifts: [
-      "Ca 8 tiếng: 14h - 22h",
-      "Hỗ trợ 50.000đ/ngày",
-      "Ca 6 tiếng: 16h - 22h",
-      "Không hỗ trợ",
+    salary: "25.000 - 30.000đ/giờ",
+    icon: "🥢",
+    description:
+      "Phù hợp với bạn nhanh nhẹn, sạch sẽ, chịu được môi trường bếp hơi nóng và muốn làm việc lâu dài.",
+    works: [
+      "Cuốn bánh tráng theo đơn khách",
+      "Trộn món theo quy trình của quán",
+      "Làm nước theo đơn",
+      "Chuẩn bị nguyên liệu trong ca",
+      "Giữ vệ sinh khu vực làm món",
     ],
   },
   {
-    title: "Nhân viên Order & Đóng Gói",
+    title: "Nhân viên Order & Đóng gói",
     salary: "22.000đ/giờ",
-    shifts: [
-      "Ca 8 tiếng: 14h - 22h",
-      "Ca 4 tiếng: 14h - 18h",
-      "Ca 4 tiếng: 18h - 22h",
+    icon: "📦",
+    description:
+      "Phù hợp với bạn cẩn thận, giao tiếp ổn, biết sắp xếp đơn hàng và làm việc đúng giờ.",
+    works: [
+      "Nhận đơn tại quầy và trên hệ thống",
+      "Kiểm tra món theo bill",
+      "Đóng gói đơn hàng gọn gàng",
+      "Bàn giao đơn cho shipper",
+      "Hỗ trợ khách hàng khi cần",
     ],
   },
 ];
 
-const benefits = [
-  "Hỗ trợ đào tạo",
-  "Thử việc có lương",
-  "Môi trường trẻ trung",
-  "Off 1 ngày/tuần",
-  "Có cơ hội tăng thu nhập",
-  "Làm việc lâu dài",
+const shifts = [
+  {
+    title: "Full-time",
+    time: "11h - 22h",
+    note: "Thu nhập khoảng 8 - 9 triệu/tháng",
+  },
+  {
+    title: "Ca 8 tiếng",
+    time: "14h - 22h",
+    note: "Thu nhập khoảng 7 - 8 triệu/tháng",
+  },
+  {
+    title: "Ca linh hoạt",
+    time: "Trao đổi thêm",
+    note: "Tùy theo nhu cầu thực tế của quán",
+  },
 ];
 
 const requirements = [
-  "Tuổi từ 18 - 30",
-  "Siêng năng",
-  "Trung thực",
-  "Có trách nhiệm",
-  "Đúng giờ",
-  "Chịu được áp lực giờ cao điểm",
+  "Từ 18 - 30 tuổi",
+  "Siêng năng, sạch sẽ, gọn gàng",
+  "Nhanh nhẹn, chủ động trong công việc",
+  "Đi làm đúng giờ, có trách nhiệm",
+  "Chịu được môi trường bếp hơi nóng",
+  "Ưu tiên bạn có thể làm lâu dài",
+];
+
+const benefits = [
+  "Chưa có kinh nghiệm vẫn được hướng dẫn từ đầu",
+  "Thử việc 7 ngày vẫn tính lương",
+  "Off 1 ngày/tuần",
+  "Công việc rõ ràng, làm theo đơn khách",
+  "Đúng giờ xong việc là về, không thích tăng ca",
+  "Quán nhỏ, dễ trao đổi công việc trực tiếp",
 ];
 
 export default function TuyenDungPage() {
   return (
     <main className="bg-white">
-      {/* HERO */}
-      <section className="bg-[#00B14F] px-4 py-16 text-white md:px-8 md:py-20">
-        <div className="mx-auto max-w-7xl">
-          <p className="inline-flex rounded-full bg-white px-5 py-2 text-sm font-black text-[#00B14F]">
-            TUYỂN DỤNG
-          </p>
+      <section className="relative overflow-hidden bg-[#00B14F] px-4 py-16 text-white md:px-8 md:py-20">
+        <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/10" />
+        <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-white/10" />
 
-          <h1 className="mt-6 text-5xl font-black leading-tight md:text-7xl">
-            Gia nhập
-            <br />
-            Ăn Vặt Ngọc Trinh
-          </h1>
+        <div className="relative mx-auto grid max-w-7xl gap-10 md:grid-cols-[1.05fr_0.95fr] md:items-center">
+          <div>
+            <p className="inline-flex rounded-full bg-white px-5 py-2 text-sm font-black text-[#00B14F]">
+              Tuyển dụng Quận 6
+            </p>
 
-          <p className="mt-6 max-w-3xl text-lg font-bold leading-8 text-white/90">
-            Môi trường trẻ trung, công việc ổn định, thu nhập rõ ràng.
-            Chúng tôi đang tìm kiếm những bạn năng động để đồng hành cùng quán.
-          </p>
+            <h1 className="mt-6 max-w-4xl text-5xl font-black leading-tight md:text-7xl">
+              Tuyển nhân viên quán ăn vặt
+            </h1>
 
-          <div className="mt-8 flex flex-wrap gap-4">
-            <a
-              href="https://zalo.me/0392496220"
-              target="_blank"
-              className="rounded-2xl bg-white px-6 py-4 font-black text-[#00B14F]"
-            >
-              💬 Nhắn Zalo ứng tuyển
-            </a>
+            <p className="mt-5 max-w-3xl text-lg font-bold leading-8 text-white/90">
+              Ăn Vặt Ngọc Trinh cần tuyển nhân viên làm món, order và đóng gói.
+              Công việc rõ ràng, được hướng dẫn từ đầu, phù hợp với bạn siêng
+              năng và muốn làm việc ổn định.
+            </p>
 
-            <a
-              href="tel:0392496220"
-              className="rounded-2xl bg-[#06113C] px-6 py-4 font-black text-white"
-            >
-              ☎️ Gọi ngay
-            </a>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                href={`https://zalo.me/${phone}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-2xl bg-white px-6 py-4 text-center text-sm font-black text-[#00B14F] shadow-xl shadow-black/10"
+              >
+                💬 Nhắn Zalo ứng tuyển
+              </a>
+
+              <a
+                href={`tel:${phone}`}
+                className="rounded-2xl bg-[#06113C] px-6 py-4 text-center text-sm font-black text-white shadow-xl shadow-black/10"
+              >
+                ☎️ Gọi ngay
+              </a>
+            </div>
+          </div>
+
+          <div className="rounded-[40px] bg-white p-6 text-[#06113C] shadow-2xl shadow-black/15">
+            <p className="text-sm font-black text-[#00B14F]">
+              Thông tin nhanh
+            </p>
+
+            <div className="mt-5 grid gap-4">
+              <div className="rounded-[28px] bg-[#F5FFF8] p-5">
+                <p className="text-sm font-bold text-neutral-500">Vị trí</p>
+                <p className="mt-1 text-2xl font-black">
+                  Làm món · Order · Đóng gói
+                </p>
+              </div>
+
+              <div className="rounded-[28px] bg-[#F5FFF8] p-5">
+                <p className="text-sm font-bold text-neutral-500">
+                  Lương theo giờ
+                </p>
+                <p className="mt-1 text-3xl font-black text-[#00B14F]">
+                  Từ 22.000đ/h
+                </p>
+              </div>
+
+              <div className="rounded-[28px] bg-[#F5FFF8] p-5">
+                <p className="text-sm font-bold text-neutral-500">Khu vực</p>
+                <p className="mt-1 text-2xl font-black">Quận 6, TP.HCM</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* VỊ TRÍ */}
       <section className="mx-auto max-w-7xl px-4 py-14 md:px-8">
         <div className="text-center">
-          <p className="font-black text-[#00B14F]">VỊ TRÍ ĐANG TUYỂN</p>
+          <p className="font-black text-[#00B14F]">Vị trí đang tuyển</p>
 
           <h2 className="mt-3 text-4xl font-black text-[#06113C]">
-            Chọn vị trí phù hợp với bạn
+            Bạn phù hợp vị trí nào?
           </h2>
         </div>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
-          {positions.map((position) => (
+        <div className="mt-10 grid gap-8 md:grid-cols-2">
+          {jobs.map((job) => (
             <div
-              key={position.title}
-              className="rounded-[32px] border border-[#E8FFF1] bg-white p-8 shadow-lg shadow-black/5"
+              key={job.title}
+              className="rounded-[40px] border border-black/5 bg-white p-8 shadow-xl shadow-neutral-950/5"
             >
-              <h3 className="text-2xl font-black text-[#06113C]">
-                {position.title}
-              </h3>
+              <div className="flex items-start gap-4">
+                <div className="text-5xl">{job.icon}</div>
 
-              <p className="mt-4 text-3xl font-black text-[#00B14F]">
-                {position.salary}
+                <div>
+                  <h3 className="text-2xl font-black text-[#06113C]">
+                    {job.title}
+                  </h3>
+
+                  <p className="mt-2 text-2xl font-black text-[#00B14F]">
+                    {job.salary}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-5 text-sm font-bold leading-7 text-neutral-600">
+                {job.description}
               </p>
 
               <div className="mt-6 space-y-3">
-                {position.shifts.map((shift) => (
+                {job.works.map((item) => (
                   <div
-                    key={shift}
-                    className="rounded-2xl bg-[#F5FFF8] px-4 py-3 font-bold text-[#06113C]"
+                    key={item}
+                    className="rounded-2xl bg-[#F5FFF8] px-5 py-4 text-sm font-black text-[#06113C]"
                   >
-                    ✓ {shift}
+                    ✓ {item}
                   </div>
                 ))}
               </div>
@@ -125,71 +196,75 @@ export default function TuyenDungPage() {
         </div>
       </section>
 
-      {/* MÔ TẢ */}
       <section className="bg-[#F5FFF8] py-14">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-[32px] bg-white p-8">
-              <h3 className="text-2xl font-black text-[#06113C]">
-                🍳 Nhân viên làm món
-              </h3>
+          <div className="text-center">
+            <p className="font-black text-[#00B14F]">Ca làm & thu nhập</p>
 
-              <ul className="mt-5 space-y-3 text-sm font-semibold leading-7 text-neutral-600">
-                <li>• Chuẩn bị nguyên liệu</li>
-                <li>• Làm món theo quy trình của quán</li>
-                <li>• Giữ vệ sinh khu vực làm việc</li>
-                <li>• Hỗ trợ đóng gói khi đông khách</li>
-              </ul>
-            </div>
+            <h2 className="mt-3 text-4xl font-black text-[#06113C]">
+              Rõ ràng trước khi nhận việc
+            </h2>
+          </div>
 
-            <div className="rounded-[32px] bg-white p-8">
-              <h3 className="text-2xl font-black text-[#06113C]">
-                📦 Nhân viên Order & Đóng Gói
-              </h3>
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {shifts.map((shift) => (
+              <div
+                key={shift.title}
+                className="rounded-[32px] bg-white p-7 shadow-lg shadow-neutral-950/5"
+              >
+                <p className="text-sm font-black text-[#00B14F]">
+                  {shift.title}
+                </p>
 
-              <ul className="mt-5 space-y-3 text-sm font-semibold leading-7 text-neutral-600">
-                <li>• Nhận đơn khách</li>
-                <li>• In bill và đóng gói</li>
-                <li>• Bàn giao đơn cho shipper</li>
-                <li>• Hỗ trợ khách hàng tại quán</li>
-              </ul>
-            </div>
+                <p className="mt-3 text-3xl font-black text-[#06113C]">
+                  {shift.time}
+                </p>
+
+                <p className="mt-3 text-sm font-bold leading-6 text-neutral-500">
+                  {shift.note}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-[32px] bg-white p-6 text-sm font-bold leading-7 text-neutral-600 shadow-lg shadow-neutral-950/5">
+            <p>
+              Lương thử việc 7 ngày:{" "}
+              <span className="font-black text-[#06113C]">23.000đ/giờ</span>.
+              Sau thử việc sẽ trao đổi mức lương chính thức theo vị trí và khả
+              năng làm việc thực tế.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* QUYỀN LỢI + YÊU CẦU */}
       <section className="mx-auto max-w-7xl px-4 py-14 md:px-8">
         <div className="grid gap-8 md:grid-cols-2">
-          <div>
-            <h2 className="text-3xl font-black text-[#06113C]">
-              🎁 Quyền lợi
-            </h2>
+          <div className="rounded-[40px] bg-[#F5FFF8] p-8">
+            <h2 className="text-3xl font-black text-[#06113C]">✅ Yêu cầu</h2>
 
-            <div className="mt-6 grid gap-3">
-              {benefits.map((item) => (
-                <div
-                  key={item}
-                  className="rounded-2xl bg-[#F5FFF8] px-5 py-4 font-black text-[#06113C]"
-                >
-                  ✓ {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-3xl font-black text-[#06113C]">
-              ✅ Yêu cầu
-            </h2>
-
-            <div className="mt-6 grid gap-3">
+            <div className="mt-6 space-y-3">
               {requirements.map((item) => (
                 <div
                   key={item}
-                  className="rounded-2xl bg-[#F5FFF8] px-5 py-4 font-black text-[#06113C]"
+                  className="rounded-2xl bg-white px-5 py-4 text-sm font-black text-[#06113C]"
                 >
-                  ✓ {item}
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[40px] bg-[#06113C] p-8 text-white">
+            <h2 className="text-3xl font-black">🎁 Quyền lợi</h2>
+
+            <div className="mt-6 space-y-3">
+              {benefits.map((item) => (
+                <div
+                  key={item}
+                  className="rounded-2xl bg-white/10 px-5 py-4 text-sm font-black text-white ring-1 ring-white/10"
+                >
+                  {item}
                 </div>
               ))}
             </div>
@@ -197,36 +272,90 @@ export default function TuyenDungPage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="bg-[#06113C] px-4 py-16 text-white md:px-8">
-        <div className="mx-auto max-w-5xl text-center">
-          <p className="font-black text-[#00B14F]">
-            Ứng tuyển ngay hôm nay
-          </p>
+      <section className="mx-auto max-w-7xl px-4 pb-14 md:px-8">
+        <div className="rounded-[40px] bg-[#F5FFF8] p-8 md:p-10">
+          <p className="font-black text-[#00B14F]">Lưu ý trước khi ứng tuyển</p>
 
-          <h2 className="mt-4 text-4xl font-black md:text-5xl">
-            Chúng tôi đang chờ bạn
+          <h2 className="mt-3 text-4xl font-black text-[#06113C]">
+            Quán nói thật để bạn dễ quyết định
           </h2>
 
-          <p className="mx-auto mt-5 max-w-2xl text-sm font-medium leading-8 text-white/70">
-            Chỉ cần nhắn Zalo hoặc gọi trực tiếp, quán sẽ liên hệ trao đổi công việc
-            và sắp xếp lịch phỏng vấn trong thời gian sớm nhất.
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-[28px] bg-white p-6">
+              <p className="text-xl font-black text-[#06113C]">
+                Giờ cao điểm sẽ khá bận
+              </p>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-neutral-600">
+                Công việc chủ yếu làm theo đơn khách. Khi đông đơn, bạn cần làm
+                nhanh, gọn và đúng quy trình.
+              </p>
+            </div>
+
+            <div className="rounded-[28px] bg-white p-6">
+              <p className="text-xl font-black text-[#06113C]">
+                Môi trường bếp hơi nóng
+              </p>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-neutral-600">
+                Công việc không phù hợp nếu bạn chỉ muốn ngồi máy lạnh hoặc không
+                quen môi trường bếp.
+              </p>
+            </div>
+
+            <div className="rounded-[28px] bg-white p-6">
+              <p className="text-xl font-black text-[#06113C]">
+                Không yêu cầu kinh nghiệm
+              </p>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-neutral-600">
+                Chưa biết làm vẫn được hướng dẫn từ đầu, quan trọng là siêng,
+                sạch sẽ và có trách nhiệm.
+              </p>
+            </div>
+
+            <div className="rounded-[28px] bg-white p-6">
+              <p className="text-xl font-black text-[#06113C]">
+                Không thích tăng ca
+              </p>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-neutral-600">
+                Quán ưu tiên làm việc đúng giờ. Xong việc đúng ca thì về, không
+                kéo dài thời gian nếu không cần thiết.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#00B14F] px-4 py-16 text-white md:px-8">
+        <div className="mx-auto max-w-4xl text-center">
+          <p className="font-black text-white/80">Ứng tuyển ngay hôm nay</p>
+
+          <h2 className="mt-4 text-4xl font-black md:text-5xl">
+            Nhắn Zalo để trao đổi công việc
+          </h2>
+
+          <p className="mx-auto mt-5 max-w-2xl text-base font-bold leading-8 text-white/90">
+            Bạn chỉ cần gửi họ tên, tuổi, khu vực đang ở và ca có thể làm. Quán
+            sẽ phản hồi để trao đổi công việc cụ thể.
           </p>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <a
-              href="https://zalo.me/0392496220"
+              href={`https://zalo.me/${phone}`}
               target="_blank"
-              className="rounded-2xl bg-[#00B14F] px-8 py-4 font-black text-white"
+              rel="noopener noreferrer"
+              className="rounded-2xl bg-white px-8 py-4 text-lg font-black text-[#00B14F]"
             >
-              💬 Nhắn Zalo ứng tuyển
+              💬 Zalo: 0392 496 220
             </a>
 
             <a
-              href="tel:0392496220"
-              className="rounded-2xl bg-white px-8 py-4 font-black text-[#06113C]"
+              href={`tel:${phone}`}
+              className="rounded-2xl bg-[#06113C] px-8 py-4 text-lg font-black text-white"
             >
-              ☎️ 0392 496 220
+              ☎️ Gọi ngay
             </a>
           </div>
         </div>

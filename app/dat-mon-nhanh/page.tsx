@@ -934,7 +934,7 @@ const amountToNextShippingPromo = nextShippingPromotion
           <div className="flex gap-4">
             <div className="h-24 w-24 shrink-0 overflow-hidden rounded-3xl bg-[#E8FFF1]">
               <img
-                src="/images/hero.png"
+                src="/images/og-image.png"
                 alt="Ăn Vặt Ngọc Trinh"
                 className="h-full w-full object-cover"
               />

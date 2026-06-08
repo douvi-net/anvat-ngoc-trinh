@@ -117,34 +117,7 @@ export default function TuyenDungPage() {
             </div>
           </div>
 
-          <div className="rounded-[40px] bg-white p-6 text-[#06113C] shadow-2xl shadow-black/15">
-            <p className="text-sm font-black text-[#00B14F]">
-              Thông tin nhanh
-            </p>
-
-            <div className="mt-5 grid gap-4">
-              <div className="rounded-[28px] bg-[#F5FFF8] p-5">
-                <p className="text-sm font-bold text-neutral-500">Vị trí</p>
-                <p className="mt-1 text-2xl font-black">
-                  Làm món · Order · Đóng gói
-                </p>
-              </div>
-
-              <div className="rounded-[28px] bg-[#F5FFF8] p-5">
-                <p className="text-sm font-bold text-neutral-500">
-                  Lương theo giờ
-                </p>
-                <p className="mt-1 text-3xl font-black text-[#00B14F]">
-                  Từ 22.000đ/h
-                </p>
-              </div>
-
-              <div className="rounded-[28px] bg-[#F5FFF8] p-5">
-                <p className="text-sm font-bold text-neutral-500">Khu vực</p>
-                <p className="mt-1 text-2xl font-black">Quận 6, TP.HCM</p>
-              </div>
-            </div>
-          </div>
+          
         </div>
       </section>
 

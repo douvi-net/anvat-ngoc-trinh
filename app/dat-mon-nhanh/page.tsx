@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
+
 type Product = {
   id: string;
   name: string;
@@ -94,7 +90,12 @@ type Coupon = {
   max_discount?: number | null;
   is_active?: boolean | null;
 };
-
+type PlaceSuggestion = {
+  placeId: string;
+  text: string;
+  mainText: string;
+  secondaryText: string;
+};
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
 const frequentlyBoughtTogether: Record<string, string[]> = {
   "Cuốn đỏ sốt me": [
@@ -159,9 +160,11 @@ export default function DatMonNhanhPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
-  const addressInputRef = useRef<HTMLInputElement | null>(null);
-const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
-const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [addressSelected, setAddressSelected] = useState(false);
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -183,76 +186,6 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
     fetchInitialData();
     loadSavedCustomer();
   }, []);
-  useEffect(() => {
-    if (!checkoutOpen) return;
-  
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  
-    if (!apiKey) {
-      console.error("Thiếu NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
-      return;
-    }
-    
-    if (!addressInputRef.current) {
-      console.error("Chưa tìm thấy ô nhập địa chỉ");
-      return;
-    }
-  
-    const scriptId = "google-maps-script";
-  
-    function initAutocomplete() {
-      if (!window.google || !addressInputRef.current) return;
-  
-      const autocomplete = new window.google.maps.places.Autocomplete(
-        addressInputRef.current,
-        {
-          componentRestrictions: { country: "vn" },
-          fields: ["formatted_address", "geometry", "name"],
-        }
-      );
-  
-      autocomplete.addListener("place_changed", () => {
-        const place = autocomplete.getPlace();
-  
-        const lat = place.geometry?.location?.lat();
-        const lng = place.geometry?.location?.lng();
-  
-        if (!lat || !lng) {
-          setRouteMessage("Không lấy được tọa độ địa chỉ.");
-          return;
-        }
-  
-        const fullAddress = place.formatted_address || place.name || "";
-  
-        setCustomerAddress(fullAddress);
-        setDeliveryLat(lat);
-        setDeliveryLng(lng);
-  
-        calculateRouteByLatLng(lat, lng);
-      });
-    }
-  
-    if (document.getElementById(scriptId)) {
-      initAutocomplete();
-      return;
-    }
-  
-    const script = document.createElement("script");
-    script.id = scriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=vi&region=VN&callback=Function.prototype`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      console.log("Google Maps script loaded", window.google);
-      initAutocomplete();
-    };
-    
-    script.onerror = () => {
-      console.error("Không load được Google Maps script");
-    };
-  
-    document.body.appendChild(script);
-  }, [checkoutOpen]);
   useEffect(() => {
     if (!products.length) return;
   
@@ -861,6 +794,91 @@ const amountToNextShippingPromo = nextShippingPromotion
     if (error) throw error;
     return data as Customer;
   }
+  async function searchAddressSuggestions(value: string) {
+    const input = value.trim();
+  
+    if (input.length < 2) {
+      setAddressSuggestions([]);
+      return;
+    }
+  
+    setAddressLoading(true);
+  
+    try {
+      const res = await fetch("/api/places", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "autocomplete",
+          input,
+        }),
+      });
+  
+      const data = await res.json();
+  
+      if (!data.ok) {
+        console.error("PLACES AUTOCOMPLETE ERROR:", data);
+        setAddressSuggestions([]);
+        return;
+      }
+  
+      setAddressSuggestions(data.suggestions || []);
+    } catch (error) {
+      console.error("SEARCH ADDRESS ERROR:", error);
+      setAddressSuggestions([]);
+    } finally {
+      setAddressLoading(false);
+    }
+  }
+  
+  async function selectAddressSuggestion(suggestion: PlaceSuggestion) {
+    setAddressLoading(true);
+    setRouteMessage("");
+    setAddressSuggestions([]);
+  
+    try {
+      const res = await fetch("/api/places", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "details",
+          placeId: suggestion.placeId,
+        }),
+      });
+  
+      const data = await res.json();
+  
+      if (!data.ok) {
+        alert(data.message || "Không lấy được tọa độ địa chỉ.");
+        return;
+      }
+  
+      const lat = Number(data.place?.lat);
+      const lng = Number(data.place?.lng);
+      const address = String(data.place?.address || suggestion.text);
+  
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        alert("Địa chỉ này chưa có tọa độ rõ ràng. Anh chọn địa chỉ khác giúp em.");
+        return;
+      }
+  
+      setCustomerAddress(address);
+      setDeliveryLat(lat);
+      setDeliveryLng(lng);
+      setAddressSelected(true);
+  
+      await calculateRouteByLatLng(lat, lng);
+    } catch (error) {
+      console.error("SELECT ADDRESS ERROR:", error);
+      alert("Lỗi khi chọn địa chỉ.");
+    } finally {
+      setAddressLoading(false);
+    }
+  }
   async function calculateRouteByLatLng(lat: number, lng: number) {
     setRouteLoading(true);
     setRouteMessage("");
@@ -902,61 +920,7 @@ const amountToNextShippingPromo = nextShippingPromotion
       setRouteLoading(false);
     }
   }
-  async function calculateRouteFromCurrentLocation() {
-    if (!navigator.geolocation) {
-      alert("Trình duyệt không hỗ trợ lấy vị trí.");
-      return;
-    }
-  
-    setRouteLoading(true);
-    setRouteMessage("");
-  
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const res = await fetch("/api/maps", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-            }),
-          });
-  
-          const data = await res.json();
-  
-          if (!data.ok) {
-            setRouteMessage(data.message || "Không tính được phí ship.");
-            return;
-          }
-  
-          setDeliveryDistanceKm(Number(data.distance_km || 0));
-          setGoogleShippingFee(
-            data.shipping_fee === null ? null : Number(data.shipping_fee)
-          );
-  
-          setRouteMessage(
-            `${data.distance_text} - ${data.duration_text}. Phí ship: ${
-              data.shipping_fee === null
-                ? "quán xác nhận"
-                : Number(data.shipping_fee).toLocaleString("vi-VN") + "đ"
-            }`
-          );
-        } catch (error) {
-          console.error("MAP ROUTE ERROR:", error);
-          setRouteMessage("Lỗi khi tính phí ship.");
-        } finally {
-          setRouteLoading(false);
-        }
-      },
-      () => {
-        setRouteLoading(false);
-        alert("Không lấy được vị trí. Anh cho phép truy cập vị trí giúp em.");
-      }
-    );
-  }
+ 
   async function submitOrder() {
     if (!isShopOpen) {
       alert("Hiện tại quán chưa nhận đơn. Anh quay lại sau giúp em nha.");
@@ -1646,19 +1610,63 @@ const amountToNextShippingPromo = nextShippingPromotion
                   className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
 
-<input
-  ref={addressInputRef}
-  value={customerAddress}
-  onChange={(e) => {
-    setCustomerAddress(e.target.value);
-    setDeliveryLat(null);
-    setDeliveryLng(null);
-    setGoogleShippingFee(null);
-    setRouteMessage("");
-  }}
-  placeholder="Nhập địa chỉ giao hàng"
-  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-/>
+<div className="relative">
+  <input
+    value={customerAddress}
+    onChange={(e) => {
+      const value = e.target.value;
+
+      setCustomerAddress(value);
+      setDeliveryLat(null);
+      setDeliveryLng(null);
+      setGoogleShippingFee(null);
+      setRouteMessage("");
+      setAddressSelected(false);
+
+      window.clearTimeout((window as any).avntAddressTimer);
+      (window as any).avntAddressTimer = window.setTimeout(() => {
+        searchAddressSuggestions(value);
+      }, 450);
+    }}
+    placeholder="Nhập địa chỉ giao hàng"
+    className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+  />
+
+  {addressLoading && (
+    <p className="mt-2 rounded-2xl bg-white px-4 py-3 text-xs font-black text-neutral-500">
+      Đang tìm địa chỉ...
+    </p>
+  )}
+
+  {addressSuggestions.length > 0 && (
+    <div className="absolute left-0 right-0 top-full z-[1200] mt-2 overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+      {addressSuggestions.map((suggestion) => (
+        <button
+          key={suggestion.placeId}
+          type="button"
+          onClick={() => selectAddressSuggestion(suggestion)}
+          className="block w-full border-b border-black/5 px-4 py-3 text-left last:border-b-0 hover:bg-[#F5FFF8]"
+        >
+          <p className="text-sm font-black text-[#06113C]">
+            {suggestion.mainText || suggestion.text}
+          </p>
+
+          {suggestion.secondaryText && (
+            <p className="mt-1 text-xs font-bold text-neutral-500">
+              {suggestion.secondaryText}
+            </p>
+          )}
+        </button>
+      ))}
+    </div>
+  )}
+
+  {addressSelected && googleShippingFee !== null && (
+    <p className="mt-2 rounded-2xl bg-[#E8FFF1] px-4 py-3 text-xs font-black text-[#00B14F]">
+      ✅ Đã chọn địa chỉ Google và tính phí ship.
+    </p>
+  )}
+</div>
               </div>
             </div>
 
@@ -1690,7 +1698,7 @@ const amountToNextShippingPromo = nextShippingPromotion
   disabled={routeLoading}
   className="col-span-2 rounded-2xl bg-[#00B14F] px-4 py-4 font-black text-white disabled:opacity-60"
 >
-  {routeLoading ? "Đang tính phí ship..." : "📍 Tính phí ship tự động"}
+{routeLoading ? "Đang tính phí ship..." : "🚚 Tính lại phí ship"}
 </button>
 {routeMessage && (
   <p className="col-span-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-[#06113C]">

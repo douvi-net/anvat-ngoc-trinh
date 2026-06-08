@@ -13,24 +13,54 @@ type RouteRequestBody = {
 
 function calculateShippingFee(distanceKm: number) {
   if (distanceKm <= 0.5) return 0;
-  if (distanceKm <= 2) return 15000;
-  if (distanceKm <= 5) return 20000;
-  if (distanceKm <= 8) return 30000;
+  if (distanceKm <= 2) return 16000;
+  if (distanceKm <= 5) return 21000;
+  if (distanceKm <= 8) return 31000;
 
   return null;
 }
 
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceKm(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+) {
+  const earthRadiusKm = 6371;
+
+  const dLat = toRadians(toLat - fromLat);
+  const dLng = toRadians(toLng - fromLng);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(fromLat)) *
+      Math.cos(toRadians(toLat)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  const straightDistanceKm = earthRadiusKm * c;
+
+  // Hệ số quy đổi từ đường chim bay sang đường xe chạy thực tế trong nội thành.
+  const estimatedRoadDistanceKm = straightDistanceKm * 1.25;
+
+  return Number(estimatedRoadDistanceKm.toFixed(2));
+}
+
+function estimateDurationText(distanceKm: number) {
+  const averageSpeedKmH = 22;
+  const minutes = Math.max(5, Math.ceil((distanceKm / averageSpeedKmH) * 60));
+
+  return `${minutes} phút`;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { ok: false, message: "Missing GOOGLE_MAPS_API_KEY" },
-        { status: 500 }
-      );
-    }
-
     const body = (await request.json()) as RouteRequestBody;
 
     const lat = Number(body.lat);
@@ -50,60 +80,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const params = new URLSearchParams({
-      origins: `${SHOP_LOCATION.lat},${SHOP_LOCATION.lng}`,
-      destinations: `${lat},${lng}`,
-      mode: "driving",
-      language: "vi",
-      units: "metric",
-      key: apiKey,
-    });
-
-    const googleResponse = await fetch(
-      `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`,
-      {
-        method: "GET",
-      }
+    const distanceKm = calculateDistanceKm(
+      SHOP_LOCATION.lat,
+      SHOP_LOCATION.lng,
+      lat,
+      lng
     );
 
-    const data = await googleResponse.json();
-
-    if (!googleResponse.ok || data.status !== "OK") {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-  data?.error_message ||
-  JSON.stringify(data) ||
-  "Không tính được tuyến đường từ Google Maps.",
-          error: data,
-        },
-        { status: googleResponse.ok ? 400 : googleResponse.status }
-      );
-    }
-
-    const element = data?.rows?.[0]?.elements?.[0];
-
-    if (!element || element.status !== "OK") {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-            element?.status === "ZERO_RESULTS"
-              ? "Không tìm thấy tuyến đường phù hợp."
-              : element?.status || "Không tính được khoảng cách giao hàng.",
-          error: data,
-        },
-        { status: 400 }
-      );
-    }
-
-    const distanceMeters = Number(element.distance?.value || 0);
-    const distanceKm = Number((distanceMeters / 1000).toFixed(2));
-
-    const durationText = element.duration?.text || "";
-    const distanceText = element.distance?.text || `${distanceKm} km`;
-
+    const distanceMeters = Math.round(distanceKm * 1000);
+    const distanceText = `${distanceKm} km`;
+    const durationText = estimateDurationText(distanceKm);
     const shippingFee = calculateShippingFee(distanceKm);
 
     return NextResponse.json({
@@ -118,7 +104,7 @@ export async function POST(request: NextRequest) {
       message:
         shippingFee === null
           ? "Khoảng cách ngoài khu vực giao hàng tự động. Quán sẽ xác nhận phí ship."
-          : "Đã tính phí ship theo Google Distance Matrix.",
+          : "Đã tính phí ship tự động theo tọa độ Google Maps.",
     });
   } catch (error) {
     return NextResponse.json(

@@ -122,7 +122,12 @@ export default function AdminSettingsPage() {
         shop_name: settings.shop_name,
         hotline: settings.hotline,
         open_time: settings.open_time,
+      
         order_status: settings.order_status,
+      
+        is_open:
+          settings.order_status === "open",
+      
         description: settings.description,
         delivery_note: settings.delivery_note,
         updated_at: new Date().toISOString(),

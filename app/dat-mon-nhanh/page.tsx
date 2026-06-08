@@ -1002,6 +1002,30 @@ const amountToNextShippingPromo = nextShippingPromotion
           </div>
         </section>
       )}
+     
+
+{!isShopOpen && (
+  <section className="mx-auto mt-6 max-w-6xl px-4">
+    <div
+      className={`rounded-[28px] p-5 ${
+        shopSettings?.order_status === "closed"
+          ? "bg-red-50 text-red-700"
+          : "bg-yellow-50 text-yellow-700"
+      }`}
+    >
+      <p className="text-xl font-black">
+        {shopSettings?.order_status === "closed"
+          ? "Quán hiện đang đóng cửa"
+          : "Quán đang tạm ngưng nhận đơn"}
+      </p>
+
+      <p className="mt-2 text-sm font-bold">
+        Khách vẫn có thể xem menu, nhưng hiện tại chưa thể gửi đơn mới.
+      </p>
+    </div>
+  </section>
+)}
+
 
       <section className="sticky top-0 z-40 mt-6 bg-[#F5FFF8]/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-6xl overflow-x-auto">

@@ -97,6 +97,8 @@ type PlaceSuggestion = {
   secondaryText: string;
 };
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
+const iceOptions = ["Không đá", "Ít đá", "Đá bình thường"];
+const sugarOptions = ["Ít ngọt", "Ngọt bình thường"];
 const frequentlyBoughtTogether: Record<string, string[]> = {
   "Cuốn đỏ sốt me": [
     "Trà sữa truyền thống",
@@ -151,6 +153,8 @@ export default function DatMonNhanhPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedToppingIds, setSelectedToppingIds] = useState<string[]>([]);
   const [selectedSpicyLevel, setSelectedSpicyLevel] = useState("Cay vừa");
+  const [selectedIceLevel, setSelectedIceLevel] = useState("Đá bình thường");
+const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thường");
   const [itemNote, setItemNote] = useState("");
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -380,7 +384,18 @@ setUsePointsDiscount(0);
     setCartAnimate(true);
     window.setTimeout(() => setCartAnimate(false), 420);
   }
-
+  function isDrinkProduct(product: Product) {
+    const category = String(product.category || "").toLowerCase();
+    const toppingCategory = String(product.topping_category || "").toLowerCase();
+  
+    return (
+      category.includes("nước") ||
+      category.includes("trà") ||
+      category.includes("trà sữa") ||
+      toppingCategory.includes("nước") ||
+      toppingCategory.includes("trà sữa")
+    );
+  }
   function openProductOptions(product: Product) {
     if (product.is_sold_out) {
       showToast("Món này đang tạm hết");
@@ -478,6 +493,8 @@ setUsePointsDiscount(0);
     setSelectedProduct(product);
     setSelectedToppingIds([]);
     setSelectedSpicyLevel("Cay vừa");
+    setSelectedIceLevel("Đá bình thường");
+setSelectedSugarLevel("Ngọt bình thường");
     setItemNote("");
   }
 
@@ -508,7 +525,7 @@ setUsePointsDiscount(0);
     const cartKey = [
       selectedProduct.id,
       [...selectedToppingIds].sort().join("-"),
-      selectedSpicyLevel,
+      optionNote,
       itemNote.trim(),
     ].join("_");
 
@@ -530,7 +547,7 @@ setUsePointsDiscount(0);
           cartKey,
           quantity: 1,
           selectedToppings,
-          spicyLevel: selectedSpicyLevel,
+          spicyLevel: optionNote,
           itemNote,
         },
       ];
@@ -1518,26 +1535,72 @@ const amountToNextShippingPromo = nextShippingPromotion
           )}
         </div>
 
-        <div className="mt-5">
-          <p className="font-black text-[#06113C]">Độ cay</p>
+        {selectedProduct && isDrinkProduct(selectedProduct) ? (
+  <>
+    <div className="mt-5">
+      <p className="font-black text-[#06113C]">Lượng đá</p>
 
-          <div className="mt-3 grid grid-cols-4 gap-2">
-            {spicyOptions.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setSelectedSpicyLevel(option)}
-                className={`rounded-xl px-2 py-3 text-xs font-black ${
-                  selectedSpicyLevel === option
-                    ? "bg-[#00B14F] text-white"
-                    : "bg-[#F5FFF8] text-[#06113C]"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {iceOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setSelectedIceLevel(option)}
+            className={`rounded-xl px-2 py-3 text-xs font-black ${
+              selectedIceLevel === option
+                ? "bg-[#00B14F] text-white"
+                : "bg-[#F5FFF8] text-[#06113C]"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div className="mt-5">
+      <p className="font-black text-[#06113C]">Độ ngọt</p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {sugarOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setSelectedSugarLevel(option)}
+            className={`rounded-xl px-2 py-3 text-xs font-black ${
+              selectedSugarLevel === option
+                ? "bg-[#00B14F] text-white"
+                : "bg-[#F5FFF8] text-[#06113C]"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </div>
+  </>
+) : (
+  <div className="mt-5">
+    <p className="font-black text-[#06113C]">Độ cay</p>
+
+    <div className="mt-3 grid grid-cols-4 gap-2">
+      {spicyOptions.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => setSelectedSpicyLevel(option)}
+          className={`rounded-xl px-2 py-3 text-xs font-black ${
+            selectedSpicyLevel === option
+              ? "bg-[#00B14F] text-white"
+              : "bg-[#F5FFF8] text-[#06113C]"
+          }`}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
 
         <textarea
           value={itemNote}

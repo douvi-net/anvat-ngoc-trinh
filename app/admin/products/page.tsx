@@ -123,7 +123,7 @@ export default function AdminProductsPage() {
       badge: product.badge || "MÓN NGON",
       sort_order: Number(product.sort_order || 99),
       category: product.category || "Món ngon",
-      topping_category: product.topping_category || "Topping bánh tráng",
+      topping_category: product.topping_category || "",
     });
 
     resetFileInput();
@@ -314,7 +314,7 @@ export default function AdminProductsPage() {
       sort_order: Number(form.sort_order || 99),
       updated_at: new Date().toISOString(),
       category: form.category.trim() || "Món ngon",
-      topping_category: form.topping_category.trim() || "Topping bánh tráng",
+      topping_category: form.topping_category.trim() || null,
     };
 
     if (editingProduct) {
@@ -601,6 +601,7 @@ export default function AdminProductsPage() {
   }
   className="w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
 >
+  <option value="">Không có topping</option>
   <option value="Topping bánh tráng">Topping bánh tráng</option>
   <option value="Topping nước">Topping nước</option>
   <option value="Topping trà sữa">Topping trà sữa</option>

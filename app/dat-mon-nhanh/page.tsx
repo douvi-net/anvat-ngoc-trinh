@@ -386,7 +386,54 @@ setUsePointsDiscount(0);
       showToast("Món này đang tạm hết");
       return;
     }
-
+  
+    const productToppingCategory =
+      product.topping_category || "Topping bánh tráng";
+  
+    const matchedToppings = toppings.filter(
+      (topping) =>
+        topping.category === productToppingCategory ||
+        topping.category === "Topping dùng chung"
+    );
+  
+    if (matchedToppings.length === 0) {
+      const cartKey = [
+        product.id,
+        "no-topping",
+        "Cay vừa",
+        "",
+      ].join("_");
+  
+      setCart((prev) => {
+        const existing = prev.find((item) => item.cartKey === cartKey);
+  
+        if (existing) {
+          return prev.map((item) =>
+            item.cartKey === cartKey
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        }
+  
+        return [
+          ...prev,
+          {
+            ...product,
+            cartKey,
+            quantity: 1,
+            selectedToppings: [],
+            spicyLevel: "Cay vừa",
+            itemNote: "",
+          },
+        ];
+      });
+  
+      showToast(`Đã thêm ${product.name} vào giỏ`);
+      playSound("add");
+      triggerCartAnimation();
+      return;
+    }
+  
     setSelectedProduct(product);
     setSelectedToppingIds([]);
     setSelectedSpicyLevel("Cay vừa");

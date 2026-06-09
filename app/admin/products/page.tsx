@@ -128,7 +128,57 @@ export default function AdminProductsPage() {
 
     resetFileInput();
   }
-
+  async function optimizeImage(file: File): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+  
+      reader.onload = () => {
+        img.src = String(reader.result);
+      };
+  
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxWidth = 1200;
+        const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+  
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+  
+        const ctx = canvas.getContext("2d");
+  
+        if (!ctx) {
+          reject(new Error("Không xử lý được ảnh."));
+          return;
+        }
+  
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Không nén được ảnh."));
+              return;
+            }
+  
+            const optimizedFile = new File(
+              [blob],
+              file.name.replace(/\.[^/.]+$/, "") + ".webp",
+              { type: "image/webp" }
+            );
+  
+            resolve(optimizedFile);
+          },
+          "image/webp",
+          0.85
+        );
+      };
+  
+      img.onerror = reject;
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
   async function uploadImage(file: File) {
     try {
       if (!file.type.startsWith("image/")) {
@@ -150,17 +200,17 @@ export default function AdminProductsPage() {
         .replace(/đ/g, "d")
         .replace(/[^a-z0-9.]+/g, "-");
 
-      const ext = safeName.split(".").pop() || "jpg";
+        const ext = "webp";
       const filePath = `${PRODUCT_FOLDER}/${Date.now()}-${Math.random()
         .toString(36)
         .slice(2)}.${ext}`;
-
+        const optimizedFile = await optimizeImage(file);
       const { error } = await supabase.storage
         .from(BUCKET_NAME)
-        .upload(filePath, file, {
+        .upload(filePath, optimizedFile, {
           cacheControl: "3600",
           upsert: false,
-          contentType: file.type,
+          contentType: optimizedFile.type,
         });
 
       if (error) {

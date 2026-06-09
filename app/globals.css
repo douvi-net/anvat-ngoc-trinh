@@ -82,3 +82,11 @@ a {
 .food-card:active {
   transform: scale(0.98);
 }
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.protected-content {
+  user-select: none;
+}

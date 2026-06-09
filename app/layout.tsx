@@ -7,6 +7,7 @@ import MobileBottomBar from "@/components/MobileBottomBar";
 import FloatingOrderButton from "@/components/FloatingOrderButton";
 import LiveOrder from "@/components/LiveOrder";
 import HideOnOrderMobile from "@/components/HideOnOrderMobile";
+import CopyProtection from "@/components/CopyProtection";
 const beVietnam = Be_Vietnam_Pro({
   subsets: ["vietnamese"],
   weight: ["400", "500", "600", "700", "800", "900"],
@@ -73,6 +74,7 @@ export default function RootLayout({
   return (
     <html lang="vi">
   <body className={beVietnam.className}>
+  <CopyProtection />
   <HideOnOrderMobile>
   <Header />
 </HideOnOrderMobile>

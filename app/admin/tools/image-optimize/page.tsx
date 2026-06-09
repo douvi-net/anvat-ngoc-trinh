@@ -113,7 +113,13 @@ export default function ImageOptimizePage() {
  
   async function optimizeBucket(bucket: string) {
     log(`📁 Đang quét bucket ${bucket}`);
-    const { data: files, error } = await supabase.storage.from(bucket).list("", {
+    const folder =
+    bucket === "product-images"
+      ? "products"
+      : "banners";
+  
+  const { data: files, error } =
+    await supabase.storage.from(bucket).list(folder, {
       limit: 1000,
     });
 
@@ -123,13 +129,13 @@ export default function ImageOptimizePage() {
     }
    
     for (const file of files || []) {
-        log(`📸 Đang xử lý ${file.name}`);
+        log(`📸 Đang xử lý ${bucket}/${folder}/${file.name}`);
       if (!file.name || file.name.endsWith(".emptyFolderPlaceholder")) continue;
       if (file.name.includes("-watermark")) continue;
 
       try {
         const { data: downloadData, error: downloadError } =
-          await supabase.storage.from(bucket).download(file.name);
+          await supabase.storage.from(bucket).download(`${folder}/${file.name}`)
 
         if (downloadError || !downloadData) {
           log(`❌ Không tải được ${bucket}/${file.name}`);
@@ -153,7 +159,9 @@ export default function ImageOptimizePage() {
 
         const { error: uploadError } = await supabase.storage
           .from(bucket)
-          .upload(newPath, watermarked, {
+          .upload(
+            `${folder}/${newPath}`,
+            watermarked, {
             cacheControl: "3600",
             upsert: true,
             contentType: "image/webp",
@@ -164,8 +172,14 @@ export default function ImageOptimizePage() {
           continue;
         }
 
-        const oldUrl = getPublicUrl(bucket, file.name);
-const newUrl = getPublicUrl(bucket, newPath);
+        const oldUrl = getPublicUrl(
+            bucket,
+            `${folder}/${file.name}`
+          );
+          const newUrl = getPublicUrl(
+            bucket,
+            `${folder}/${newPath}`
+          );
 
 await updateImageUrlInDatabase(bucket, oldUrl, newUrl);
 

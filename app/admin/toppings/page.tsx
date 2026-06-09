@@ -93,7 +93,22 @@ export default function AdminToppingsPage() {
       alert("Nhập tên topping trước nha.");
       return;
     }
-
+    async function toggleTopping(topping: Topping) {
+      const { error } = await supabase
+        .from("toppings")
+        .update({
+          is_active: !topping.is_active,
+        })
+        .eq("id", topping.id);
+    
+      if (error) {
+        alert("Không cập nhật được trạng thái topping.");
+        console.error(error);
+        return;
+      }
+    
+      fetchToppings();
+    }
     setSaving(true);
 
     const payload = {
@@ -417,6 +432,16 @@ export default function AdminToppingsPage() {
                             >
                               Xóa
                             </button>
+                            <button
+  onClick={() => toggleTopping(topping)}
+  className={`rounded-xl px-3 py-2 text-sm font-bold text-white ${
+    topping.is_active
+      ? "bg-green-500"
+      : "bg-red-500"
+  }`}
+>
+  {topping.is_active ? "🟢 Đang bán" : "🔴 Hết hàng"}
+</button>
                           </div>
                         </div>
                       ))}

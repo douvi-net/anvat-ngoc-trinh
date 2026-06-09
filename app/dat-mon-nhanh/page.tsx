@@ -1114,13 +1114,13 @@ const amountToNextShippingPromo = nextShippingPromotion
     <img
       src={banners[0].image_url}
       alt={banners[0].title || "Banner"}
-      className="h-full w-full object-cover"
+      className="protected-img h-full w-full object-cover"
     />
   ) : (
     <img
       src="/images/og-back.png"
       alt="Ăn Vặt Ngọc Trinh"
-      className="h-full w-full object-cover"
+      className="protected-img h-full w-full object-cover"
     />
   )}
 
@@ -1134,7 +1134,7 @@ const amountToNextShippingPromo = nextShippingPromotion
               <img
                 src="/images/hero.png"
                 alt="Ăn Vặt Ngọc Trinh"
-                className="h-full w-full object-cover"
+                className="protected-img h-full w-full object-cover"
               />
             </div>
 
@@ -1181,7 +1181,7 @@ const amountToNextShippingPromo = nextShippingPromotion
                     <img
                       src={banner.image_url}
                       alt={banner.title}
-                      className="h-full w-full object-cover"
+                      className="protected-img h-full w-full object-cover"
                     />
                   )}
                 </div>
@@ -1267,7 +1267,7 @@ const amountToNextShippingPromo = nextShippingPromotion
                     <img
                       src={product.image_url}
                       alt={product.name}
-                      className="h-full w-full object-cover"
+                      className="protected-img h-full w-full object-cover"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center text-5xl">
@@ -1344,7 +1344,7 @@ const amountToNextShippingPromo = nextShippingPromotion
               <img
                 src={selectedProduct.image_url || "/images/hero.jpg"}
                 alt={selectedProduct.name}
-                className="h-full w-full object-cover"
+                className="protected-img h-full w-full object-cover"
               />
             </div>
 
@@ -1499,7 +1499,7 @@ const amountToNextShippingPromo = nextShippingPromotion
                       <img
                         src={item.image_url || "/images/hero.jpg"}
                         alt={item.name}
-                        className="h-full w-full object-cover"
+                        className="protected-img h-full w-full object-cover"
                       />
                     </div>
 

@@ -4,7 +4,10 @@ import { useState } from "react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 
-const BUCKETS = ["products", "banners", "posts"];
+const BUCKETS = [
+    "product-images",
+    "banner-images",
+  ];
 
 async function addWatermark(file: File): Promise<File> {
   return new Promise((resolve, reject) => {
@@ -86,14 +89,14 @@ export default function ImageOptimizePage() {
     oldUrl: string,
     newUrl: string
   ) {
-    if (bucket === "products") {
+    if (bucket === "product-images") {
       await supabase
         .from("products")
         .update({ image_url: newUrl })
         .eq("image_url", oldUrl);
     }
   
-    if (bucket === "banners") {
+    if (bucket === "banner-images") {
       await supabase
         .from("banners")
         .update({ image_url: newUrl })
@@ -107,6 +110,7 @@ export default function ImageOptimizePage() {
         .eq("image_url", oldUrl);
     }
   }
+  log(`📁 Đang quét bucket ${bucket}`);
   async function optimizeBucket(bucket: string) {
     const { data: files, error } = await supabase.storage.from(bucket).list("", {
       limit: 1000,
@@ -116,7 +120,7 @@ export default function ImageOptimizePage() {
       log(`❌ ${bucket}: ${error.message}`);
       return;
     }
-
+    log(`📸 Đang xử lý ${file.name}`);
     for (const file of files || []) {
       if (!file.name || file.name.endsWith(".emptyFolderPlaceholder")) continue;
       if (file.name.includes("-watermark")) continue;

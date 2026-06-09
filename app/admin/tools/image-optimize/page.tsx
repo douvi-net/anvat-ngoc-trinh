@@ -110,8 +110,9 @@ export default function ImageOptimizePage() {
         .eq("image_url", oldUrl);
     }
   }
-  log(`📁 Đang quét bucket ${bucket}`);
+ 
   async function optimizeBucket(bucket: string) {
+    log(`📁 Đang quét bucket ${bucket}`);
     const { data: files, error } = await supabase.storage.from(bucket).list("", {
       limit: 1000,
     });
@@ -120,8 +121,9 @@ export default function ImageOptimizePage() {
       log(`❌ ${bucket}: ${error.message}`);
       return;
     }
-    log(`📸 Đang xử lý ${file.name}`);
+   
     for (const file of files || []) {
+        log(`📸 Đang xử lý ${file.name}`);
       if (!file.name || file.name.endsWith(".emptyFolderPlaceholder")) continue;
       if (file.name.includes("-watermark")) continue;
 

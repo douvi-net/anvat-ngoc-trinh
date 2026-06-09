@@ -129,10 +129,10 @@ export default function ImageOptimizePage() {
     }
    
     for (const file of files || []) {
-        log(`📸 Đang xử lý ${bucket}/${folder}/${file.name}`);
+       
       if (!file.name || file.name.endsWith(".emptyFolderPlaceholder")) continue;
       if (file.name.includes("-watermark")) continue;
-
+      log(`📸 Đang xử lý ${bucket}/${folder}/${file.name}`);
       try {
         const { data: downloadData, error: downloadError } =
           await supabase.storage.from(bucket).download(`${folder}/${file.name}`)

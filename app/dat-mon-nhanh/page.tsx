@@ -521,7 +521,10 @@ setSelectedSugarLevel("Ngọt bình thường");
     const selectedToppings = toppings.filter((topping) =>
       selectedToppingIds.includes(topping.id)
     );
-
+    const optionNote =
+    selectedProduct && isDrinkProduct(selectedProduct)
+      ? `${selectedIceLevel}, ${selectedSugarLevel}`
+      : selectedSpicyLevel;
     const cartKey = [
       selectedProduct.id,
       [...selectedToppingIds].sort().join("-"),
@@ -1668,7 +1671,7 @@ const amountToNextShippingPromo = nextShippingPromotion
                         )}
 
                         <p className="mt-1 text-xs font-bold text-neutral-500">
-                          Độ cay: {item.spicyLevel}
+                        Tùy chọn: {item.spicyLevel}
                         </p>
 
                         {item.itemNote && (

@@ -351,7 +351,31 @@ setLoading(false);
           {customerReward.total_points || 0}
         </p>
         <p className="mt-1 text-xs font-bold text-white/60">Xu hiện có</p>
-        {customerReward && rewards.length > 0 && (
+ 
+
+      </div>
+
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-2xl font-black">
+          {customerReward.total_orders || 0}
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Đơn đã mua</p>
+      </div>
+
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-lg font-black">
+          {Number(customerReward.total_spent || 0).toLocaleString("vi-VN")}đ
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Đã chi tiêu</p>
+      </div>
+    </div>
+
+    <p className="mt-4 rounded-2xl bg-white/10 p-3 text-xs font-bold text-white/70">
+      10 Xu = giảm 1.000đ. Xu chỉ được cộng khi đơn hoàn thành.
+    </p>
+  </div>
+)}
+       {customerReward && rewards.length > 0 && (
   <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
     <h2 className="text-xl font-black text-[#06113C]">
       🎁 Đổi quà bằng xu
@@ -463,28 +487,6 @@ setLoading(false);
         </div>
       ))}
     </div>
-  </div>
-)}
-      </div>
-
-      <div className="rounded-2xl bg-white/10 p-3">
-        <p className="text-2xl font-black">
-          {customerReward.total_orders || 0}
-        </p>
-        <p className="mt-1 text-xs font-bold text-white/60">Đơn đã mua</p>
-      </div>
-
-      <div className="rounded-2xl bg-white/10 p-3">
-        <p className="text-lg font-black">
-          {Number(customerReward.total_spent || 0).toLocaleString("vi-VN")}đ
-        </p>
-        <p className="mt-1 text-xs font-bold text-white/60">Đã chi tiêu</p>
-      </div>
-    </div>
-
-    <p className="mt-4 rounded-2xl bg-white/10 p-3 text-xs font-bold text-white/70">
-      10 Xu = giảm 1.000đ. Xu chỉ được cộng khi đơn hoàn thành.
-    </p>
   </div>
 )}
         <div className="mt-6 space-y-5">

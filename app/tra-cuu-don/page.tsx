@@ -187,6 +187,8 @@ setLoading(false);
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
   
+    console.log("FETCH REWARDS:", data, error);
+  
     if (error) {
       console.error("FETCH REWARDS ERROR:", error);
       setRewards([]);
@@ -390,7 +392,7 @@ setLoading(false);
     </p>
   </div>
 )}
-       {customerReward && rewards.length > 0 && (
+     {rewards.length > 0 && customerReward && (
   <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
     <h2 className="text-xl font-black text-[#06113C]">
       🎁 Đổi quà bằng xu

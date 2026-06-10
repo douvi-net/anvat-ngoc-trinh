@@ -261,131 +261,6 @@ setLoading(false);
             </button>
           </div>
         </div>
-        {customerReward && (
-  <div className="mt-6 rounded-[28px] bg-[#06113C] p-5 text-white shadow-xl">
-    <p className="text-sm font-black text-[#00B14F]">Xu Ăn Vặt</p>
-
-    <div className="mt-3 grid grid-cols-3 gap-3 text-center">
-      <div className="rounded-2xl bg-white/10 p-3">
-        <p className="text-2xl font-black">
-          {customerReward.total_points || 0}
-        </p>
-        <p className="mt-1 text-xs font-bold text-white/60">Xu hiện có</p>
- 
-
-      </div>
-
-      <div className="rounded-2xl bg-white/10 p-3">
-        <p className="text-2xl font-black">
-          {customerReward.total_orders || 0}
-        </p>
-        <p className="mt-1 text-xs font-bold text-white/60">Đơn đã mua</p>
-      </div>
-
-      <div className="rounded-2xl bg-white/10 p-3">
-        <p className="text-lg font-black">
-          {Number(customerReward.total_spent || 0).toLocaleString("vi-VN")}đ
-        </p>
-        <p className="mt-1 text-xs font-bold text-white/60">Đã chi tiêu</p>
-      </div>
-    </div>
-
-    <p className="mt-4 rounded-2xl bg-white/10 p-3 text-xs font-bold text-white/70">
-      10 Xu = giảm 1.000đ. Xu chỉ được cộng khi đơn hoàn thành.
-    </p>
-  </div>
-)}
-     {rewards.length > 0 && (
-          <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="text-xl font-black text-[#06113C]">
-                  🎁 Điều kiện đổi quà
-                </h2>
-
-                <p className="mt-1 text-sm font-bold text-neutral-500">
-                  Quà sẽ được đổi trực tiếp ở bước thanh toán khi đặt đơn mới.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const phone = customerReward?.phone || keyword.trim();
-                  window.location.href = phone
-                    ? `/dat-mon-nhanh?phone=${encodeURIComponent(phone)}`
-                    : "/dat-mon-nhanh";
-                }}
-                className="rounded-2xl bg-[#00B14F] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#00B14F]/25"
-              >
-                Đặt món để đổi quà
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-600">
-              <p>
-                Bạn đang có{" "}
-                <span className="font-black text-[#00B14F]">
-                  {customerReward?.total_points || 0} xu
-                </span>
-                . Khi đặt món, hệ thống sẽ tự hiện quà đủ điều kiện để bạn chọn
-                và quà sẽ đi chung với đơn.
-              </p>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {rewards.map((reward) => {
-                const canRedeem =
-                  Number(customerReward?.total_points || 0) >=
-                  Number(reward.points_required || 0);
-
-                return (
-                  <div
-                    key={reward.id}
-                    className={`rounded-2xl border p-4 ${
-                      canRedeem
-                        ? "border-[#00B14F]/30 bg-[#E8FFF1]"
-                        : "border-black/10 bg-neutral-50 opacity-75"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-black text-[#06113C]">
-                          {reward.name}
-                        </p>
-
-                        <p className="mt-1 text-sm font-bold text-neutral-500">
-                          Cần {reward.points_required} xu
-                          {Number(reward.reward_value || 0) > 0
-                            ? ` · Giá trị ${Number(
-                                reward.reward_value || 0
-                              ).toLocaleString("vi-VN")}đ`
-                            : ""}
-                        </p>
-
-                        {reward.description && (
-                          <p className="mt-1 text-xs font-bold text-neutral-400">
-                            {reward.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <span
-                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
-                          canRedeem
-                            ? "bg-[#00B14F] text-white"
-                            : "bg-neutral-200 text-neutral-500"
-                        }`}
-                      >
-                        {canRedeem ? "Đủ xu" : "Chưa đủ"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
         <div className="mt-6 space-y-5">
         
           {searched && !loading && orders.length === 0 && (
@@ -581,6 +456,132 @@ setLoading(false);
             );
           })}
         </div>
+        {customerReward && (
+  <div className="mt-6 rounded-[28px] bg-[#06113C] p-5 text-white shadow-xl">
+    <p className="text-sm font-black text-[#00B14F]">Xu Ăn Vặt</p>
+
+    <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-2xl font-black">
+          {customerReward.total_points || 0}
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Xu hiện có</p>
+ 
+
+      </div>
+
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-2xl font-black">
+          {customerReward.total_orders || 0}
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Đơn đã mua</p>
+      </div>
+
+      <div className="rounded-2xl bg-white/10 p-3">
+        <p className="text-lg font-black">
+          {Number(customerReward.total_spent || 0).toLocaleString("vi-VN")}đ
+        </p>
+        <p className="mt-1 text-xs font-bold text-white/60">Đã chi tiêu</p>
+      </div>
+    </div>
+
+    <p className="mt-4 rounded-2xl bg-white/10 p-3 text-xs font-bold text-white/70">
+      10 Xu = giảm 1.000đ. Xu chỉ được cộng khi đơn hoàn thành.
+    </p>
+  </div>
+)}
+     {rewards.length > 0 && (
+          <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-xl font-black text-[#06113C]">
+                  🎁 Điều kiện đổi quà
+                </h2>
+
+                <p className="mt-1 text-sm font-bold text-neutral-500">
+                  Quà sẽ được đổi trực tiếp ở bước thanh toán khi đặt đơn mới.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const phone = customerReward?.phone || keyword.trim();
+                  window.location.href = phone
+                    ? `/dat-mon-nhanh?phone=${encodeURIComponent(phone)}`
+                    : "/dat-mon-nhanh";
+                }}
+                className="rounded-2xl bg-[#00B14F] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[#00B14F]/25"
+              >
+                Đặt món để đổi quà
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-600">
+              <p>
+                Bạn đang có{" "}
+                <span className="font-black text-[#00B14F]">
+                  {customerReward?.total_points || 0} xu
+                </span>
+                . Khi đặt món, hệ thống sẽ tự hiện quà đủ điều kiện để bạn chọn
+                và quà sẽ đi chung với đơn.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {rewards.map((reward) => {
+                const canRedeem =
+                  Number(customerReward?.total_points || 0) >=
+                  Number(reward.points_required || 0);
+
+                return (
+                  <div
+                    key={reward.id}
+                    className={`rounded-2xl border p-4 ${
+                      canRedeem
+                        ? "border-[#00B14F]/30 bg-[#E8FFF1]"
+                        : "border-black/10 bg-neutral-50 opacity-75"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-black text-[#06113C]">
+                          {reward.name}
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-neutral-500">
+                          Cần {reward.points_required} xu
+                          {Number(reward.reward_value || 0) > 0
+                            ? ` · Giá trị ${Number(
+                                reward.reward_value || 0
+                              ).toLocaleString("vi-VN")}đ`
+                            : ""}
+                        </p>
+
+                        {reward.description && (
+                          <p className="mt-1 text-xs font-bold text-neutral-400">
+                            {reward.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                          canRedeem
+                            ? "bg-[#00B14F] text-white"
+                            : "bg-neutral-200 text-neutral-500"
+                        }`}
+                      >
+                        {canRedeem ? "Đủ xu" : "Chưa đủ"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </section>
     </main>
   );

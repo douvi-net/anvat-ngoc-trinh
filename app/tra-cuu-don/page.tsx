@@ -42,6 +42,23 @@ type CustomerReward = {
   total_orders: number;
   total_spent: number;
 };
+type Reward = {
+  id: string;
+  name: string;
+  points_required: number;
+  reward_value: number;
+  description: string | null;
+};
+
+type RewardRedemption = {
+  id: string;
+  reward_name: string;
+  points_used: number;
+  code: string;
+  status: string;
+  expires_at: string | null;
+  created_at: string;
+};
 const statusMap: Record<string, { label: string; color: string; desc: string }> = {
   waiting_payment: {
     label: "Chờ thanh toán",
@@ -76,6 +93,9 @@ export default function TrackOrderPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [customerReward, setCustomerReward] = useState<CustomerReward | null>(null);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+const [redemptions, setRedemptions] = useState<RewardRedemption[]>([]);
+const [redeeming, setRedeeming] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
@@ -139,11 +159,114 @@ if (phoneForReward) {
     .maybeSingle();
 
   setCustomerReward((customerData || null) as CustomerReward | null);
+  await fetchRewards();
+await fetchRedemptions(phoneForReward);
 } else {
   setCustomerReward(null);
+  
+
 }
 
 setLoading(false);
+  }
+  async function fetchRewards() {
+    const { data, error } = await supabase
+      .from("rewards")
+      .select("id,name,points_required,reward_value,description")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+  
+    if (!error) {
+      setRewards((data || []) as Reward[]);
+    }
+  }
+  
+  async function fetchRedemptions(phone: string) {
+    const { data, error } = await supabase
+      .from("reward_redemptions")
+      .select("id,reward_name,points_used,code,status,expires_at,created_at")
+      .eq("customer_phone", phone)
+      .order("created_at", { ascending: false })
+      .limit(5);
+  
+    if (!error) {
+      setRedemptions((data || []) as RewardRedemption[]);
+    }
+  }
+  
+  function makeRewardCode() {
+    return `RW-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  }
+  async function redeemReward(reward: Reward) {
+    if (!customerReward) return;
+  
+    const currentPoints = Number(customerReward.total_points || 0);
+  
+    if (currentPoints < reward.points_required) {
+      alert("Bạn chưa đủ xu để đổi quà này.");
+      return;
+    }
+  
+    const confirmed = confirm(
+      `Đổi ${reward.points_required} xu để nhận "${reward.name}"?\n\nSau khi đổi, mã quà có hiệu lực 7 ngày.`
+    );
+  
+    if (!confirmed) return;
+  
+    setRedeeming(true);
+  
+    try {
+      const newPoints = currentPoints - reward.points_required;
+      const code = makeRewardCode();
+  
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+  
+      const { error: updateError } = await supabase
+        .from("customers")
+        .update({
+          total_points: newPoints,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("phone", customerReward.phone);
+  
+      if (updateError) throw updateError;
+  
+      const { error: redemptionError } = await supabase
+        .from("reward_redemptions")
+        .insert({
+          customer_phone: customerReward.phone,
+          reward_id: reward.id,
+          reward_name: reward.name,
+          points_used: reward.points_required,
+          code,
+          status: "unused",
+          expires_at: expiresAt.toISOString(),
+        });
+  
+      if (redemptionError) throw redemptionError;
+  
+      await supabase.from("points_history").insert({
+        customer_phone: customerReward.phone,
+        points: -reward.points_required,
+        type: "reward",
+        note: `Đổi ${reward.points_required} xu lấy quà: ${reward.name} - Mã ${code}`,
+      });
+  
+      setCustomerReward({
+        ...customerReward,
+        total_points: newPoints,
+      });
+  
+      await fetchRedemptions(customerReward.phone);
+  
+      alert(`Đổi quà thành công!\nMã quà của bạn: ${code}`);
+    } catch (error) {
+      console.error("REDEEM REWARD ERROR:", error);
+      alert("Không đổi được quà. Vui lòng thử lại.");
+    } finally {
+      setRedeeming(false);
+    }
   }
   function reorder(order: Order) {
     const reorderItems = order.order_items.map((item) => ({
@@ -228,6 +351,71 @@ setLoading(false);
           {customerReward.total_points || 0}
         </p>
         <p className="mt-1 text-xs font-bold text-white/60">Xu hiện có</p>
+        {customerReward && rewards.length > 0 && (
+  <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
+    <h2 className="text-xl font-black text-[#06113C]">
+      🎁 Đổi quà bằng xu
+    </h2>
+
+    <p className="mt-1 text-sm font-bold text-neutral-500">
+      Bạn đang có{" "}
+      <span className="text-[#00B14F]">
+        {customerReward.total_points || 0} xu
+      </span>
+    </p>
+
+    <div className="mt-4 space-y-3">
+      {rewards.map((reward) => {
+        const canRedeem =
+          Number(customerReward.total_points || 0) >=
+          Number(reward.points_required || 0);
+
+        return (
+          <div
+            key={reward.id}
+            className={`rounded-2xl border p-4 ${
+              canRedeem
+                ? "border-[#00B14F]/30 bg-[#E8FFF1]"
+                : "border-black/10 bg-neutral-50 opacity-70"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-black text-[#06113C]">
+                  {reward.name}
+                </p>
+
+                <p className="mt-1 text-sm font-bold text-neutral-500">
+                  Cần {reward.points_required} xu · Giá trị{" "}
+                  {Number(reward.reward_value || 0).toLocaleString("vi-VN")}đ
+                </p>
+
+                {reward.description && (
+                  <p className="mt-1 text-xs font-bold text-neutral-400">
+                    {reward.description}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={!canRedeem || redeeming}
+                onClick={() => redeemReward(reward)}
+                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-black ${
+                  canRedeem
+                    ? "bg-[#00B14F] text-white"
+                    : "bg-neutral-200 text-neutral-500"
+                }`}
+              >
+                {canRedeem ? "Đổi" : "Chưa đủ"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
       </div>
 
       <div className="rounded-2xl bg-white/10 p-3">

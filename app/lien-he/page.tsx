@@ -155,7 +155,7 @@ export default function LienHePage() {
               </a>
 
               <a
-                href="https://www.tiktok.com/"
+                href="https://www.tiktok.com/@anvatngoctrinh"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-2xl bg-white/10 px-5 py-4 text-sm font-black text-white ring-1 ring-white/10"
@@ -164,7 +164,7 @@ export default function LienHePage() {
               </a>
 
               <a
-                href="https://www.youtube.com/"
+                href="https://www.youtube.com/@anvatngoctrinh"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-2xl bg-white/10 px-5 py-4 text-sm font-black text-white ring-1 ring-white/10"

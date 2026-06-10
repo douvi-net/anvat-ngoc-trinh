@@ -158,9 +158,20 @@ if (phoneForReward) {
     .eq("phone", phoneForReward)
     .maybeSingle();
 
-  setCustomerReward((customerData || null) as CustomerReward | null);
-  await fetchRewards();
-await fetchRedemptions(phoneForReward);
+    setCustomerReward(
+      customerData
+        ? (customerData as CustomerReward)
+        : {
+            phone: phoneForReward,
+            name: null,
+            total_points: 0,
+            total_orders: 0,
+            total_spent: 0,
+          }
+    );
+    
+    await fetchRewards();
+    await fetchRedemptions(phoneForReward);
 } else {
   setCustomerReward(null);
   
@@ -176,9 +187,13 @@ setLoading(false);
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
   
-    if (!error) {
-      setRewards((data || []) as Reward[]);
+    if (error) {
+      console.error("FETCH REWARDS ERROR:", error);
+      setRewards([]);
+      return;
     }
+  
+    setRewards((data || []) as Reward[]);
   }
   
   async function fetchRedemptions(phone: string) {

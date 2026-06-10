@@ -1145,6 +1145,15 @@ const amountToNextShippingPromo = nextShippingPromotion
       const customer = await upsertCustomer();
       const orderCode = `AVNT${Date.now().toString().slice(-6)}`;
 
+      const estimateBaseTime = new Date();
+      const estimatedFrom = new Date(
+        estimateBaseTime.getTime() +
+          (estimatedReceive.prepMinutes + estimatedReceive.deliveryMinutes) *
+            60 *
+            1000
+      );
+      const estimatedTo = new Date(estimatedFrom.getTime() + 10 * 60 * 1000);
+
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
@@ -1181,6 +1190,11 @@ const amountToNextShippingPromo = nextShippingPromotion
           delivery_distance_km: deliveryDistanceKm,
           delivery_area: selectedShippingZone?.name || "Quán xác nhận",
           delivery_status: "pending",
+          preparation_minutes: estimatedReceive.prepMinutes,
+          delivery_minutes: estimatedReceive.deliveryMinutes,
+          estimated_delivery_from: estimatedFrom.toISOString(),
+          estimated_delivery_to: estimatedTo.toISOString(),
+          confirmed_at: paymentMethod === "cod" ? new Date().toISOString() : null,
         })
         .select()
         .single();

@@ -90,6 +90,16 @@ type Coupon = {
   max_discount?: number | null;
   is_active?: boolean | null;
 };
+type Reward = {
+  id: string;
+  name: string;
+  points_required: number;
+  reward_value?: number | null;
+  description?: string | null;
+  is_active?: boolean | null;
+  sort_order?: number | null;
+};
+
 type PlaceSuggestion = {
   placeId: string;
   text: string;
@@ -146,6 +156,8 @@ export default function DatMonNhanhPage() {
   const [shippingZones, setShippingZones] = useState<ShippingZone[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [selectedRewardId, setSelectedRewardId] = useState("");
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
   const [shippingPromotions, setShippingPromotions] = useState<ShippingPromotion[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -254,6 +266,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
       settingResult,
       bannerResult,
       couponResult,
+      rewardResult,
       promotionResult,
     ] = await Promise.all([
       supabase
@@ -285,6 +298,13 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
         .order("sort_order", { ascending: true }),
 
       supabase.from("coupons").select("*"),
+
+      supabase
+        .from("rewards")
+        .select("id,name,points_required,reward_value,description,is_active,sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true }),
+
       supabase
   .from("shipping_promotions")
   .select("*")
@@ -302,6 +322,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
       (item) => item.is_active !== false
     );
     setCoupons(activeCoupons);
+    setRewards((rewardResult.data || []) as Reward[]);
     setShippingPromotions(
       (promotionResult.data || []) as ShippingPromotion[]
     );
@@ -361,6 +382,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
       setCustomerPoints(Number((customer as any).total_points || 0));
       if (Number((customer as any).total_points || 0) < 50) {
         setUsePointsDiscount(0);
+        setSelectedRewardId("");
       }
       setCustomerFoundMessage(
         "Đã tìm thấy thông tin cũ, hệ thống tự điền giúp bạn."
@@ -368,6 +390,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
     } else {
       setCustomerPoints(0);
 setUsePointsDiscount(0);
+      setSelectedRewardId("");
       setCustomerId("");
       setCustomerFoundMessage("Khách mới, thông tin sẽ được lưu sau khi đặt.");
     }
@@ -745,6 +768,18 @@ const finalShippingFee = Math.max(0, shippingFee - shippingDiscount);
 
 const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
 
+const selectedReward = rewards.find((reward) => reward.id === selectedRewardId) || null;
+const rewardPointsUsed = selectedReward ? Number(selectedReward.points_required || 0) : 0;
+const canUseSelectedReward =
+  !!selectedReward &&
+  subtotal >= 50000 &&
+  customerPoints >= rewardPointsUsed;
+
+const redeemableRewards = rewards.filter(
+  (reward) =>
+    customerPoints >= Number(reward.points_required || 0) &&
+    subtotal >= 50000
+);
 
 const totalAfterPoints = Math.max(
   0,
@@ -1097,6 +1132,11 @@ const amountToNextShippingPromo = nextShippingPromotion
       alert("Anh/chị bấm tính lại phí ship trước khi đặt hàng nha.");
       return;
     }
+
+    if (selectedReward && !canUseSelectedReward) {
+      alert("Quà đã chọn chưa đủ điều kiện. Anh/chị bỏ quà hoặc chọn quà khác giúp em nha.");
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -1113,17 +1153,22 @@ const amountToNextShippingPromo = nextShippingPromotion
           customer_name: customerName.trim(),
           customer_phone: customerPhone.trim(),
           customer_address: customerAddress.trim(),
-          note: note.trim(),
+          note: [
+            note.trim(),
+            selectedReward ? `🎁 Quà đổi xu: ${selectedReward.name} (${rewardPointsUsed} xu)` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
           subtotal,
           shipping_fee: finalShippingFee,
           discount_amount: discountAmount + shippingDiscount + usePointsDiscount,
 
           points_used:
-            usePointsDiscount === 10000
+            (usePointsDiscount === 10000
               ? 100
               : usePointsDiscount === 5000
               ? 50
-              : 0,
+              : 0) + rewardPointsUsed,
           
           points_discount: usePointsDiscount,
           
@@ -1142,29 +1187,58 @@ const amountToNextShippingPromo = nextShippingPromotion
 
       if (orderError || !order) throw orderError;
 
-      const orderItems = cart.map((item) => ({
-        order_id: order.id,
-        product_id: item.id,
-        product_name: item.name,
-        quantity: item.quantity,
-        price: getItemUnitTotal(item),
-        unit_price: getItemUnitTotal(item),
-        total: getItemUnitTotal(item) * item.quantity,
-        note: item.itemNote || null,
-        spicy_level: item.spicyLevel,
-        toppings: item.selectedToppings.map((topping) => ({
-          id: topping.id,
-          name: topping.name,
-          price: topping.price,
-          category: topping.category || null,
+      const orderItems = [
+        ...cart.map((item) => ({
+          order_id: order.id,
+          product_id: item.id,
+          product_name: item.name,
+          quantity: item.quantity,
+          price: getItemUnitTotal(item),
+          unit_price: getItemUnitTotal(item),
+          total: getItemUnitTotal(item) * item.quantity,
+          note: item.itemNote || null,
+          spicy_level: item.spicyLevel,
+          toppings: item.selectedToppings.map((topping) => ({
+            id: topping.id,
+            name: topping.name,
+            price: topping.price,
+            category: topping.category || null,
+          })),
         })),
-      }));
+        ...(selectedReward
+          ? [
+              {
+                order_id: order.id,
+                product_id: null,
+                product_name: `🎁 Quà đổi xu: ${selectedReward.name}`,
+                quantity: 1,
+                price: 0,
+                unit_price: 0,
+                total: 0,
+                note: `Dùng ${rewardPointsUsed} xu. Quán làm/giao chung với đơn.`,
+                spicy_level: null,
+                toppings: [],
+              },
+            ]
+          : []),
+      ];
 
       const { error: itemsError } = await supabase
         .from("order_items")
         .insert(orderItems);
 
       if (itemsError) throw itemsError;
+
+      if (selectedReward) {
+        await supabase.from("reward_redemptions").insert({
+          customer_phone: customerPhone.trim(),
+          reward_id: selectedReward.id,
+          reward_name: selectedReward.name,
+          points_used: rewardPointsUsed,
+          code: `${orderCode}-REWARD`,
+          status: "pending",
+        });
+      }
 
       await supabase
         .from("customers")
@@ -1190,6 +1264,7 @@ const amountToNextShippingPromo = nextShippingPromotion
       setCart([]);
       setNote("");
       setSelectedCoupon(null);
+      setSelectedRewardId("");
       setCheckoutOpen(false);
       playSound("success");
       router.push(`/tra-cuu-don?code=${orderCode}`);
@@ -1711,6 +1786,28 @@ const amountToNextShippingPromo = nextShippingPromotion
               ))}
             </div>
 
+            {selectedReward && (
+              <div className="mt-3 rounded-3xl border border-[#00B14F]/30 bg-[#E8FFF1] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black text-[#00B14F]">
+                      🎁 Quà đổi xu
+                    </p>
+                    <p className="mt-1 font-black text-[#06113C]">
+                      {selectedReward.name}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-neutral-500">
+                      Dùng {rewardPointsUsed} xu · Quà sẽ được làm chung với đơn
+                    </p>
+                  </div>
+
+                  <p className="shrink-0 text-sm font-black text-[#00B14F]">
+                    0đ
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="mt-6 rounded-[28px] bg-[#F5FFF8] p-4">
   <p className="text-xl font-black text-[#06113C]">
     Ưu đãi & giảm giá
@@ -1953,7 +2050,7 @@ const amountToNextShippingPromo = nextShippingPromotion
                     <p className="mt-4 font-black text-[#06113C]">Số tiền:</p>
 
                     <p className="mt-1 text-2xl font-black text-[#00B14F]">
-                      {total.toLocaleString("vi-VN")}đ
+                      {totalAfterPoints.toLocaleString("vi-VN")}đ
                     </p>
                   </div>
 
@@ -2130,8 +2227,101 @@ const amountToNextShippingPromo = nextShippingPromotion
       </div>
     </div>
 
+    {rewards.length > 0 && (
+      <div className="mt-4 rounded-2xl bg-white/10 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-white">
+              🎁 Đổi quà trực tiếp
+            </p>
+            <p className="mt-1 text-xs font-bold text-white/60">
+              Đơn từ 50.000đ, mỗi đơn chọn tối đa 1 quà.
+            </p>
+          </div>
+
+          {selectedReward && (
+            <button
+              type="button"
+              onClick={() => setSelectedRewardId("")}
+              className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white"
+            >
+              Bỏ chọn
+            </button>
+          )}
+        </div>
+
+        {subtotal < 50000 ? (
+          <p className="mt-3 rounded-xl bg-[#FFF7E8] px-3 py-2 text-xs font-bold text-[#B45309]">
+            Mua thêm {(50000 - subtotal).toLocaleString("vi-VN")}đ để mở đổi quà.
+          </p>
+        ) : redeemableRewards.length === 0 ? (
+          <p className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white/70">
+            Bạn chưa đủ xu để đổi quà. Quà thấp nhất cần{" "}
+            {Math.min(...rewards.map((item) => Number(item.points_required || 0)))} xu.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {rewards.map((reward) => {
+              const requiredPoints = Number(reward.points_required || 0);
+              const canRedeem = customerPoints >= requiredPoints && subtotal >= 50000;
+              const active = selectedRewardId === reward.id;
+
+              return (
+                <button
+                  key={reward.id}
+                  type="button"
+                  disabled={!canRedeem}
+                  onClick={() => {
+                    setSelectedRewardId(active ? "" : reward.id);
+                    setUsePointsDiscount(0);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left ${
+                    active
+                      ? "bg-[#00B14F] text-white"
+                      : canRedeem
+                      ? "bg-white text-[#06113C]"
+                      : "bg-white/10 text-white/40"
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-black">
+                      {reward.name}
+                    </p>
+
+                    {reward.description && (
+                      <p className={`mt-1 text-xs font-bold ${
+                        active ? "text-white/80" : "text-neutral-500"
+                      }`}>
+                        {reward.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                    active
+                      ? "bg-white text-[#00B14F]"
+                      : canRedeem
+                      ? "bg-[#FFF7E8] text-[#B45309]"
+                      : "bg-white/10 text-white/50"
+                  }`}>
+                    {requiredPoints} xu
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {selectedReward && (
+          <p className="mt-3 rounded-xl bg-[#E8FFF1] px-3 py-2 text-xs font-black text-[#00B14F]">
+            ✅ Quà sẽ hiện trong đơn: {selectedReward.name} - 0đ
+          </p>
+        )}
+      </div>
+    )}
+
     <div className="mt-3 flex gap-2">
-      {customerPoints >= 50 && (
+      {customerPoints >= 50 && !selectedReward && (
         <button
           type="button"
           onClick={() =>
@@ -2149,7 +2339,7 @@ const amountToNextShippingPromo = nextShippingPromotion
         </button>
       )}
 
-      {customerPoints >= 100 && (
+      {customerPoints >= 100 && !selectedReward && (
         <button
           type="button"
           onClick={() =>
@@ -2174,6 +2364,15 @@ const amountToNextShippingPromo = nextShippingPromotion
       <span>Giảm Xu</span>
       <span>
         -{usePointsDiscount.toLocaleString("vi-VN")}đ
+      </span>
+    </div>
+  )}
+
+  {selectedReward && (
+    <div className="mt-3 flex justify-between gap-3 text-sm font-bold text-[#FBBF24]">
+      <span>Quà đổi xu</span>
+      <span className="text-right">
+        {selectedReward.name} · -{rewardPointsUsed} xu
       </span>
     </div>
   )}

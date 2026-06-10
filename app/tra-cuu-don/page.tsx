@@ -96,15 +96,17 @@ export default function TrackOrderPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
 const [redemptions, setRedemptions] = useState<RewardRedemption[]>([]);
 const [redeeming, setRedeeming] = useState(false);
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
+useEffect(() => {
+  fetchRewards();
 
-    if (code) {
-      setKeyword(code);
-      searchOrders(code);
-    }
-  }, []);
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+
+  if (code) {
+    setKeyword(code);
+    searchOrders(code);
+  }
+}, []);
 
   async function searchOrders(input?: string) {
     const q = (input || keyword).trim();
@@ -392,7 +394,7 @@ setLoading(false);
     </p>
   </div>
 )}
-     {rewards.length > 0 && customerReward && (
+     {rewards.length > 0 && (
   <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
     <h2 className="text-xl font-black text-[#06113C]">
       🎁 Đổi quà bằng xu
@@ -401,14 +403,14 @@ setLoading(false);
     <p className="mt-1 text-sm font-bold text-neutral-500">
       Bạn đang có{" "}
       <span className="text-[#00B14F]">
-        {customerReward.total_points || 0} xu
+      {customerReward?.total_points || 0} xu
       </span>
     </p>
 
     <div className="mt-4 space-y-3">
       {rewards.map((reward) => {
         const canRedeem =
-          Number(customerReward.total_points || 0) >=
+        Number(customerReward?.total_points || 0) >=
           Number(reward.points_required || 0);
 
         return (
@@ -440,7 +442,7 @@ setLoading(false);
 
               <button
                 type="button"
-                disabled={!canRedeem || redeeming}
+                disabled={!customerReward || !canRedeem || redeeming}
                 onClick={() => redeemReward(reward)}
                 className={`shrink-0 rounded-xl px-4 py-2 text-sm font-black ${
                   canRedeem

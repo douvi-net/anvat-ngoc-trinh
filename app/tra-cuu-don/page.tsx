@@ -416,6 +416,55 @@ setLoading(false);
     </div>
   </div>
 )}
+{redemptions.length > 0 && (
+  <div className="mt-5 rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
+    <h2 className="text-xl font-black text-[#06113C]">
+      🎟️ Mã quà của bạn
+    </h2>
+
+    <div className="mt-4 space-y-3">
+      {redemptions.map((item) => (
+        <div
+          key={item.id}
+          className="rounded-2xl border border-black/10 bg-[#F5FFF8] p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-black text-[#06113C]">
+                {item.reward_name}
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-neutral-500">
+                Đã dùng {item.points_used} xu
+              </p>
+
+              <p className="mt-2 text-lg font-black text-[#00B14F]">
+                Mã: {item.code}
+              </p>
+
+              {item.expires_at && (
+                <p className="mt-1 text-xs font-bold text-neutral-400">
+                  Hạn dùng:{" "}
+                  {new Date(item.expires_at).toLocaleDateString("vi-VN")}
+                </p>
+              )}
+            </div>
+
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-black ${
+                item.status === "used"
+                  ? "bg-neutral-100 text-neutral-500"
+                  : "bg-[#E8FFF1] text-[#00B14F]"
+              }`}
+            >
+              {item.status === "used" ? "Đã dùng" : "Chưa dùng"}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
       </div>
 
       <div className="rounded-2xl bg-white/10 p-3">

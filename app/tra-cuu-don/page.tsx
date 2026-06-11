@@ -13,6 +13,15 @@ type OrderItem = {
   toppings: { name: string; price: number }[] | null;
 };
 
+type OrderReview = {
+  id: string;
+  order_id: string;
+  rating: number;
+  comment: string | null;
+  reward_points: number;
+  created_at: string;
+};
+
 type Order = {
   id: string;
   order_code: string;
@@ -34,6 +43,7 @@ estimated_delivery_to?: string | null;
 promotion_name: string | null;
 promotion_discount: number | null;
   order_items: OrderItem[];
+  order_reviews?: OrderReview[];
 };
 type CustomerReward = {
   phone: string;
@@ -49,6 +59,8 @@ type Reward = {
   reward_value: number;
   description: string | null;
 };
+const REVIEW_REWARD_POINTS = 5;
+
 const statusMap: Record<string, { label: string; color: string; desc: string }> = {
   waiting_payment: {
     label: "Chờ thanh toán",
@@ -87,6 +99,9 @@ export default function TrackOrderPage() {
   const [activeTab, setActiveTab] = useState<"orders" | "rewards">("orders");
   const [trackedKeyword, setTrackedKeyword] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [reviewRatings, setReviewRatings] = useState<Record<string, number>>({});
+  const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
+  const [reviewingOrderId, setReviewingOrderId] = useState("");
   const silentRefreshRef = useRef(false);
 
   useEffect(() => {
@@ -119,7 +134,7 @@ export default function TrackOrderPage() {
 
     let query = supabase
       .from("orders")
-      .select("*, order_items (*)")
+      .select("*, order_items (*), order_reviews (*)")
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -286,6 +301,45 @@ if (!silent) {
   
     searchOrders();
   }
+  async function submitReview(order: Order) {
+    const rating = reviewRatings[order.id] || 5;
+    const comment = (reviewComments[order.id] || "").trim();
+
+    if (order.status !== "completed") {
+      alert("Đơn hoàn thành mới đánh giá được nha.");
+      return;
+    }
+
+    setReviewingOrderId(order.id);
+
+    const { data, error } = await supabase.rpc("submit_order_review", {
+      p_order_id: order.id,
+      p_rating: rating,
+      p_comment: comment,
+    });
+
+    setReviewingOrderId("");
+
+    if (error) {
+      console.error("SUBMIT REVIEW ERROR:", error);
+
+      const message = String(error.message || "");
+
+      if (message.includes("ALREADY_REVIEWED")) {
+        alert("Đơn này đã được đánh giá rồi.");
+      } else if (message.includes("ORDER_NOT_COMPLETED")) {
+        alert("Đơn hoàn thành mới đánh giá được nha.");
+      } else {
+        alert("Không gửi được đánh giá. Anh/chị thử lại giúp quán nha.");
+      }
+
+      return;
+    }
+
+    alert(`Cảm ơn anh/chị đã đánh giá. Quán đã cộng ${data?.reward_points || REVIEW_REWARD_POINTS} xu vào tài khoản.`);
+    searchOrders(trackedKeyword || keyword, true);
+  }
+
   function formatTime(value?: string | null) {
     if (!value) return "";
   
@@ -609,6 +663,91 @@ if (!silent) {
   </div>
 )}
                 </div>
+
+                {order.status === "completed" && (
+                  <div className="mt-5 rounded-[28px] border border-yellow-200 bg-yellow-50 p-5">
+                    {order.order_reviews && order.order_reviews.length > 0 ? (
+                      <div>
+                        <p className="text-lg font-black text-[#06113C]">
+                          ⭐ Cảm ơn anh/chị đã đánh giá
+                        </p>
+
+                        <p className="mt-2 text-sm font-bold text-neutral-600">
+                          Đánh giá: {"★".repeat(Number(order.order_reviews[0].rating || 5))}
+                          {"☆".repeat(5 - Number(order.order_reviews[0].rating || 5))}
+                        </p>
+
+                        {order.order_reviews[0].comment && (
+                          <p className="mt-2 rounded-2xl bg-white p-3 text-sm font-bold text-neutral-600">
+                            {order.order_reviews[0].comment}
+                          </p>
+                        )}
+
+                        <p className="mt-2 text-xs font-black text-[#B45309]">
+                          Đã cộng {order.order_reviews[0].reward_points || REVIEW_REWARD_POINTS} xu cho đánh giá này.
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-lg font-black text-[#06113C]">
+                          ⭐ Đánh giá đơn hàng
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-neutral-600">
+                          Đánh giá trải nghiệm để nhận +{REVIEW_REWARD_POINTS} xu. Mỗi đơn chỉ nhận xu 1 lần.
+                        </p>
+
+                        <div className="mt-4 flex gap-2">
+                          {[1, 2, 3, 4, 5].map((star) => {
+                            const current = reviewRatings[order.id] || 5;
+
+                            return (
+                              <button
+                                key={star}
+                                type="button"
+                                onClick={() =>
+                                  setReviewRatings((prev) => ({
+                                    ...prev,
+                                    [order.id]: star,
+                                  }))
+                                }
+                                className={`text-3xl ${
+                                  star <= current ? "text-yellow-500" : "text-neutral-300"
+                                }`}
+                              >
+                                ★
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <textarea
+                          value={reviewComments[order.id] || ""}
+                          onChange={(e) =>
+                            setReviewComments((prev) => ({
+                              ...prev,
+                              [order.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Góp ý cho quán nếu có..."
+                          rows={3}
+                          className="mt-4 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => submitReview(order)}
+                          disabled={reviewingOrderId === order.id}
+                          className="mt-4 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white disabled:opacity-60"
+                        >
+                          {reviewingOrderId === order.id
+                            ? "Đang gửi đánh giá..."
+                            : `Gửi đánh giá · Nhận +${REVIEW_REWARD_POINTS} xu`}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

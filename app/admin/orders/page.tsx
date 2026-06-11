@@ -44,6 +44,7 @@ estimated_delivery_to?: string | null;
   order_items: OrderItem[];
   points_used?: number | null;
 points_discount?: number | null;
+points_processed?: boolean | null;
 };
 
 const columns = [
@@ -318,13 +319,14 @@ if (!currentOrder) {
     if (
       currentOrder &&
       status === "completed" &&
-      currentOrder.status !== "completed"
+      currentOrder.status !== "completed" &&
+      !(currentOrder as any).points_processed
     ) {
       const phone = currentOrder.customer_phone?.trim();
       const orderTotal = Number(currentOrder.total || 0);
       const pointsUsed = Number(currentOrder.points_used || 0);
       const pointsEarned = Math.floor(orderTotal / 10000);
-  
+
       if (phone) {
         const { data: existingHistory } = await supabase
           .from("points_history")
@@ -332,27 +334,24 @@ if (!currentOrder) {
           .eq("order_id", orderId)
           .eq("type", "complete")
           .maybeSingle();
-  
+
         if (!existingHistory) {
           const { data: existingCustomer } = await supabase
             .from("customers")
             .select("*")
             .eq("phone", phone)
             .maybeSingle();
-  
+
           const oldPoints = Number(existingCustomer?.total_points || 0);
-          const oldOrders = Number(existingCustomer?.total_orders || 0);
           const oldSpent = Number(existingCustomer?.total_spent || 0);
-  
           const newPoints = Math.max(0, oldPoints - pointsUsed + pointsEarned);
-  
+
           if (existingCustomer) {
             await supabase
               .from("customers")
               .update({
                 name: currentOrder.customer_name,
                 total_points: newPoints,
-                total_orders: oldOrders + 1,
                 total_spent: oldSpent + orderTotal,
                 updated_at: new Date().toISOString(),
               })
@@ -366,7 +365,7 @@ if (!currentOrder) {
               total_spent: orderTotal,
             });
           }
-  
+
           if (pointsUsed > 0) {
             await supabase.from("points_history").insert({
               customer_phone: phone,
@@ -375,8 +374,17 @@ if (!currentOrder) {
               type: "redeem",
               note: `Dùng ${pointsUsed} xu cho đơn ${currentOrder.order_code}`,
             });
+
+            await supabase
+              .from("reward_redemptions")
+              .update({
+                status: "used",
+                used_at: new Date().toISOString(),
+              })
+              .eq("customer_phone", phone)
+              .eq("code", `${currentOrder.order_code}-REWARD`);
           }
-  
+
           if (pointsEarned > 0) {
             await supabase.from("points_history").insert({
               customer_phone: phone,
@@ -386,7 +394,7 @@ if (!currentOrder) {
               note: `Cộng ${pointsEarned} xu từ đơn ${currentOrder.order_code}`,
             });
           }
-  
+
           await supabase.from("points_history").insert({
             customer_phone: phone,
             order_id: orderId,
@@ -394,10 +402,37 @@ if (!currentOrder) {
             type: "complete",
             note: `Hoàn thành đơn ${currentOrder.order_code}`,
           });
+
+          await supabase
+            .from("orders")
+            .update({
+              points_processed: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", orderId);
         }
       }
     }
-  
+
+    if (
+      currentOrder &&
+      status === "cancelled" &&
+      currentOrder.status !== "cancelled"
+    ) {
+      const phone = currentOrder.customer_phone?.trim();
+
+      if (phone) {
+        await supabase
+          .from("reward_redemptions")
+          .update({
+            status: "cancelled",
+          })
+          .eq("customer_phone", phone)
+          .eq("code", `${currentOrder.order_code}-REWARD`)
+          .eq("status", "pending");
+      }
+    }
+
     if (status === "making" || status === "cancelled" || status === "new") {
       stopOrderSound();
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type OrderItem = {
@@ -85,6 +85,10 @@ export default function TrackOrderPage() {
   const [customerReward, setCustomerReward] = useState<CustomerReward | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [activeTab, setActiveTab] = useState<"orders" | "rewards">("orders");
+  const [trackedKeyword, setTrackedKeyword] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const silentRefreshRef = useRef(false);
+
   useEffect(() => {
     fetchRewards();
 
@@ -97,7 +101,7 @@ export default function TrackOrderPage() {
     }
   }, []);
 
-  async function searchOrders(input?: string) {
+  async function searchOrders(input?: string, silent = false) {
     const q = (input || keyword).trim();
 
     if (!q) {
@@ -105,8 +109,11 @@ export default function TrackOrderPage() {
       return;
     }
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     setSearched(true);
+    setTrackedKeyword(q);
 
     const isOrderCode = q.toUpperCase().startsWith("AVNT");
 
@@ -127,12 +134,15 @@ export default function TrackOrderPage() {
     if (error) {
       console.error(error);
       alert("Không tra cứu được đơn. Vui lòng thử lại.");
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       return;
     }
 
     const foundOrders = (data || []) as Order[];
 setOrders(foundOrders);
+setLastUpdatedAt(new Date());
 
 let phoneForReward = "";
 
@@ -168,8 +178,65 @@ if (phoneForReward) {
 
 }
 
-setLoading(false);
+if (!silent) {
+  setLoading(false);
+}
   }
+
+  useEffect(() => {
+    const q = trackedKeyword.trim();
+
+    if (!searched || !q) return;
+
+    const timer = window.setInterval(() => {
+      searchOrders(q, true);
+    }, 10000);
+
+    return () => window.clearInterval(timer);
+  }, [searched, trackedKeyword]);
+
+  useEffect(() => {
+    const q = trackedKeyword.trim();
+
+    if (!searched || !q) return;
+
+    const channel = supabase
+      .channel(`avnt-track-order-${q}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          if (silentRefreshRef.current) return;
+          silentRefreshRef.current = true;
+
+          window.setTimeout(() => {
+            searchOrders(q, true).finally(() => {
+              silentRefreshRef.current = false;
+            });
+          }, 400);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_items" },
+        () => {
+          if (silentRefreshRef.current) return;
+          silentRefreshRef.current = true;
+
+          window.setTimeout(() => {
+            searchOrders(q, true).finally(() => {
+              silentRefreshRef.current = false;
+            });
+          }, 400);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [searched, trackedKeyword]);
+
   async function fetchRewards() {
     const { data, error } = await supabase
       .from("rewards")
@@ -333,6 +400,25 @@ setLoading(false);
 
         {activeTab === "orders" && (
         <div className="mt-6 space-y-5">
+          {searched && orders.length > 0 && (
+            <div className="rounded-[24px] bg-white p-4 text-sm font-bold text-neutral-500 shadow-lg shadow-neutral-950/5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <span>
+                  🔄 Trạng thái đơn sẽ tự cập nhật khi quán xử lý.
+                </span>
+
+                {lastUpdatedAt && (
+                  <span className="text-xs font-black text-[#00B14F]">
+                    Cập nhật lúc {lastUpdatedAt.toLocaleTimeString("vi-VN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         
           {searched && !loading && orders.length === 0 && (
             <div className="rounded-[28px] bg-white p-6 text-center font-bold text-neutral-500 shadow-xl shadow-neutral-950/5">

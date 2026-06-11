@@ -492,6 +492,19 @@ export default function AdminOrdersPage() {
     if (distanceKm <= 8) return 20;
     return 30;
   }
+  async function notifyCustomerOrderStatus(orderId: string, status: string) {
+    try {
+      await fetch("/api/push/order-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, status }),
+      });
+    } catch (error) {
+      console.error("NOTIFY CUSTOMER STATUS ERROR:", error);
+    }
+  }
+  
+ 
   async function updateOrderStatus(orderId: string, status: string) {
     let currentOrder = orders.find((item) => item.id === orderId);
 
@@ -679,7 +692,7 @@ if (!currentOrder) {
     if (status === "making" || status === "cancelled" || status === "new") {
       stopOrderSound();
     }
-  
+    await notifyCustomerOrderStatus(orderId, status);
     fetchOrders();
   }
 

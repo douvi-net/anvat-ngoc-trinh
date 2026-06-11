@@ -102,6 +102,12 @@ type Reward = {
   sort_order?: number | null;
 };
 
+type CustomerFlag = {
+  phone: string;
+  status: "normal" | "warning" | "blocked";
+  note?: string | null;
+};
+
 type PlaceSuggestion = {
   placeId: string;
   text: string;
@@ -195,6 +201,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingCustomer, setCheckingCustomer] = useState(false);
   const [customerFoundMessage, setCustomerFoundMessage] = useState("");
+  const [customerFlag, setCustomerFlag] = useState<CustomerFlag | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
   const [cartAnimate, setCartAnimate] = useState(false);
@@ -361,12 +368,38 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
     localStorage.setItem("avnt_payment_method", paymentMethod);
   }
 
+  async function fetchCustomerFlag(phone: string) {
+    const cleanPhone = phone.trim();
+    if (cleanPhone.length < 9) {
+      setCustomerFlag(null);
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("customer_flags")
+      .select("phone,status,note")
+      .eq("phone", cleanPhone)
+      .maybeSingle();
+
+    if (error) {
+      console.error("CUSTOMER FLAG ERROR:", error);
+      setCustomerFlag(null);
+      return null;
+    }
+
+    const flag = (data || null) as CustomerFlag | null;
+    setCustomerFlag(flag);
+    return flag;
+  }
+
   async function findCustomerByPhone(phone: string) {
     const cleanPhone = phone.trim();
     if (cleanPhone.length < 9) return;
 
     setCheckingCustomer(true);
     setCustomerFoundMessage("");
+
+    const flag = await fetchCustomerFlag(cleanPhone);
 
     const { data, error } = await supabase
       .from("customers")
@@ -1148,6 +1181,13 @@ const amountToNextShippingPromo = nextShippingPromotion
       alert("Anh nhập đủ số điện thoại, tên và địa chỉ giúp em nha.");
       return;
     }
+
+    const latestFlag = await fetchCustomerFlag(customerPhone.trim());
+    if (latestFlag?.status === "blocked") {
+      alert("Rất tiếc, quán hiện chưa thể tiếp nhận đơn hàng từ số điện thoại này. Anh/chị vui lòng liên hệ hotline 0392 496 220.");
+      return;
+    }
+
     if (!deliveryLat || !deliveryLng) {
       alert("Anh/chị vui lòng chọn địa chỉ từ danh sách gợi ý Google.");
       return;
@@ -1194,6 +1234,9 @@ const amountToNextShippingPromo = nextShippingPromotion
           customer_address: customerAddress.trim(),
           note: [
             note.trim(),
+            latestFlag?.status === "warning"
+              ? `⚠️ Khách cần xác nhận trước: ${latestFlag.note || "Admin đã đánh dấu cần xác nhận."}`
+              : "",
             selectedReward ? `🎁 Quà đổi xu: ${selectedReward.name} (${rewardPointsUsed} xu)` : "",
           ]
             .filter(Boolean)
@@ -1213,7 +1256,12 @@ const amountToNextShippingPromo = nextShippingPromotion
           
           coupon_code: selectedCoupon?.code || null,
           total: totalAfterPoints,
-          status: paymentMethod === "momo" ? "waiting_payment" : "new",
+          status:
+            paymentMethod === "momo"
+              ? "waiting_payment"
+              : latestFlag?.status === "warning"
+              ? "need_confirm"
+              : "new",
           source: "website",
           payment_method: paymentMethod,
           payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
@@ -1301,7 +1349,12 @@ const amountToNextShippingPromo = nextShippingPromotion
           orderCode,
           total,
           paymentMethod,
-          status: paymentMethod === "momo" ? "waiting_payment" : "new",
+          status:
+            paymentMethod === "momo"
+              ? "waiting_payment"
+              : latestFlag?.status === "warning"
+              ? "need_confirm"
+              : "new",
         }),
       });
 
@@ -1947,6 +2000,25 @@ const amountToNextShippingPromo = nextShippingPromotion
                   </p>
                 )}
 
+                {customerFlag?.status === "warning" && (
+                  <div className="rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-xs font-bold text-yellow-700">
+                    <p className="font-black">⚠️ Đơn hàng cần quán xác nhận trước</p>
+                    <p className="mt-1">
+                      {customerFlag.note ||
+                        "Quán sẽ kiểm tra và xác nhận trước khi làm món."}
+                    </p>
+                  </div>
+                )}
+
+                {customerFlag?.status === "blocked" && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600">
+                    <p className="font-black">🚫 Số điện thoại đang bị hạn chế đặt hàng</p>
+                    <p className="mt-1">
+                      Vui lòng liên hệ hotline 0392 496 220 để được hỗ trợ.
+                    </p>
+                  </div>
+                )}
+
                 <input
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
@@ -2438,14 +2510,18 @@ const amountToNextShippingPromo = nextShippingPromotion
 
             <button
               onClick={submitOrder}
-              disabled={submitting || !isShopOpen}
+              disabled={submitting || !isShopOpen || customerFlag?.status === "blocked"}
               className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white disabled:opacity-60"
             >
               {submitting
                 ? "Đang gửi đơn..."
-                : isShopOpen
-                ? `Đặt hàng · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
-                : "Quán đang tạm ngưng"}
+                : !isShopOpen
+                ? "Quán đang tạm ngưng"
+                : customerFlag?.status === "blocked"
+                ? "Số điện thoại đang bị hạn chế"
+                : customerFlag?.status === "warning"
+                ? `Gửi đơn chờ xác nhận · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
+                : `Đặt hàng · ${totalAfterPoints.toLocaleString("vi-VN")}đ`}
             </button>
           </div>
         </div>

@@ -62,6 +62,15 @@ type GoogleReviewReward = {
   created_at: string;
 };
 
+type CustomerFlag = {
+  phone: string;
+  status: "normal" | "warning" | "blocked";
+  note: string | null;
+  flagged_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const columns = [
   {
     key: "waiting_payment",
@@ -70,6 +79,14 @@ const columns = [
     badge: "bg-orange-100 text-orange-700",
     action: "Đã nhận tiền",
     next: "new",
+  },
+  {
+    key: "need_confirm",
+    title: "Cần xác nhận",
+    color: "bg-amber-50",
+    badge: "bg-amber-100 text-amber-700",
+    action: "Xác nhận đơn",
+    next: "making",
   },
   {
     key: "new",
@@ -110,6 +127,7 @@ const filters = [
   { key: "today", label: "Hôm nay" },
   { key: "waiting_payment", label: "Chờ thanh toán" },
   { key: "customer_sent", label: "Khách báo CK" },
+  { key: "need_confirm", label: "Cần xác nhận" },
   { key: "new", label: "Đơn mới" },
   { key: "making", label: "Đang làm" },
   { key: "completed", label: "Hoàn thành" },
@@ -119,6 +137,8 @@ const filters = [
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [googleReviewRewards, setGoogleReviewRewards] = useState<Record<string, GoogleReviewReward>>({});
+  const [customerFlags, setCustomerFlags] = useState<Record<string, CustomerFlag>>({});
+  const [processingFlagPhone, setProcessingFlagPhone] = useState("");
   const [processingGoogleReviewId, setProcessingGoogleReviewId] = useState("");
   const [loading, setLoading] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
@@ -189,7 +209,7 @@ export default function AdminOrdersPage() {
   }, []);
 
   async function fetchOrders() {
-    const [orderResult, googleReviewResult] = await Promise.all([
+    const [orderResult, googleReviewResult, flagResult] = await Promise.all([
       supabase
         .from("orders")
         .select("*, order_items (*)")
@@ -199,6 +219,11 @@ export default function AdminOrdersPage() {
         .from("google_review_rewards")
         .select("*")
         .order("created_at", { ascending: false }),
+
+      supabase
+        .from("customer_flags")
+        .select("*")
+        .order("updated_at", { ascending: false }),
     ]);
 
     if (orderResult.error) {
@@ -211,14 +236,24 @@ export default function AdminOrdersPage() {
       console.error("GOOGLE REVIEW REWARD ERROR:", googleReviewResult.error);
     }
 
+    if (flagResult.error) {
+      console.error("CUSTOMER FLAGS ERROR:", flagResult.error);
+    }
+
     const reviewMap: Record<string, GoogleReviewReward> = {};
+    const flagMap: Record<string, CustomerFlag> = {};
 
     ((googleReviewResult.data || []) as GoogleReviewReward[]).forEach((item) => {
       reviewMap[item.order_id] = item;
     });
 
+    ((flagResult.data || []) as CustomerFlag[]).forEach((item) => {
+      flagMap[item.phone] = item;
+    });
+
     setOrders((orderResult.data || []) as Order[]);
     setGoogleReviewRewards(reviewMap);
+    setCustomerFlags(flagMap);
     setLoading(false);
   }
 
@@ -226,6 +261,91 @@ export default function AdminOrdersPage() {
     if (!error) return "Không rõ lỗi.";
     if (typeof error === "string") return error;
     return error.message || error.details || error.hint || JSON.stringify(error);
+  }
+
+  function getCustomerFlag(phone?: string | null) {
+    const cleanPhone = String(phone || "").trim();
+    return customerFlags[cleanPhone] || null;
+  }
+
+  function getFlagMeta(flag?: CustomerFlag | null) {
+    if (!flag || flag.status === "normal") {
+      return {
+        label: "Bình thường",
+        className: "bg-[#E8FFF1] text-[#00B14F] ring-[#00B14F]/20",
+        icon: "🟢",
+      };
+    }
+
+    if (flag.status === "warning") {
+      return {
+        label: "Cần xác nhận trước",
+        className: "bg-yellow-50 text-yellow-700 ring-yellow-300",
+        icon: "🟡",
+      };
+    }
+
+    return {
+      label: "Đang chặn đặt hàng",
+      className: "bg-red-50 text-red-600 ring-red-200",
+      icon: "🔴",
+    };
+  }
+
+  async function updateCustomerFlag(
+    phone: string,
+    status: "normal" | "warning" | "blocked",
+    defaultNote = ""
+  ) {
+    const cleanPhone = phone.trim();
+    if (!cleanPhone) return;
+
+    const note =
+      status === "normal"
+        ? ""
+        : window.prompt(
+            status === "warning"
+              ? "Lý do đánh dấu khách cần xác nhận trước:"
+              : "Lý do chặn khách đặt hàng:",
+            defaultNote
+          );
+
+    if (status !== "normal" && note === null) return;
+
+    const ok =
+      status === "normal"
+        ? window.confirm(`Gỡ cảnh báo/chặn cho số ${cleanPhone}?`)
+        : window.confirm(
+            status === "warning"
+              ? `Đánh dấu số ${cleanPhone} là cần xác nhận trước?`
+              : `Chặn số ${cleanPhone} đặt hàng?`
+          );
+
+    if (!ok) return;
+
+    setProcessingFlagPhone(cleanPhone);
+
+    try {
+      const { error } = await supabase.from("customer_flags").upsert(
+        {
+          phone: cleanPhone,
+          status,
+          note: status === "normal" ? null : note || "",
+          flagged_by: "admin",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "phone" }
+      );
+
+      if (error) throw error;
+
+      await fetchOrders();
+    } catch (error: any) {
+      console.error("UPDATE CUSTOMER FLAG ERROR:", error);
+      alert(`Không cập nhật được trạng thái khách: ${getSupabaseErrorMessage(error)}`);
+    } finally {
+      setProcessingFlagPhone("");
+    }
   }
 
   async function approveGoogleReviewReward(reward: GoogleReviewReward) {
@@ -927,6 +1047,83 @@ if (!currentOrder) {
                             👤 {order.customer_name} · {order.customer_phone}
                           </p>
                           <p>📍 {order.customer_address}</p>
+                        </div>
+
+                        <div
+                          className={`mt-4 rounded-2xl p-4 text-sm font-bold ring-1 ${
+                            getFlagMeta(getCustomerFlag(order.customer_phone)).className
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-black">
+                                {getFlagMeta(getCustomerFlag(order.customer_phone)).icon}{" "}
+                                Khách: {getFlagMeta(getCustomerFlag(order.customer_phone)).label}
+                              </p>
+
+                              {getCustomerFlag(order.customer_phone)?.note && (
+                                <p className="mt-1 text-xs font-bold opacity-80">
+                                  Ghi chú: {getCustomerFlag(order.customer_phone)?.note}
+                                </p>
+                              )}
+
+                              {order.status === "need_confirm" && (
+                                <p className="mt-1 text-xs font-black">
+                                  Đơn này đang chờ quán xác nhận trước khi làm món.
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex shrink-0 flex-col gap-2">
+                              {getCustomerFlag(order.customer_phone)?.status !== "warning" && (
+                                <button
+                                  type="button"
+                                  disabled={processingFlagPhone === order.customer_phone}
+                                  onClick={() =>
+                                    updateCustomerFlag(
+                                      order.customer_phone,
+                                      "warning",
+                                      "Khách cần xác nhận trước khi làm món."
+                                    )
+                                  }
+                                  className="rounded-xl bg-yellow-100 px-3 py-2 text-xs font-black text-yellow-700 disabled:opacity-60"
+                                >
+                                  Cần xác nhận
+                                </button>
+                              )}
+
+                              {getCustomerFlag(order.customer_phone)?.status !== "blocked" && (
+                                <button
+                                  type="button"
+                                  disabled={processingFlagPhone === order.customer_phone}
+                                  onClick={() =>
+                                    updateCustomerFlag(
+                                      order.customer_phone,
+                                      "blocked",
+                                      "Khách có dấu hiệu đặt ảo/boom hàng."
+                                    )
+                                  }
+                                  className="rounded-xl bg-red-100 px-3 py-2 text-xs font-black text-red-600 disabled:opacity-60"
+                                >
+                                  Chặn
+                                </button>
+                              )}
+
+                              {getCustomerFlag(order.customer_phone)?.status &&
+                                getCustomerFlag(order.customer_phone)?.status !== "normal" && (
+                                  <button
+                                    type="button"
+                                    disabled={processingFlagPhone === order.customer_phone}
+                                    onClick={() =>
+                                      updateCustomerFlag(order.customer_phone, "normal")
+                                    }
+                                    className="rounded-xl bg-white px-3 py-2 text-xs font-black text-[#06113C] ring-1 ring-black/10 disabled:opacity-60"
+                                  >
+                                    Gỡ
+                                  </button>
+                                )}
+                            </div>
+                          </div>
                         </div>
 
                         <div className="mt-4 rounded-2xl bg-[#F5FFF8] p-4">

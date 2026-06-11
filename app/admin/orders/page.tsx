@@ -47,6 +47,21 @@ points_discount?: number | null;
 points_processed?: boolean | null;
 };
 
+
+type GoogleReviewReward = {
+  id: string;
+  order_id: string;
+  customer_phone: string;
+  customer_name: string | null;
+  screenshot_url: string | null;
+  status: "pending" | "approved" | "rejected";
+  reward_points: number;
+  points_awarded?: boolean | null;
+  admin_note?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+};
+
 const columns = [
   {
     key: "waiting_payment",
@@ -103,6 +118,8 @@ const filters = [
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [googleReviewRewards, setGoogleReviewRewards] = useState<Record<string, GoogleReviewReward>>({});
+  const [processingGoogleReviewId, setProcessingGoogleReviewId] = useState("");
   const [loading, setLoading] = useState(true);
   const [newOrderAlert, setNewOrderAlert] = useState<Order | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -156,6 +173,13 @@ export default function AdminOrdersPage() {
           fetchOrders();
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "google_review_rewards" },
+        () => {
+          fetchOrders();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -165,19 +189,142 @@ export default function AdminOrdersPage() {
   }, []);
 
   async function fetchOrders() {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*, order_items (*)")
-      .order("created_at", { ascending: false });
+    const [orderResult, googleReviewResult] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("*, order_items (*)")
+        .order("created_at", { ascending: false }),
 
-    if (error) {
-      console.error(error);
+      supabase
+        .from("google_review_rewards")
+        .select("*")
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (orderResult.error) {
+      console.error(orderResult.error);
       setLoading(false);
       return;
     }
 
-    setOrders((data || []) as Order[]);
+    if (googleReviewResult.error) {
+      console.error("GOOGLE REVIEW REWARD ERROR:", googleReviewResult.error);
+    }
+
+    const reviewMap: Record<string, GoogleReviewReward> = {};
+
+    ((googleReviewResult.data || []) as GoogleReviewReward[]).forEach((item) => {
+      reviewMap[item.order_id] = item;
+    });
+
+    setOrders((orderResult.data || []) as Order[]);
+    setGoogleReviewRewards(reviewMap);
     setLoading(false);
+  }
+
+  async function approveGoogleReviewReward(reward: GoogleReviewReward) {
+    if (!reward || reward.status === "approved" || reward.points_awarded) return;
+
+    const ok = window.confirm(
+      `Duyệt Google Maps review và cộng ${reward.reward_points || 20} xu cho khách ${reward.customer_phone}?`
+    );
+
+    if (!ok) return;
+
+    setProcessingGoogleReviewId(reward.id);
+
+    try {
+      const rewardPoints = Number(reward.reward_points || 20);
+      const phone = reward.customer_phone?.trim();
+
+      if (!phone) {
+        alert("Thiếu số điện thoại khách.");
+        return;
+      }
+
+      const order = orders.find((item) => item.id === reward.order_id);
+
+      const { data: existingCustomer } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (existingCustomer) {
+        await supabase
+          .from("customers")
+          .update({
+            total_points: Number(existingCustomer.total_points || 0) + rewardPoints,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("phone", phone);
+      } else {
+        await supabase.from("customers").insert({
+          phone,
+          name: reward.customer_name || order?.customer_name || "",
+          total_points: rewardPoints,
+          total_orders: 0,
+          total_spent: 0,
+        });
+      }
+
+      await supabase.from("points_history").insert({
+        customer_phone: phone,
+        order_id: reward.order_id,
+        points: rewardPoints,
+        type: "google_review",
+        note: `Cộng ${rewardPoints} xu vì khách đã đánh giá Google Maps${order ? ` cho đơn ${order.order_code}` : ""}`,
+      });
+
+      const { error } = await supabase
+        .from("google_review_rewards")
+        .update({
+          status: "approved",
+          points_awarded: true,
+          reviewed_at: new Date().toISOString(),
+          admin_note: "Đã duyệt và cộng xu.",
+        })
+        .eq("id", reward.id);
+
+      if (error) throw error;
+
+      await fetchOrders();
+      alert("Đã duyệt Google Maps review và cộng xu cho khách.");
+    } catch (error) {
+      console.error("APPROVE GOOGLE REVIEW ERROR:", error);
+      alert("Không duyệt được Google Maps review.");
+    } finally {
+      setProcessingGoogleReviewId("");
+    }
+  }
+
+  async function rejectGoogleReviewReward(reward: GoogleReviewReward) {
+    if (!reward || reward.status !== "pending") return;
+
+    const ok = window.confirm("Từ chối yêu cầu nhận xu Google Maps review này?");
+    if (!ok) return;
+
+    setProcessingGoogleReviewId(reward.id);
+
+    try {
+      const { error } = await supabase
+        .from("google_review_rewards")
+        .update({
+          status: "rejected",
+          reviewed_at: new Date().toISOString(),
+          admin_note: "Admin từ chối vì chưa đủ điều kiện hoặc ảnh không hợp lệ.",
+        })
+        .eq("id", reward.id);
+
+      if (error) throw error;
+
+      await fetchOrders();
+    } catch (error) {
+      console.error("REJECT GOOGLE REVIEW ERROR:", error);
+      alert("Không từ chối được yêu cầu.");
+    } finally {
+      setProcessingGoogleReviewId("");
+    }
   }
 
   function startOrderSound() {
@@ -484,6 +631,10 @@ if (!currentOrder) {
   const customerSentCount = orders.filter(
     (order) => order.payment_status === "customer_sent"
   ).length;
+
+  const pendingGoogleReviewCount = Object.values(googleReviewRewards).filter(
+    (item) => item.status === "pending"
+  ).length;
   function printOrder(order: Order) {
     const itemsHtml = order.order_items
       ?.map(
@@ -669,7 +820,7 @@ if (!currentOrder) {
         </div>
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-4">
+      <div className="mt-8 grid gap-4 md:grid-cols-5">
         <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
           <p className="text-sm font-black text-neutral-400">Tổng đơn</p>
           <p className="mt-2 text-3xl font-black text-[#06113C]">
@@ -698,6 +849,16 @@ if (!currentOrder) {
           </p>
           <p className="mt-2 text-xs font-bold text-yellow-700">
             Chờ quán kiểm tra tiền
+          </p>
+        </div>
+
+        <div className="rounded-[28px] bg-[#E8FFF1] p-5">
+          <p className="text-sm font-black text-[#00B14F]">Google Review</p>
+          <p className="mt-2 text-3xl font-black text-[#00B14F]">
+            {pendingGoogleReviewCount}
+          </p>
+          <p className="mt-2 text-xs font-bold text-[#00B14F]">
+            Chờ duyệt cộng xu
           </p>
         </div>
       </div>
@@ -920,6 +1081,94 @@ if (!currentOrder) {
                             </p>
                           </div>
                         </div>
+
+                        {googleReviewRewards[order.id] && (
+                          <div
+                            className={`mt-4 rounded-2xl p-4 ${
+                              googleReviewRewards[order.id].status === "pending"
+                                ? "bg-yellow-50 ring-1 ring-yellow-300"
+                                : googleReviewRewards[order.id].status === "approved"
+                                ? "bg-[#E8FFF1] ring-1 ring-[#00B14F]/30"
+                                : "bg-red-50 ring-1 ring-red-200"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-black text-neutral-500">
+                                  ⭐ Google Maps review
+                                </p>
+
+                                <p className="mt-1 text-sm font-black text-[#06113C]">
+                                  {googleReviewRewards[order.id].status === "pending"
+                                    ? `Chờ duyệt +${googleReviewRewards[order.id].reward_points || 20} xu`
+                                    : googleReviewRewards[order.id].status === "approved"
+                                    ? `Đã duyệt +${googleReviewRewards[order.id].reward_points || 20} xu`
+                                    : "Đã từ chối"}
+                                </p>
+
+                                <p className="mt-1 text-xs font-bold text-neutral-500">
+                                  Gửi lúc{" "}
+                                  {new Date(
+                                    googleReviewRewards[order.id].created_at
+                                  ).toLocaleString("vi-VN")}
+                                </p>
+                              </div>
+
+                              {googleReviewRewards[order.id].screenshot_url && (
+                                <a
+                                  href={googleReviewRewards[order.id].screenshot_url || "#"}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#06113C] ring-1 ring-black/10"
+                                >
+                                  Xem ảnh
+                                </a>
+                              )}
+                            </div>
+
+                            {googleReviewRewards[order.id].status === "pending" && (
+                              <div className="mt-3 grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  disabled={
+                                    processingGoogleReviewId ===
+                                    googleReviewRewards[order.id].id
+                                  }
+                                  onClick={() =>
+                                    approveGoogleReviewReward(
+                                      googleReviewRewards[order.id]
+                                    )
+                                  }
+                                  className="rounded-xl bg-[#00B14F] px-3 py-2 text-xs font-black text-white disabled:opacity-60"
+                                >
+                                  Duyệt + xu
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    processingGoogleReviewId ===
+                                    googleReviewRewards[order.id].id
+                                  }
+                                  onClick={() =>
+                                    rejectGoogleReviewReward(
+                                      googleReviewRewards[order.id]
+                                    )
+                                  }
+                                  className="rounded-xl bg-red-100 px-3 py-2 text-xs font-black text-red-600 disabled:opacity-60"
+                                >
+                                  Từ chối
+                                </button>
+                              </div>
+                            )}
+
+                            {googleReviewRewards[order.id].admin_note && (
+                              <p className="mt-2 text-xs font-bold text-neutral-500">
+                                Ghi chú: {googleReviewRewards[order.id].admin_note}
+                              </p>
+                            )}
+                          </div>
+                        )}
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
   <button

@@ -22,6 +22,18 @@ type OrderReview = {
   created_at: string;
 };
 
+type GoogleReviewReward = {
+  id: string;
+  order_id: string;
+  customer_phone: string;
+  customer_name: string | null;
+  screenshot_url: string | null;
+  status: "pending" | "approved" | "rejected" | string;
+  reward_points: number;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
 type Order = {
   id: string;
   order_code: string;
@@ -60,6 +72,9 @@ type Reward = {
   description: string | null;
 };
 const REVIEW_REWARD_POINTS = 5;
+const GOOGLE_REVIEW_REWARD_POINTS = 20;
+const GOOGLE_MAPS_REVIEW_URL = "https://maps.app.goo.gl/BWLqLKMz1V77BPKw7";
+const GOOGLE_REVIEW_BUCKET = "google-review-screenshots";
 
 const statusMap: Record<string, { label: string; color: string; desc: string }> = {
   waiting_payment: {
@@ -103,7 +118,10 @@ export default function TrackOrderPage() {
   const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
   const [reviewingOrderId, setReviewingOrderId] = useState("");
   const silentRefreshRef = useRef(false);
-
+  const [orderReviews, setOrderReviews] = useState<Record<string, OrderReview>>({});
+  const [googleReviewRewards, setGoogleReviewRewards] = useState<Record<string, GoogleReviewReward>>({});
+  const [googleReviewFiles, setGoogleReviewFiles] = useState<Record<string, File | null>>({});
+  const [submittingGoogleReviewOrderId, setSubmittingGoogleReviewOrderId] = useState("");
   useEffect(() => {
     fetchRewards();
 
@@ -155,9 +173,47 @@ export default function TrackOrderPage() {
       return;
     }
 
-    const foundOrders = (data || []) as Order[];
-setOrders(foundOrders);
-setLastUpdatedAt(new Date());
+    const rawOrders = (data || []) as Order[];
+    const orderIds = rawOrders.map((order) => order.id);
+
+    let reviewMap: Record<string, OrderReview> = {};
+    let googleReviewMap: Record<string, GoogleReviewReward> = {};
+
+    if (orderIds.length > 0) {
+      const { data: reviewData, error: reviewError } = await supabase
+        .from("order_reviews")
+        .select("id,order_id,rating,comment,reward_points,created_at")
+        .in("order_id", orderIds);
+
+      if (!reviewError && reviewData) {
+        reviewData.forEach((review) => {
+          reviewMap[review.order_id] = review as OrderReview;
+        });
+      }
+
+      const { data: googleReviewData, error: googleReviewError } = await supabase
+        .from("google_review_rewards")
+        .select("id,order_id,customer_phone,customer_name,screenshot_url,status,reward_points,reviewed_at,created_at")
+        .in("order_id", orderIds);
+
+      if (!googleReviewError && googleReviewData) {
+        googleReviewData.forEach((item) => {
+          googleReviewMap[item.order_id] = item as GoogleReviewReward;
+        });
+      }
+    }
+
+    const foundOrders = rawOrders.map((order) => ({
+      ...order,
+      order_reviews: reviewMap[order.id]
+        ? [reviewMap[order.id]]
+        : order.order_reviews || [],
+    }));
+
+    setOrders(foundOrders);
+    setOrderReviews(reviewMap);
+    setGoogleReviewRewards(googleReviewMap);
+    setLastUpdatedAt(new Date());
 
 let phoneForReward = "";
 
@@ -245,6 +301,34 @@ if (!silent) {
           }, 400);
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_reviews" },
+        () => {
+          if (silentRefreshRef.current) return;
+          silentRefreshRef.current = true;
+
+          window.setTimeout(() => {
+            searchOrders(q, true).finally(() => {
+              silentRefreshRef.current = false;
+            });
+          }, 400);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "google_review_rewards" },
+        () => {
+          if (silentRefreshRef.current) return;
+          silentRefreshRef.current = true;
+
+          window.setTimeout(() => {
+            searchOrders(q, true).finally(() => {
+              silentRefreshRef.current = false;
+            });
+          }, 400);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -310,6 +394,10 @@ if (!silent) {
       return;
     }
 
+    if (orderReviews[order.id] || (order.order_reviews && order.order_reviews.length > 0)) {
+      return;
+    }
+
     setReviewingOrderId(order.id);
 
     const { data, error } = await supabase.rpc("submit_order_review", {
@@ -326,8 +414,33 @@ if (!silent) {
       const message = String(error.message || "");
 
       if (message.includes("ALREADY_REVIEWED")) {
-        alert("Đơn này đã được đánh giá rồi.");
-      } else if (message.includes("ORDER_NOT_COMPLETED")) {
+        const { data: existingReview } = await supabase
+          .from("order_reviews")
+          .select("id,order_id,rating,comment,reward_points,created_at")
+          .eq("order_id", order.id)
+          .maybeSingle();
+
+        if (existingReview) {
+          const review = existingReview as OrderReview;
+
+          setOrderReviews((prev) => ({
+            ...prev,
+            [order.id]: review,
+          }));
+
+          setOrders((prev) =>
+            prev.map((item) =>
+              item.id === order.id
+                ? { ...item, order_reviews: [review] }
+                : item
+            )
+          );
+        }
+
+        return;
+      }
+
+      if (message.includes("ORDER_NOT_COMPLETED")) {
         alert("Đơn hoàn thành mới đánh giá được nha.");
       } else {
         alert("Không gửi được đánh giá. Anh/chị thử lại giúp quán nha.");
@@ -336,8 +449,161 @@ if (!silent) {
       return;
     }
 
-    alert(`Cảm ơn anh/chị đã đánh giá. Quán đã cộng ${data?.reward_points || REVIEW_REWARD_POINTS} xu vào tài khoản.`);
+    const rewardPoints = Number(data?.reward_points || REVIEW_REWARD_POINTS);
+
+    const newReview: OrderReview = {
+      id: `local-${order.id}`,
+      order_id: order.id,
+      rating,
+      comment: comment || null,
+      reward_points: rewardPoints,
+      created_at: new Date().toISOString(),
+    };
+
+    setOrderReviews((prev) => ({
+      ...prev,
+      [order.id]: newReview,
+    }));
+
+    setOrders((prev) =>
+      prev.map((item) =>
+        item.id === order.id
+          ? { ...item, order_reviews: [newReview] }
+          : item
+      )
+    );
+
+    setReviewComments((prev) => ({
+      ...prev,
+      [order.id]: "",
+    }));
+
+    alert(`Cảm ơn anh/chị đã đánh giá. Quán đã cộng ${rewardPoints} xu vào tài khoản.`);
     searchOrders(trackedKeyword || keyword, true);
+  }
+
+  function safeFileName(name: string) {
+    return name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "-")
+      .toLowerCase();
+  }
+
+  async function submitGoogleReview(order: Order) {
+    const existing = googleReviewRewards[order.id];
+
+    if (existing?.status === "pending") {
+      alert("Ảnh đánh giá Google Maps của đơn này đang chờ quán duyệt.");
+      return;
+    }
+
+    if (existing?.status === "approved") {
+      alert("Đơn này đã được duyệt thưởng Google Maps rồi nha.");
+      return;
+    }
+
+    const file = googleReviewFiles[order.id];
+
+    if (!file) {
+      alert("Anh/chị vui lòng tải ảnh chụp màn hình đánh giá Google Maps trước nha.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("File tải lên phải là hình ảnh.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Ảnh hơi nặng. Anh/chị chọn ảnh dưới 5MB giúp quán nha.");
+      return;
+    }
+
+    setSubmittingGoogleReviewOrderId(order.id);
+
+    try {
+      const filePath = `${order.id}/${Date.now()}-${safeFileName(file.name)}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(GOOGLE_REVIEW_BUCKET)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("UPLOAD GOOGLE REVIEW ERROR:", uploadError);
+        alert("Không tải được ảnh. Kiểm tra bucket google-review-screenshots trong Supabase Storage.");
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(GOOGLE_REVIEW_BUCKET)
+        .getPublicUrl(filePath);
+
+      const payload = {
+        order_id: order.id,
+        customer_phone: order.customer_phone,
+        customer_name: order.customer_name,
+        screenshot_url: publicUrlData.publicUrl,
+        status: "pending",
+        reward_points: GOOGLE_REVIEW_REWARD_POINTS,
+      };
+
+      let savedReward: GoogleReviewReward | null = null;
+
+      if (existing?.status === "rejected") {
+        const { data, error } = await supabase
+          .from("google_review_rewards")
+          .update({
+            screenshot_url: payload.screenshot_url,
+            status: "pending",
+            reward_points: GOOGLE_REVIEW_REWARD_POINTS,
+            reviewed_at: null,
+          })
+          .eq("id", existing.id)
+          .select("id,order_id,customer_phone,customer_name,screenshot_url,status,reward_points,reviewed_at,created_at")
+          .single();
+
+        if (error) throw error;
+        savedReward = data as GoogleReviewReward;
+      } else {
+        const { data, error } = await supabase
+          .from("google_review_rewards")
+          .insert(payload)
+          .select("id,order_id,customer_phone,customer_name,screenshot_url,status,reward_points,reviewed_at,created_at")
+          .single();
+
+        if (error) throw error;
+        savedReward = data as GoogleReviewReward;
+      }
+
+      setGoogleReviewRewards((prev) => ({
+        ...prev,
+        [order.id]: savedReward as GoogleReviewReward,
+      }));
+
+      setGoogleReviewFiles((prev) => ({
+        ...prev,
+        [order.id]: null,
+      }));
+
+      alert("Quán đã nhận ảnh đánh giá Google Maps. Sau khi duyệt, hệ thống sẽ cộng +20 xu.");
+    } catch (error: any) {
+      console.error("SUBMIT GOOGLE REVIEW ERROR:", error);
+
+      const message = String(error?.message || "");
+
+      if (message.includes("duplicate") || message.includes("unique")) {
+        alert("Đơn này đã gửi đánh giá Google Maps rồi nha.");
+        searchOrders(trackedKeyword || keyword, true);
+      } else {
+        alert("Không gửi được ảnh đánh giá Google Maps. Anh/chị thử lại giúp quán nha.");
+      }
+    } finally {
+      setSubmittingGoogleReviewOrderId("");
+    }
   }
 
   function formatTime(value?: string | null) {
@@ -666,86 +932,241 @@ if (!silent) {
 
                 {order.status === "completed" && (
                   <div className="mt-5 rounded-[28px] border border-yellow-200 bg-yellow-50 p-5">
-                    {order.order_reviews && order.order_reviews.length > 0 ? (
-                      <div>
-                        <p className="text-lg font-black text-[#06113C]">
-                          ⭐ Cảm ơn anh/chị đã đánh giá
-                        </p>
+                    {(() => {
+                      const existingReview =
+                        orderReviews[order.id] ||
+                        (order.order_reviews && order.order_reviews.length > 0
+                          ? order.order_reviews[0]
+                          : null);
 
-                        <p className="mt-2 text-sm font-bold text-neutral-600">
-                          Đánh giá: {"★".repeat(Number(order.order_reviews[0].rating || 5))}
-                          {"☆".repeat(5 - Number(order.order_reviews[0].rating || 5))}
-                        </p>
+                      if (existingReview) {
+                        const rating = Number(existingReview.rating || 5);
 
-                        {order.order_reviews[0].comment && (
-                          <p className="mt-2 rounded-2xl bg-white p-3 text-sm font-bold text-neutral-600">
-                            {order.order_reviews[0].comment}
-                          </p>
-                        )}
+                        return (
+                          <div>
+                            <p className="text-lg font-black text-[#06113C]">
+                              ⭐ Bạn đã đánh giá đơn hàng
+                            </p>
 
-                        <p className="mt-2 text-xs font-black text-[#B45309]">
-                          Đã cộng {order.order_reviews[0].reward_points || REVIEW_REWARD_POINTS} xu cho đánh giá này.
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-lg font-black text-[#06113C]">
-                          ⭐ Đánh giá đơn hàng
-                        </p>
+                            <p className="mt-2 text-sm font-bold text-neutral-600">
+                              Cảm ơn anh/chị đã góp ý cho quán. Đơn này đã được
+                              cộng{" "}
+                              <span className="font-black text-[#00B14F]">
+                                +{existingReview.reward_points || REVIEW_REWARD_POINTS} xu
+                              </span>
+                              .
+                            </p>
 
-                        <p className="mt-1 text-sm font-bold text-neutral-600">
-                          Đánh giá trải nghiệm để nhận +{REVIEW_REWARD_POINTS} xu. Mỗi đơn chỉ nhận xu 1 lần.
-                        </p>
+                            <div className="mt-4 rounded-2xl bg-white p-4">
+                              <p className="text-2xl text-yellow-500">
+                                {"★".repeat(rating)}
+                                <span className="text-neutral-300">
+                                  {"☆".repeat(5 - rating)}
+                                </span>
+                              </p>
 
-                        <div className="mt-4 flex gap-2">
-                          {[1, 2, 3, 4, 5].map((star) => {
-                            const current = reviewRatings[order.id] || 5;
+                              {existingReview.comment && (
+                                <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-3 text-sm font-bold text-neutral-600">
+                                  “{existingReview.comment}”
+                                </p>
+                              )}
 
-                            return (
-                              <button
-                                key={star}
-                                type="button"
-                                onClick={() =>
-                                  setReviewRatings((prev) => ({
-                                    ...prev,
-                                    [order.id]: star,
-                                  }))
+                              <p className="mt-3 text-xs font-black text-[#B45309]">
+                                Đánh giá đã được ghi nhận. Mỗi đơn chỉ nhận xu
+                                đánh giá 1 lần.
+                              </p>
+                            </div>
+
+                            <div className="mt-4 rounded-2xl border border-[#00B14F]/20 bg-[#F5FFF8] p-4">
+                              {(() => {
+                                const googleReward = googleReviewRewards[order.id];
+
+                                if (googleReward?.status === "approved") {
+                                  return (
+                                    <div>
+                                      <p className="font-black text-[#06113C]">
+                                        ✅ Google Maps review đã được duyệt
+                                      </p>
+                                      <p className="mt-1 text-sm font-bold text-neutral-600">
+                                        Quán đã cộng{" "}
+                                        <span className="font-black text-[#00B14F]">
+                                          +{googleReward.reward_points || GOOGLE_REVIEW_REWARD_POINTS} xu
+                                        </span>{" "}
+                                        cho đánh giá Google Maps của anh/chị.
+                                      </p>
+                                      {googleReward.screenshot_url && (
+                                        <a
+                                          href={googleReward.screenshot_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="mt-3 inline-flex text-xs font-black text-[#00B14F]"
+                                        >
+                                          Xem ảnh đã gửi →
+                                        </a>
+                                      )}
+                                    </div>
+                                  );
                                 }
-                                className={`text-3xl ${
-                                  star <= current ? "text-yellow-500" : "text-neutral-300"
-                                }`}
-                              >
-                                ★
-                              </button>
-                            );
-                          })}
+
+                                if (googleReward?.status === "pending") {
+                                  return (
+                                    <div>
+                                      <p className="font-black text-[#06113C]">
+                                        ⏳ Google Maps review đang chờ duyệt
+                                      </p>
+                                      <p className="mt-1 text-sm font-bold text-neutral-600">
+                                        Quán đã nhận ảnh. Sau khi admin xác nhận,
+                                        hệ thống sẽ cộng +{googleReward.reward_points || GOOGLE_REVIEW_REWARD_POINTS} xu.
+                                      </p>
+                                      {googleReward.screenshot_url && (
+                                        <a
+                                          href={googleReward.screenshot_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="mt-3 inline-flex text-xs font-black text-[#00B14F]"
+                                        >
+                                          Xem ảnh đã gửi →
+                                        </a>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div>
+                                    <p className="font-black text-[#06113C]">
+                                      📍 Đánh giá Google Maps nhận +{GOOGLE_REVIEW_REWARD_POINTS} xu
+                                    </p>
+
+                                    <p className="mt-1 text-sm font-bold leading-6 text-neutral-600">
+                                      Sau khi đã đánh giá đơn hàng trên web, anh/chị có thể
+                                      đánh giá quán trên Google Maps và gửi ảnh chụp màn hình
+                                      để quán duyệt cộng xu.
+                                    </p>
+
+                                    {googleReward?.status === "rejected" && (
+                                      <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600">
+                                        Ảnh trước đó chưa được duyệt. Anh/chị có thể gửi lại ảnh rõ hơn.
+                                      </p>
+                                    )}
+
+                                    <a
+                                      href={GOOGLE_MAPS_REVIEW_URL}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-3 inline-flex w-full justify-center rounded-2xl bg-[#00B14F] px-4 py-3 text-sm font-black text-white"
+                                    >
+                                      Mở Google Maps để đánh giá
+                                    </a>
+
+                                    <label className="mt-3 block rounded-2xl bg-white p-4 text-sm font-bold text-neutral-600 ring-1 ring-black/10">
+                                      <span className="block font-black text-[#06113C]">
+                                        Tải ảnh chụp màn hình review
+                                      </span>
+
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0] || null;
+                                          setGoogleReviewFiles((prev) => ({
+                                            ...prev,
+                                            [order.id]: file,
+                                          }));
+                                        }}
+                                        className="mt-3 block w-full text-xs font-bold"
+                                      />
+
+                                      {googleReviewFiles[order.id] && (
+                                        <span className="mt-2 block text-xs font-black text-[#00B14F]">
+                                          Đã chọn: {googleReviewFiles[order.id]?.name}
+                                        </span>
+                                      )}
+                                    </label>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => submitGoogleReview(order)}
+                                      disabled={submittingGoogleReviewOrderId === order.id}
+                                      className="mt-3 w-full rounded-2xl bg-[#06113C] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                                    >
+                                      {submittingGoogleReviewOrderId === order.id
+                                        ? "Đang gửi ảnh..."
+                                        : `Gửi ảnh chờ duyệt · Nhận +${GOOGLE_REVIEW_REWARD_POINTS} xu`}
+                                    </button>
+
+                                    <p className="mt-3 text-xs font-bold leading-5 text-neutral-500">
+                                      Mỗi đơn chỉ gửi Google Maps review 1 lần. Xu chỉ được cộng
+                                      sau khi quán kiểm tra ảnh hợp lệ.
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div>
+                          <p className="text-lg font-black text-[#06113C]">
+                            ⭐ Đánh giá đơn hàng
+                          </p>
+
+                          <p className="mt-1 text-sm font-bold text-neutral-600">
+                            Đánh giá trải nghiệm để nhận +{REVIEW_REWARD_POINTS} xu. Mỗi đơn chỉ nhận xu 1 lần.
+                          </p>
+
+                          <div className="mt-4 flex gap-2">
+                            {[1, 2, 3, 4, 5].map((star) => {
+                              const current = reviewRatings[order.id] || 5;
+
+                              return (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() =>
+                                    setReviewRatings((prev) => ({
+                                      ...prev,
+                                      [order.id]: star,
+                                    }))
+                                  }
+                                  className={`text-3xl ${
+                                    star <= current ? "text-yellow-500" : "text-neutral-300"
+                                  }`}
+                                >
+                                  ★
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <textarea
+                            value={reviewComments[order.id] || ""}
+                            onChange={(e) =>
+                              setReviewComments((prev) => ({
+                                ...prev,
+                                [order.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Góp ý cho quán nếu có..."
+                            rows={3}
+                            className="mt-4 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => submitReview(order)}
+                            disabled={reviewingOrderId === order.id}
+                            className="mt-4 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white disabled:opacity-60"
+                          >
+                            {reviewingOrderId === order.id
+                              ? "Đang gửi đánh giá..."
+                              : `Gửi đánh giá · Nhận +${REVIEW_REWARD_POINTS} xu`}
+                          </button>
                         </div>
-
-                        <textarea
-                          value={reviewComments[order.id] || ""}
-                          onChange={(e) =>
-                            setReviewComments((prev) => ({
-                              ...prev,
-                              [order.id]: e.target.value,
-                            }))
-                          }
-                          placeholder="Góp ý cho quán nếu có..."
-                          rows={3}
-                          className="mt-4 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => submitReview(order)}
-                          disabled={reviewingOrderId === order.id}
-                          className="mt-4 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white disabled:opacity-60"
-                        >
-                          {reviewingOrderId === order.id
-                            ? "Đang gửi đánh giá..."
-                            : `Gửi đánh giá · Nhận +${REVIEW_REWARD_POINTS} xu`}
-                        </button>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>

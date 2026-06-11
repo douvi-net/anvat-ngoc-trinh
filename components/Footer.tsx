@@ -108,7 +108,7 @@ export default function Footer() {
                 <p className="text-white">📍 Chi nhánh Quận 1</p>
                 <p>178/4A Cô Giang, Quận 1, TP.HCM</p>
                 <p className="mt-1 text-[#00B14F]">
-                  10:00 - 17:00, nghỉ Chủ Nhật
+                  Tạm đóng 
                 </p>
               </div>
             </div>

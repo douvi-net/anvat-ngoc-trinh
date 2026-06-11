@@ -99,16 +99,16 @@ export default function Footer() {
 
             <div className="mt-4 space-y-4 text-sm font-bold leading-6 text-white/70">
               <div>
-                <p className="text-white">📍 Chi nhánh Quận 6</p>
-                <p>240/127/22C Nguyễn Văn Luông, Quận 6, TP.HCM</p>
-                <p className="mt-1 text-[#00B14F]">18:00 - 23:00 mỗi ngày</p>
+                <p className="text-white">📍 Chi nhánh CN2</p>
+                <p>240/127/22C Nguyễn Văn Luông, Phường Bình Phú (Q6 CŨ), TP.HCM</p>
+                <p className="mt-1 text-[#00B14F]">11:00 - 22:00 mỗi ngày</p>
               </div>
 
               <div>
-                <p className="text-white">📍 Chi nhánh Quận 1</p>
-                <p>178/4A Cô Giang, Quận 1, TP.HCM</p>
+                <p className="text-white">📍 Chi nhánh CN1</p>
+                <p>178/4A Cô Giang, Phường Cầu Ông Lãnh (Q1 CŨ), TP.HCM</p>
                 <p className="mt-1 text-[#00B14F]">
-                  Tạm đóng 
+                  Tạm đóng (Chưa hoạt động lại)
                 </p>
               </div>
             </div>

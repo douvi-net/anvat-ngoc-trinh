@@ -222,6 +222,12 @@ export default function AdminOrdersPage() {
     setLoading(false);
   }
 
+  function getSupabaseErrorMessage(error: any) {
+    if (!error) return "Không rõ lỗi.";
+    if (typeof error === "string") return error;
+    return error.message || error.details || error.hint || JSON.stringify(error);
+  }
+
   async function approveGoogleReviewReward(reward: GoogleReviewReward) {
     if (!reward || reward.status === "approved" || reward.points_awarded) return;
 
@@ -234,65 +240,39 @@ export default function AdminOrdersPage() {
     setProcessingGoogleReviewId(reward.id);
 
     try {
-      const rewardPoints = Number(reward.reward_points || 20);
-      const phone = reward.customer_phone?.trim();
-
-      if (!phone) {
-        alert("Thiếu số điện thoại khách.");
-        return;
-      }
-
-      const order = orders.find((item) => item.id === reward.order_id);
-
-      const { data: existingCustomer } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("phone", phone)
-        .maybeSingle();
-
-      if (existingCustomer) {
-        await supabase
-          .from("customers")
-          .update({
-            total_points: Number(existingCustomer.total_points || 0) + rewardPoints,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("phone", phone);
-      } else {
-        await supabase.from("customers").insert({
-          phone,
-          name: reward.customer_name || order?.customer_name || "",
-          total_points: rewardPoints,
-          total_orders: 0,
-          total_spent: 0,
-        });
-      }
-
-      await supabase.from("points_history").insert({
-        customer_phone: phone,
-        order_id: reward.order_id,
-        points: rewardPoints,
-        type: "google_review",
-        note: `Cộng ${rewardPoints} xu vì khách đã đánh giá Google Maps${order ? ` cho đơn ${order.order_code}` : ""}`,
+      const { data, error } = await supabase.rpc("approve_google_review_reward", {
+        p_reward_id: reward.id,
       });
-
-      const { error } = await supabase
-        .from("google_review_rewards")
-        .update({
-          status: "approved",
-          points_awarded: true,
-          reviewed_at: new Date().toISOString(),
-          admin_note: "Đã duyệt và cộng xu.",
-        })
-        .eq("id", reward.id);
 
       if (error) throw error;
 
       await fetchOrders();
-      alert("Đã duyệt Google Maps review và cộng xu cho khách.");
-    } catch (error) {
+
+      const rewardPoints =
+        Number((data as any)?.reward_points || reward.reward_points || 20);
+
+      alert(`Đã duyệt Google Maps review và cộng ${rewardPoints} xu cho khách.`);
+    } catch (error: any) {
       console.error("APPROVE GOOGLE REVIEW ERROR:", error);
-      alert("Không duyệt được Google Maps review.");
+
+      const message = getSupabaseErrorMessage(error);
+
+      if (message.includes("PHONE_ALREADY_REWARDED")) {
+        alert("Số điện thoại này đã nhận thưởng Google Maps review rồi.");
+        return;
+      }
+
+      if (message.includes("REWARD_NOT_FOUND")) {
+        alert("Không tìm thấy yêu cầu Google Maps review này.");
+        return;
+      }
+
+      if (message.includes("REWARD_NOT_PENDING")) {
+        alert("Yêu cầu này không còn ở trạng thái chờ duyệt.");
+        return;
+      }
+
+      alert(`Không duyệt được Google Maps review: ${message}`);
     } finally {
       setProcessingGoogleReviewId("");
     }
@@ -307,21 +287,17 @@ export default function AdminOrdersPage() {
     setProcessingGoogleReviewId(reward.id);
 
     try {
-      const { error } = await supabase
-        .from("google_review_rewards")
-        .update({
-          status: "rejected",
-          reviewed_at: new Date().toISOString(),
-          admin_note: "Admin từ chối vì chưa đủ điều kiện hoặc ảnh không hợp lệ.",
-        })
-        .eq("id", reward.id);
+      const { error } = await supabase.rpc("reject_google_review_reward", {
+        p_reward_id: reward.id,
+        p_admin_note: "Admin từ chối vì chưa đủ điều kiện hoặc ảnh không hợp lệ.",
+      });
 
       if (error) throw error;
 
       await fetchOrders();
-    } catch (error) {
+    } catch (error: any) {
       console.error("REJECT GOOGLE REVIEW ERROR:", error);
-      alert("Không từ chối được yêu cầu.");
+      alert(`Không từ chối được yêu cầu: ${getSupabaseErrorMessage(error)}`);
     } finally {
       setProcessingGoogleReviewId("");
     }

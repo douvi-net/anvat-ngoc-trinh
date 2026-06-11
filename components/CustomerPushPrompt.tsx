@@ -55,7 +55,7 @@ export default function CustomerPushPrompt() {
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/sw.js");
+      const registration = await navigator.serviceWorker.register("/customer-push-sw.js");
       const existing = await registration.pushManager.getSubscription();
       const subscription =
         existing ||

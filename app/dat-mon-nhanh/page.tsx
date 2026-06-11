@@ -47,6 +47,8 @@ type Customer = {
   phone: string;
   last_address: string | null;
   last_payment_method: string | null;
+  last_lat?: number | null;
+  last_lng?: number | null;
   total_orders: number | null;
 };
 
@@ -374,28 +376,41 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
 
     if (!error && data) {
       const customer = data as Customer;
+      const savedLat = Number(customer.last_lat || 0);
+      const savedLng = Number(customer.last_lng || 0);
+      const hasSavedLocation =
+        Number.isFinite(savedLat) &&
+        Number.isFinite(savedLng) &&
+        savedLat !== 0 &&
+        savedLng !== 0;
 
       setCustomerId(customer.id);
       setCustomerName(customer.name || "");
       setCustomerAddress(customer.last_address || "");
-      if ((customer as any).last_lat && (customer as any).last_lng) {
-        setDeliveryLat(Number((customer as any).last_lat));
-        setDeliveryLng(Number((customer as any).last_lng));
-      
-        calculateRouteByLatLng(
-          Number((customer as any).last_lat),
-          Number((customer as any).last_lng)
-        );
-      }
       setPaymentMethod(customer.last_payment_method || "cod");
       setCustomerPoints(Number((customer as any).total_points || 0));
+
       if (Number((customer as any).total_points || 0) < 50) {
         setUsePointsDiscount(0);
         setSelectedRewardId("");
       }
-      setCustomerFoundMessage(
-        "Đã tìm thấy thông tin cũ, hệ thống tự điền giúp bạn."
-      );
+
+      if (hasSavedLocation) {
+        setDeliveryLat(savedLat);
+        setDeliveryLng(savedLng);
+        setAddressSelected(true);
+        setCustomerFoundMessage("");
+        await calculateRouteByLatLng(savedLat, savedLng);
+      } else {
+        setDeliveryLat(null);
+        setDeliveryLng(null);
+        setGoogleShippingFee(null);
+        setRouteMessage("");
+        setAddressSelected(false);
+        setCustomerFoundMessage(
+          "Địa chỉ cũ chưa có tọa độ. Anh/chị chọn lại địa chỉ từ gợi ý Google một lần để lần sau tự tính phí ship."
+        );
+      }
     } else {
       setCustomerPoints(0);
 setUsePointsDiscount(0);
@@ -887,9 +902,9 @@ const amountToNextShippingPromo = nextShippingPromotion
         .update({
           name: customerName.trim(),
           last_address: customerAddress.trim(),
-last_payment_method: paymentMethod,
-last_lat: deliveryLat,
-last_lng: deliveryLng,
+          last_payment_method: paymentMethod,
+          last_lat: deliveryLat,
+          last_lng: deliveryLng,
           updated_at: new Date().toISOString(),
         })
         .eq("id", customerId)
@@ -923,6 +938,8 @@ last_lng: deliveryLng,
           name: customerName.trim(),
           last_address: customerAddress.trim(),
           last_payment_method: paymentMethod,
+          last_lat: deliveryLat,
+          last_lng: deliveryLng,
           updated_at: new Date().toISOString(),
         })
         .eq("id", customer.id)
@@ -940,6 +957,8 @@ last_lng: deliveryLng,
         phone: cleanPhone,
         last_address: customerAddress.trim(),
         last_payment_method: paymentMethod,
+        last_lat: deliveryLat,
+        last_lng: deliveryLng,
         total_orders: 0,
       })
       .select()

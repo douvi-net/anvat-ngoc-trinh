@@ -378,6 +378,15 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
       setCustomerId(customer.id);
       setCustomerName(customer.name || "");
       setCustomerAddress(customer.last_address || "");
+      if ((customer as any).last_lat && (customer as any).last_lng) {
+        setDeliveryLat(Number((customer as any).last_lat));
+        setDeliveryLng(Number((customer as any).last_lng));
+      
+        calculateRouteByLatLng(
+          Number((customer as any).last_lat),
+          Number((customer as any).last_lng)
+        );
+      }
       setPaymentMethod(customer.last_payment_method || "cod");
       setCustomerPoints(Number((customer as any).total_points || 0));
       if (Number((customer as any).total_points || 0) < 50) {
@@ -878,7 +887,9 @@ const amountToNextShippingPromo = nextShippingPromotion
         .update({
           name: customerName.trim(),
           last_address: customerAddress.trim(),
-          last_payment_method: paymentMethod,
+last_payment_method: paymentMethod,
+last_lat: deliveryLat,
+last_lng: deliveryLng,
           updated_at: new Date().toISOString(),
         })
         .eq("id", customerId)

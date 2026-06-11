@@ -44,7 +44,7 @@ export default function CustomerPushPrompt() {
       setLoading(true);
 
       const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY;
-      if (!publicKey) {
+      if (!process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY) {
         alert("Website chưa cấu hình WEB PUSH PUBLIC KEY.");
         return;
       }

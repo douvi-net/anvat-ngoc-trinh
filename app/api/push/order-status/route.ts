@@ -12,11 +12,18 @@ const supabaseAdmin = createClient(
   }
 );
 
-webpush.setVapidDetails(
-  process.env.WEB_PUSH_SUBJECT || "mailto:admin@anvatngoctrinh.vn",
-  process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY!,
-  process.env.WEB_PUSH_PRIVATE_KEY!
-);
+function setupWebPush() {
+    const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY;
+    const privateKey = process.env.WEB_PUSH_PRIVATE_KEY;
+    const subject =
+      process.env.WEB_PUSH_SUBJECT || "mailto:admin@anvatngoctrinh.vn";
+  
+    if (!publicKey || !privateKey) {
+      throw new Error("Missing WEB PUSH env keys");
+    }
+  
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+  }
 
 type OrderStatusPushBody = {
   orderId?: string;
@@ -65,6 +72,7 @@ function getStatusTitle(status: string) {
 
 export async function POST(request: Request) {
   try {
+    setupWebPush();
     const body = (await request.json()) as OrderStatusPushBody;
 
     const orderId = String(body.orderId || "").trim();

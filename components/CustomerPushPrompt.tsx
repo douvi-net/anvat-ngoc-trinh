@@ -7,15 +7,27 @@ const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const base64 = (base64String + padding)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
 
-  for (let i = 0; i < rawData.length; ++i) {
+  for (let i = 0; i < rawData.length; i += 1) {
     outputArray[i] = rawData.charCodeAt(i);
   }
 
   return outputArray;
+}
+
+function isStandaloneMode() {
+  if (typeof window === "undefined") return false;
+
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as any).standalone === true
+  );
 }
 
 export default function CustomerPushPrompt() {
@@ -24,13 +36,20 @@ export default function CustomerPushPrompt() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!("serviceWorker" in navigator)) return;
+    if (!("PushManager" in window)) return;
+    if (!("Notification" in window)) return;
+    if (isStandaloneMode() && Notification.permission === "granted") return;
     if (Notification.permission === "granted") return;
 
     const dismissedAt = Number(localStorage.getItem(DISMISS_KEY) || 0);
+
     if (dismissedAt && Date.now() - dismissedAt < SEVEN_DAYS) return;
 
-    const timer = window.setTimeout(() => setVisible(true), 4500);
+    const timer = window.setTimeout(() => {
+      setVisible(true);
+    }, 4500);
+
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -43,40 +62,64 @@ export default function CustomerPushPrompt() {
     try {
       setLoading(true);
 
-      const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY;
-      if (!process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY) {
+      const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || "";
+
+      if (!publicKey) {
         alert("Website chưa cấu hình WEB PUSH PUBLIC KEY.");
         return;
       }
 
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        alert("Trình duyệt này chưa hỗ trợ thông báo.");
+        dismiss();
+        return;
+      }
+
       const permission = await Notification.requestPermission();
+
       if (permission !== "granted") {
         dismiss();
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/customer-push-sw.js");
-      const existing = await registration.pushManager.getSubscription();
+      const registration = await navigator.serviceWorker.register(
+        "/customer-push-sw.js"
+      );
+
+      await navigator.serviceWorker.ready;
+
+      const existingSubscription =
+        await registration.pushManager.getSubscription();
+
       const subscription =
-        existing ||
+        existingSubscription ||
         (await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         }));
 
-      const raw = subscription.toJSON();
+      const subscriptionJson = subscription.toJSON();
       const customerPhone = localStorage.getItem("avnt_customer_phone") || "";
 
       const res = await fetch("/api/push/subscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...raw, customerPhone }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerPhone,
+          subscription: subscriptionJson,
+        }),
       });
 
       const data = await res.json();
-      if (!data.ok) throw new Error(data.message || "Không lưu được thiết bị.");
+
+      if (!data.success) {
+        throw new Error(data.message || "Không lưu được thiết bị.");
+      }
 
       setVisible(false);
+      localStorage.removeItem(DISMISS_KEY);
       alert("Đã bật thông báo đơn hàng cho thiết bị này.");
     } catch (error: any) {
       console.error("ENABLE PUSH ERROR:", error);
@@ -97,9 +140,13 @@ export default function CustomerPushPrompt() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="font-black text-[#06113C]">Nhận thông báo đơn hàng</p>
+            <p className="font-black text-[#06113C]">
+              Nhận thông báo đơn hàng
+            </p>
+
             <p className="mt-1 text-sm font-bold leading-6 text-neutral-500">
-              Bật thông báo để biết khi đơn được xác nhận, đang làm hoặc đã hoàn thành.
+              Bật thông báo để biết khi đơn được xác nhận, đang làm hoặc đã hoàn
+              thành.
             </p>
 
             <div className="mt-4 flex gap-2">

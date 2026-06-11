@@ -534,7 +534,8 @@ if (!silent) {
 
       if (uploadError) {
         console.error("UPLOAD GOOGLE REVIEW ERROR:", uploadError);
-        alert("Không tải được ảnh. Kiểm tra bucket google-review-screenshots trong Supabase Storage.");
+        console.log(uploadError);
+alert(uploadError?.message || "Upload thất bại");
         return;
       }
 

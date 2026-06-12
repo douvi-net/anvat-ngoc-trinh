@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       android: {
         priority: "high",
         notification: {
-          channelId: "avnt_new_order_channel_v4",
+          channelId: "avnt_new_order_channel_v5",
           sound: "default",
           priority: "high",
           visibility: "public",

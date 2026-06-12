@@ -68,6 +68,8 @@ export async function POST(request: Request) {
       tokens,
     
       data: {
+        title,
+        body: bodyText,
         order_code: String(orderCode),
         total: String(total),
         payment_method: String(paymentMethod),

@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { products } from "@/data/products";
 import SocialVideoSection from "@/components/SocialVideoSection";
-
+import JsonLd from "@/components/JsonLd";
 export const metadata: Metadata = {
   title: "Ăn Vặt Ngọc Trinh - Bánh tráng, ăn vặt Quận 6 giao nhanh",
   description:
@@ -24,6 +24,55 @@ export default function HomePage() {
 
   return (
     <main className="overflow-hidden bg-[#FFFDF7]">
+      <JsonLd
+  data={{
+    "@context": "https://schema.org",
+    "@type": "Restaurant",
+    "@id": "https://anvatngoctrinh.vn/#restaurant",
+    name: "Ăn Vặt Ngọc Trinh",
+    url: "https://anvatngoctrinh.vn",
+    telephone: "0392496220",
+    priceRange: "₫",
+    servesCuisine: ["Ăn vặt", "Bánh tráng", "Trà sữa", "Trà trái cây"],
+    image: "https://anvatngoctrinh.vn/logo.png",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "240/127/22C Nguyễn Văn Luông",
+      addressLocality: "Quận 6",
+      addressRegion: "TP. Hồ Chí Minh",
+      addressCountry: "VN",
+    },
+    geo: {
+      "@type": "GeoCoordinates",
+      latitude: 10.7456603,
+      longitude: 106.6345814,
+    },
+    openingHoursSpecification: [
+      {
+        "@type": "OpeningHoursSpecification",
+        dayOfWeek: [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday",
+        ],
+        opens: "18:00",
+        closes: "23:00",
+      },
+    ],
+    sameAs: [
+      "https://www.facebook.com/anvatngoctrinh",
+    ],
+    potentialAction: {
+      "@type": "OrderAction",
+      target: "https://anvatngoctrinh.vn/dat-mon-nhanh",
+      deliveryMethod: "https://schema.org/OnSitePickup",
+    },
+  }}
+/>
       <section className="bg-[#00B14F] px-4 py-6 md:py-8">
         <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2 md:items-center">
           <div>

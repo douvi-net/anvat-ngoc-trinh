@@ -32,10 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin/posts" className="block rounded-2xl px-4 py-3 text-white/70">
               📝 Bài viết
             </Link>
-            <Link
-  href="/admin/seo"
-  className="rounded-2xl bg-white p-4 font-black text-[#06113C] shadow"
->
+            <Link href="/admin/seo" className="block rounded-2xl px-4 py-3 text-white/70">
   SEO & Analytics
 </Link>
             <Link href="/admin/banners" className="block rounded-2xl px-4 py-3 text-white/70">

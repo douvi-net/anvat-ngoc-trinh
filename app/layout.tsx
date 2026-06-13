@@ -76,40 +76,45 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi">
-  <body className={beVietnam.className}>
+<body className={beVietnam.className}>
   <Script
-  async
-  src="https://www.googletagmanager.com/gtag/js?id=G-4XNNYW5LTN"
-/>
+    src="https://www.googletagmanager.com/gtag/js?id=G-4XNNYW5LTN"
+    strategy="afterInteractive"
+  />
 
-<Script id="google-analytics">
-  {`
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
+  <Script id="google-analytics" strategy="afterInteractive">
+    {`
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-4XNNYW5LTN');
+    `}
+  </Script>
 
-    gtag('config', 'G-4XNNYW5LTN');
-  `}
-</Script>
-<script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
+  <Script id="microsoft-clarity" strategy="afterInteractive">
+    {`
+      (function(c,l,a,r,i,t,y){
         c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
         t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
         y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "x6iivrmfaw");
-</script>
+      })(window, document, "clarity", "script", "x6iivrmfaw");
+    `}
+  </Script>
+
   <CustomerPushPrompt />
   <InstallAppPrompt />
   <CopyProtection />
+
   <HideOnOrderMobile>
-  <Header />
-</HideOnOrderMobile>
+    <Header />
+  </HideOnOrderMobile>
 
-{children}
+  {children}
 
-<HideOnOrderMobile>
-  <Footer />
-</HideOnOrderMobile>
+  <HideOnOrderMobile>
+    <Footer />
+  </HideOnOrderMobile>
+
   <LiveOrder />
   <MobileBottomBar />
   <FloatingOrderButton />

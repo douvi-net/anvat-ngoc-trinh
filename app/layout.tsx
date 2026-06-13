@@ -10,6 +10,7 @@ import HideOnOrderMobile from "@/components/HideOnOrderMobile";
 import CopyProtection from "@/components/CopyProtection";
 import InstallAppPrompt from "@/components/InstallAppPrompt";
 import CustomerPushPrompt from "@/components/CustomerPushPrompt";
+import Script from "next/script";
 const beVietnam = Be_Vietnam_Pro({
   subsets: ["vietnamese"],
   weight: ["400", "500", "600", "700", "800", "900"],
@@ -76,6 +77,20 @@ export default function RootLayout({
   return (
     <html lang="vi">
   <body className={beVietnam.className}>
+  <Script
+  src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+  strategy="afterInteractive"
+/>
+
+<Script id="google-analytics" strategy="afterInteractive">
+  {`
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
+  `}
+</Script>
   <CustomerPushPrompt />
   <InstallAppPrompt />
   <CopyProtection />

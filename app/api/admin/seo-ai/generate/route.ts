@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
-        { error: "Thiếu OPENAI_API_KEY trong .env" },
+        { error: "Thiếu OPENAI_API_KEY trong .env.local" },
         { status: 500 }
       );
     }
@@ -30,22 +30,15 @@ export async function POST(req: NextRequest) {
     const prompt = `
 Viết bài SEO tiếng Việt cho website Ăn Vặt Ngọc Trinh.
 
-Thông tin:
-- Website: https://anvatngoctrinh.vn
-- Khu vực chính: Quận 6, TP.HCM
-- Trang đặt món: https://anvatngoctrinh.vn/dat-mon-nhanh
-- Từ khóa chính: ${keyword}
+Từ khóa chính: ${keyword}
 
 Yêu cầu:
-- Title hấp dẫn dưới 65 ký tự
+- Title dưới 65 ký tự
 - Meta description dưới 160 ký tự
-- Slug tiếng Việt không dấu
-- Nội dung HTML chuẩn SEO
-- Có h2, h3, p, ul/li
-- Giọng văn tự nhiên, gần gũi
-- Không nói quá kiểu "ngon nhất", "số 1"
-- Cuối bài có CTA đặt món
-- Trả về JSON hợp lệ, không markdown
+- Nội dung HTML có h2, h3, p, ul/li
+- Có CTA đặt món về /dat-mon-nhanh
+- Không nói quá kiểu "số 1", "ngon nhất"
+- Chỉ trả JSON hợp lệ
 
 Format:
 {
@@ -72,13 +65,16 @@ Format:
         messages: [
           {
             role: "system",
-            content: "Bạn chỉ trả về JSON hợp lệ, không giải thích thêm.",
+            content: "Bạn chỉ trả JSON hợp lệ, không markdown.",
           },
           {
             role: "user",
             content: prompt,
           },
         ],
+        response_format: {
+          type: "json_object",
+        },
       }),
     });
 
@@ -86,25 +82,28 @@ Format:
 
     if (!aiRes.ok) {
       return NextResponse.json(
-        { error: "Lỗi gọi AI", detail: aiData },
+        { error: "Lỗi gọi OpenAI", detail: aiData },
         { status: 500 }
       );
     }
 
-    const raw = aiData.choices?.[0]?.message?.content || "";
+    const raw = aiData.choices?.[0]?.message?.content;
 
-    let article;
-
-    try {
-      article = JSON.parse(raw);
-    } catch {
+    if (!raw) {
       return NextResponse.json(
-        { error: "AI trả về JSON lỗi", raw },
+        { error: "AI không trả nội dung" },
         { status: 500 }
       );
     }
 
-    article.slug = article.slug ? makeSlug(article.slug) : makeSlug(article.title);
+    const article = JSON.parse(raw);
+
+    article.slug = article.slug
+      ? makeSlug(article.slug)
+      : makeSlug(article.title || keyword);
+
+    article.focus_keyword = article.focus_keyword || keyword;
+    article.category = article.category || "Ăn vặt Quận 6";
 
     return NextResponse.json({ article });
   } catch (error) {

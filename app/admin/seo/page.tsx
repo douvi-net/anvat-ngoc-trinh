@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
+
 type SeoSettings = {
   ga_id: string;
   clarity_id: string;
@@ -119,156 +120,324 @@ export default function AdminSeoPage() {
     }));
   }
 
+  const connectedCount = [
+    settings.ga_id,
+    settings.clarity_id,
+    settings.google_verification,
+    settings.bing_verification,
+    settings.indexnow_key,
+  ].filter(Boolean).length;
+
   return (
     <AdminLayout>
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6">
-        <p className="text-sm font-black uppercase text-[#00B14F]">
-          SEO & CONTENT
-        </p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="font-black text-[#00B14F]">Admin/POS</p>
 
-        <h1 className="mt-1 text-3xl font-black text-[#06113C]">
-          Cấu hình SEO & Analytics
-        </h1>
+          <h1 className="mt-1 text-4xl font-black text-[#06113C]">
+            Dashboard SEO
+          </h1>
 
-        <p className="mt-2 text-sm font-semibold text-neutral-500">
-          Quản lý GA4, Clarity, Google Search Console, Bing và IndexNow.
-        </p>
+          <p className="mt-2 text-sm font-semibold text-neutral-500">
+            Quản lý nền tảng SEO, Analytics, Sitemap, robots.txt, Schema và
+            IndexNow cho website.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <a
+            href="https://anvatngoctrinh.vn/sitemap.xml"
+            target="_blank"
+            className="rounded-2xl bg-[#06113C] px-5 py-4 text-sm font-black text-white shadow-lg"
+          >
+            Xem sitemap
+          </a>
+
+          <button
+            type="button"
+            onClick={loadSettings}
+            className="rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#00B14F]/25"
+          >
+            Làm mới
+          </button>
+        </div>
       </div>
 
       {message && (
-        <div className="mb-5 rounded-2xl bg-white p-4 text-sm font-black text-[#06113C] shadow">
+        <div className="mt-6 rounded-[24px] bg-white p-4 text-sm font-black text-[#06113C] shadow-lg shadow-neutral-950/5">
           {message}
         </div>
       )}
 
+      <div className="mt-8 grid gap-4 md:grid-cols-4">
+        {[
+          {
+            label: "Kết nối SEO",
+            value: `${connectedCount}/5`,
+            note: "GA4, Clarity, Google, Bing, IndexNow",
+          },
+          {
+            label: "Sitemap",
+            value: "OK",
+            note: "Đã có sitemap.xml",
+          },
+          {
+            label: "robots.txt",
+            value: "OK",
+            note: "Đã khai báo sitemap",
+          },
+          {
+            label: "Schema",
+            value: "OK",
+            note: "Restaurant / LocalBusiness",
+          },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5"
+          >
+            <p className="text-sm font-black text-neutral-400">{item.label}</p>
+
+            <p className="mt-2 text-3xl font-black text-[#06113C]">
+              {item.value}
+            </p>
+
+            <p className="mt-2 text-xs font-bold text-neutral-400">
+              {item.note}
+            </p>
+          </div>
+        ))}
+      </div>
+
       {loading ? (
-        <div className="rounded-3xl bg-white p-6 font-bold text-neutral-500 shadow">
-          Đang tải cấu hình...
+        <div className="mt-8 rounded-[32px] bg-white p-6 font-black text-[#06113C] shadow-xl shadow-neutral-950/5">
+          Đang tải cấu hình SEO...
         </div>
       ) : (
-        <div className="grid gap-5">
-          <section className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-            <h2 className="text-xl font-black text-[#06113C]">Analytics</h2>
+        <div className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.2fr]">
+          <div className="h-fit rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5 xl:sticky xl:top-8">
+            <p className="font-black text-[#00B14F]">
+              Cấu hình SEO & Analytics
+            </p>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="mt-6 space-y-4">
               <div>
-                <label className="text-sm font-black text-neutral-700">
+                <label className="text-sm font-black text-[#06113C]">
                   GA4 Measurement ID
                 </label>
+
                 <input
                   value={settings.ga_id}
                   onChange={(e) => updateField("ga_id", e.target.value)}
                   placeholder="VD: G-4XNNYW5LTN"
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
               </div>
 
               <div>
-                <label className="text-sm font-black text-neutral-700">
+                <label className="text-sm font-black text-[#06113C]">
                   Microsoft Clarity ID
                 </label>
+
                 <input
                   value={settings.clarity_id}
                   onChange={(e) => updateField("clarity_id", e.target.value)}
                   placeholder="VD: x6iivrmfaw"
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
               </div>
-            </div>
-          </section>
 
-          <section className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-            <h2 className="text-xl font-black text-[#06113C]">
-              Search Engine Verification
-            </h2>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-sm font-black text-neutral-700">
+                <label className="text-sm font-black text-[#06113C]">
                   Google Verification Code
                 </label>
+
                 <input
                   value={settings.google_verification}
                   onChange={(e) =>
                     updateField("google_verification", e.target.value)
                   }
                   placeholder="VD: google-site-verification=..."
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
               </div>
 
               <div>
-                <label className="text-sm font-black text-neutral-700">
+                <label className="text-sm font-black text-[#06113C]">
                   Bing Verification Code
                 </label>
+
                 <input
                   value={settings.bing_verification}
                   onChange={(e) =>
                     updateField("bing_verification", e.target.value)
                   }
                   placeholder="VD: mã xác minh Bing"
-                  className="mt-2 w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
+                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-black text-[#06113C]">
+                  IndexNow Key
+                </label>
+
+                <input
+                  value={settings.indexnow_key}
+                  onChange={(e) => updateField("indexnow_key", e.target.value)}
+                  placeholder="VD: key IndexNow"
+                  className="mt-2 w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
               </div>
             </div>
-          </section>
 
-          <section className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-            <h2 className="text-xl font-black text-[#06113C]">IndexNow</h2>
-
-            <div className="mt-4">
-              <label className="text-sm font-black text-neutral-700">
-                IndexNow Key
-              </label>
-              <input
-                value={settings.indexnow_key}
-                onChange={(e) => updateField("indexnow_key", e.target.value)}
-                placeholder="VD: key IndexNow"
-                className="mt-2 w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-bold outline-none focus:border-[#00B14F]"
-              />
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-6 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={pingIndexNow}
-                className="rounded-2xl bg-[#06113C] px-5 py-3 text-sm font-black text-white"
+                onClick={saveSettings}
+                disabled={saving}
+                className="rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white disabled:opacity-60"
               >
-                Ping IndexNow
+                {saving ? "Đang lưu..." : "Lưu cấu hình"}
               </button>
 
-              <a
-                href="https://anvatngoctrinh.vn/sitemap.xml"
-                target="_blank"
-                className="rounded-2xl bg-[#E8FFF1] px-5 py-3 text-sm font-black text-[#00B14F]"
+              <button
+                type="button"
+                onClick={loadSettings}
+                className="rounded-2xl bg-neutral-100 px-5 py-4 text-sm font-black text-[#06113C]"
               >
-                Xem sitemap
-              </a>
-
-              <a
-                href="https://anvatngoctrinh.vn/robots.txt"
-                target="_blank"
-                className="rounded-2xl bg-[#E8FFF1] px-5 py-3 text-sm font-black text-[#00B14F]"
-              >
-                Xem robots.txt
-              </a>
+                Làm mới
+              </button>
             </div>
-          </section>
+          </div>
 
-          <div className="sticky bottom-4 rounded-[24px] bg-white p-4 shadow-2xl shadow-neutral-950/10">
-            <button
-              type="button"
-              onClick={saveSettings}
-              disabled={saving}
-              className="w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white disabled:opacity-50"
-            >
-              {saving ? "Đang lưu..." : "Lưu cấu hình SEO"}
-            </button>
+          <div className="space-y-6">
+            <div className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-[#06113C]">
+                    Tình trạng SEO kỹ thuật
+                  </h2>
+
+                  <p className="mt-1 text-sm font-semibold text-neutral-500">
+                    Kiểm tra nhanh các nền tảng SEO quan trọng.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={pingIndexNow}
+                  className="rounded-2xl bg-[#06113C] px-5 py-3 text-sm font-black text-white"
+                >
+                  Ping IndexNow
+                </button>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {[
+                  {
+                    title: "Google Analytics 4",
+                    desc: settings.ga_id
+                      ? `Đã nhập mã ${settings.ga_id}`
+                      : "Chưa nhập GA4 Measurement ID",
+                    ok: Boolean(settings.ga_id),
+                  },
+                  {
+                    title: "Microsoft Clarity",
+                    desc: settings.clarity_id
+                      ? `Đã nhập mã ${settings.clarity_id}`
+                      : "Chưa nhập Clarity ID",
+                    ok: Boolean(settings.clarity_id),
+                  },
+                  {
+                    title: "Google Search Console",
+                    desc: settings.google_verification
+                      ? "Đã lưu mã xác minh Google"
+                      : "Chưa lưu mã xác minh Google",
+                    ok: Boolean(settings.google_verification),
+                  },
+                  {
+                    title: "Bing Webmaster",
+                    desc: settings.bing_verification
+                      ? "Đã lưu mã xác minh Bing"
+                      : "Chưa lưu mã xác minh Bing",
+                    ok: Boolean(settings.bing_verification),
+                  },
+                  {
+                    title: "IndexNow",
+                    desc: settings.indexnow_key
+                      ? "Đã lưu IndexNow key"
+                      : "Chưa nhập IndexNow key",
+                    ok: Boolean(settings.indexnow_key),
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="flex items-center justify-between gap-4 rounded-[24px] bg-[#F5FFF8] p-4"
+                  >
+                    <div>
+                      <p className="font-black text-[#06113C]">{item.title}</p>
+                      <p className="mt-1 text-sm font-semibold text-neutral-500">
+                        {item.desc}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-black ${
+                        item.ok
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {item.ok ? "Đã cấu hình" : "Chưa xong"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+              <h2 className="text-2xl font-black text-[#06113C]">
+                Công cụ kiểm tra nhanh
+              </h2>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <a
+                  href="https://anvatngoctrinh.vn/sitemap.xml"
+                  target="_blank"
+                  className="rounded-2xl bg-[#E8FFF1] px-5 py-4 text-sm font-black text-[#00B14F]"
+                >
+                  🗺️ Xem sitemap.xml
+                </a>
+
+                <a
+                  href="https://anvatngoctrinh.vn/robots.txt"
+                  target="_blank"
+                  className="rounded-2xl bg-[#E8FFF1] px-5 py-4 text-sm font-black text-[#00B14F]"
+                >
+                  🤖 Xem robots.txt
+                </a>
+
+                <a
+                  href="https://search.google.com/test/rich-results?url=https://anvatngoctrinh.vn"
+                  target="_blank"
+                  className="rounded-2xl bg-[#E8FFF1] px-5 py-4 text-sm font-black text-[#00B14F]"
+                >
+                  🧩 Test Schema
+                </a>
+
+                <a
+                  href="https://analytics.google.com"
+                  target="_blank"
+                  className="rounded-2xl bg-[#E8FFF1] px-5 py-4 text-sm font-black text-[#00B14F]"
+                >
+                  📈 Mở GA4
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}
-    </div>
     </AdminLayout>
   );
 }

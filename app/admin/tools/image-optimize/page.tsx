@@ -3,6 +3,7 @@
 import { useState } from "react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
+import AdminLayout from "@/components/AdminLayout";
 
 const BUCKETS = [
     "product-images",
@@ -205,6 +206,7 @@ log(`✅ Đã xử lý và cập nhật DB ${bucket}/${file.name} → ${newPath}
 
   return (
     <main className="min-h-screen bg-[#F5FFF8] p-6">
+      <AdminLayout>
       <div className="mx-auto max-w-3xl rounded-[28px] bg-white p-6 shadow-xl">
         <h1 className="text-2xl font-black text-[#06113C]">
           Tối ưu ảnh cũ
@@ -231,6 +233,7 @@ log(`✅ Đã xử lý và cập nhật DB ${bucket}/${file.name} → ${newPath}
           )}
         </div>
       </div>
+      </AdminLayout>
     </main>
   );
 }

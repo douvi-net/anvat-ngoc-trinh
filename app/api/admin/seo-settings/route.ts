@@ -3,10 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-const supabase = createClient(supabaseUrl, serviceRoleKey);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const ALLOWED_KEYS = [
   "ga_id",
@@ -14,33 +12,49 @@ const ALLOWED_KEYS = [
   "google_verification",
   "bing_verification",
   "indexnow_key",
-];
+] as const;
+
+type SeoKey = (typeof ALLOWED_KEYS)[number];
+
+function getSupabase() {
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey);
+}
 
 export async function GET() {
   try {
+    const supabase = getSupabase();
+
     const { data, error } = await supabase
       .from("site_settings")
-      .select("key,value");
+      .select("key,value")
+      .in("key", [...ALLOWED_KEYS]);
 
     if (error) {
       return NextResponse.json(
-        { error: "Không thể lấy SEO settings", detail: error.message },
+        { error: "Không thể lấy cấu hình SEO", detail: error.message },
         { status: 500 }
       );
     }
 
-    const settings = ALLOWED_KEYS.reduce<Record<string, string>>((acc, key) => {
-      acc[key] = "";
-      return acc;
-    }, {});
+    const settings: Record<SeoKey, string> = {
+      ga_id: "",
+      clarity_id: "",
+      google_verification: "",
+      bing_verification: "",
+      indexnow_key: "",
+    };
 
     data?.forEach((item) => {
-      if (ALLOWED_KEYS.includes(item.key)) {
-        settings[item.key] = item.value || "";
+      if (ALLOWED_KEYS.includes(item.key as SeoKey)) {
+        settings[item.key as SeoKey] = item.value || "";
       }
     });
 
-    return NextResponse.json({ settings });
+    return NextResponse.json({ success: true, settings });
   } catch (error) {
     return NextResponse.json(
       { error: "Lỗi server", detail: String(error) },
@@ -51,6 +65,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = getSupabase();
     const body = await req.json();
 
     const rows = ALLOWED_KEYS.map((key) => ({
@@ -65,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { error: "Không thể lưu SEO settings", detail: error.message },
+        { error: "Không thể lưu cấu hình SEO", detail: error.message },
         { status: 500 }
       );
     }

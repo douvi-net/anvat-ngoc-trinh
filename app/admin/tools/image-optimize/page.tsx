@@ -1,14 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 import AdminLayout from "@/components/AdminLayout";
 
-const BUCKETS = [
-    "product-images",
-    "banner-images",
-  ];
+const BUCKETS = ["product-images", "banner-images"];
+
+type OptimizeStats = {
+  scanned: number;
+  processed: number;
+  skipped: number;
+  failed: number;
+};
+
+const defaultStats: OptimizeStats = {
+  scanned: 0,
+  processed: 0,
+  skipped: 0,
+  failed: 0,
+};
 
 async function addWatermark(file: File): Promise<File> {
   return new Promise((resolve, reject) => {
@@ -28,7 +40,10 @@ async function addWatermark(file: File): Promise<File> {
       canvas.height = Math.round(img.height * scale);
 
       const ctx = canvas.getContext("2d");
-      if (!ctx) return reject(new Error("Không tạo được canvas"));
+      if (!ctx) {
+        reject(new Error("Không tạo được canvas"));
+        return;
+      }
 
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
@@ -53,7 +68,10 @@ async function addWatermark(file: File): Promise<File> {
 
       canvas.toBlob(
         (blob) => {
-          if (!blob) return reject(new Error("Không xuất được ảnh"));
+          if (!blob) {
+            reject(new Error("Không xuất được ảnh"));
+            return;
+          }
 
           resolve(
             new File(
@@ -77,69 +95,106 @@ async function addWatermark(file: File): Promise<File> {
 export default function ImageOptimizePage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [stats, setStats] = useState<OptimizeStats>(defaultStats);
 
   function log(message: string) {
     setLogs((prev) => [message, ...prev]);
   }
+
+  function updateStats(key: keyof OptimizeStats, amount = 1) {
+    setStats((prev) => ({
+      ...prev,
+      [key]: prev[key] + amount,
+    }));
+  }
+
   function getPublicUrl(bucket: string, path: string) {
     const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   }
+
   async function updateImageUrlInDatabase(
     bucket: string,
     oldUrl: string,
     newUrl: string
   ) {
     if (bucket === "product-images") {
-      await supabase
+      const { error } = await supabase
         .from("products")
         .update({ image_url: newUrl })
         .eq("image_url", oldUrl);
+
+      if (error) throw new Error(error.message);
     }
-  
+
     if (bucket === "banner-images") {
-      await supabase
+      const { error } = await supabase
         .from("banners")
         .update({ image_url: newUrl })
         .eq("image_url", oldUrl);
-    }
-  
-    if (bucket === "posts") {
-      await supabase
-        .from("posts")
-        .update({ image_url: newUrl })
-        .eq("image_url", oldUrl);
+
+      if (error) throw new Error(error.message);
     }
   }
- 
+
+  function getFolderByBucket(bucket: string) {
+    if (bucket === "product-images") return "products";
+    if (bucket === "banner-images") return "banners";
+    return "";
+  }
+
   async function optimizeBucket(bucket: string) {
-    log(`📁 Đang quét bucket ${bucket}`);
-    const folder =
-    bucket === "product-images"
-      ? "products"
-      : "banners";
-  
-  const { data: files, error } =
-    await supabase.storage.from(bucket).list(folder, {
-      limit: 1000,
-    });
+    const folder = getFolderByBucket(bucket);
+
+    if (!folder) {
+      log(`⚠️ Không xác định được folder cho bucket ${bucket}`);
+      return;
+    }
+
+    log(`📁 Đang quét bucket ${bucket}/${folder}`);
+
+    const { data: files, error } = await supabase.storage
+      .from(bucket)
+      .list(folder, {
+        limit: 1000,
+      });
 
     if (error) {
       log(`❌ ${bucket}: ${error.message}`);
+      updateStats("failed");
       return;
     }
-   
-    for (const file of files || []) {
-       
-      if (!file.name || file.name.endsWith(".emptyFolderPlaceholder")) continue;
-      if (file.name.includes("-watermark")) continue;
+
+    if (!files || files.length === 0) {
+      log(`ℹ️ ${bucket}/${folder}: Không có ảnh để xử lý`);
+      return;
+    }
+
+    for (const file of files) {
+      updateStats("scanned");
+
+      if (!file.name || file.name.endsWith(".emptyFolderPlaceholder")) {
+        updateStats("skipped");
+        continue;
+      }
+
+      if (file.name.includes("-watermark")) {
+        updateStats("skipped");
+        log(`⏭️ Bỏ qua ảnh đã xử lý: ${bucket}/${folder}/${file.name}`);
+        continue;
+      }
+
       log(`📸 Đang xử lý ${bucket}/${folder}/${file.name}`);
+
       try {
+        const filePath = `${folder}/${file.name}`;
+
         const { data: downloadData, error: downloadError } =
-          await supabase.storage.from(bucket).download(`${folder}/${file.name}`)
+          await supabase.storage.from(bucket).download(filePath);
 
         if (downloadError || !downloadData) {
-          log(`❌ Không tải được ${bucket}/${file.name}`);
+          updateStats("failed");
+          log(`❌ Không tải được ${bucket}/${folder}/${file.name}`);
           continue;
         }
 
@@ -156,84 +211,216 @@ export default function ImageOptimizePage() {
 
         const watermarked = await addWatermark(compressed);
 
-        const newPath = file.name.replace(/\.[^/.]+$/, "") + "-watermark.webp";
+        const newFileName =
+          file.name.replace(/\.[^/.]+$/, "") + "-watermark.webp";
+
+        const newFilePath = `${folder}/${newFileName}`;
 
         const { error: uploadError } = await supabase.storage
           .from(bucket)
-          .upload(
-            `${folder}/${newPath}`,
-            watermarked, {
+          .upload(newFilePath, watermarked, {
             cacheControl: "3600",
             upsert: true,
             contentType: "image/webp",
           });
 
         if (uploadError) {
-          log(`❌ Upload lỗi ${bucket}/${newPath}: ${uploadError.message}`);
+          updateStats("failed");
+          log(`❌ Upload lỗi ${bucket}/${newFilePath}: ${uploadError.message}`);
           continue;
         }
 
-        const oldUrl = getPublicUrl(
-            bucket,
-            `${folder}/${file.name}`
-          );
-          const newUrl = getPublicUrl(
-            bucket,
-            `${folder}/${newPath}`
-          );
+        const oldUrl = getPublicUrl(bucket, filePath);
+        const newUrl = getPublicUrl(bucket, newFilePath);
 
-await updateImageUrlInDatabase(bucket, oldUrl, newUrl);
+        await updateImageUrlInDatabase(bucket, oldUrl, newUrl);
 
-log(`✅ Đã xử lý và cập nhật DB ${bucket}/${file.name} → ${newPath}`);
+        updateStats("processed");
+        log(`✅ Đã xử lý và cập nhật DB: ${file.name} → ${newFileName}`);
       } catch (err) {
-        log(`❌ Lỗi ${bucket}/${file.name}: ${String(err)}`);
+        updateStats("failed");
+        log(`❌ Lỗi ${bucket}/${folder}/${file.name}: ${String(err)}`);
       }
     }
   }
 
   async function runOptimize() {
+    if (running) return;
+
     setRunning(true);
     setLogs([]);
-    log("🚀 Bắt đầu xử lý ảnh cũ...");
+    setStats(defaultStats);
+
+    log("🚀 Bắt đầu tối ưu ảnh cũ...");
 
     for (const bucket of BUCKETS) {
       await optimizeBucket(bucket);
     }
 
-    log("🎉 Hoàn tất.");
+    log("🎉 Hoàn tất tối ưu ảnh.");
     setRunning(false);
   }
 
   return (
-    <main className="min-h-screen bg-[#F5FFF8] p-6">
-      <AdminLayout>
-      <div className="mx-auto max-w-3xl rounded-[28px] bg-white p-6 shadow-xl">
-        <h1 className="text-2xl font-black text-[#06113C]">
-          Tối ưu ảnh cũ
-        </h1>
+    <AdminLayout>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="font-black text-[#00B14F]">Admin/POS</p>
 
-        <p className="mt-2 text-sm font-bold text-neutral-500">
-          Tool này tạo bản WebP + watermark cho ảnh trong products, banners,
-          posts. Ảnh gốc vẫn được giữ lại.
-        </p>
+          <h1 className="mt-1 text-4xl font-black text-[#06113C]">
+            Tối ưu ảnh
+          </h1>
 
-        <button
-          onClick={runOptimize}
-          disabled={running}
-          className="mt-5 rounded-2xl bg-[#00B14F] px-5 py-4 font-black text-white disabled:opacity-60"
-        >
-          {running ? "Đang xử lý..." : "Bắt đầu tối ưu ảnh"}
-        </button>
+          <p className="mt-2 text-sm font-semibold text-neutral-500">
+            Chuyển ảnh cũ sang WebP, giảm dung lượng và thêm watermark thương
+            hiệu cho sản phẩm, banner.
+          </p>
+        </div>
 
-        <div className="mt-6 max-h-[480px] overflow-y-auto rounded-2xl bg-[#06113C] p-4 text-sm font-bold text-white">
-          {logs.length === 0 ? (
-            <p>Chưa chạy.</p>
-          ) : (
-            logs.map((item, index) => <p key={index}>{item}</p>)
-          )}
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/admin/tools"
+            className="rounded-2xl bg-[#06113C] px-5 py-4 text-sm font-black text-white shadow-lg"
+          >
+            Công cụ
+          </Link>
+
+          <button
+            type="button"
+            onClick={runOptimize}
+            disabled={running}
+            className="rounded-2xl bg-[#00B14F] px-5 py-4 text-sm font-black text-white shadow-lg shadow-[#00B14F]/25 disabled:opacity-60"
+          >
+            {running ? "Đang xử lý..." : "Bắt đầu tối ưu"}
+          </button>
         </div>
       </div>
-      </AdminLayout>
-    </main>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-4">
+        {[
+          {
+            label: "Đã quét",
+            value: stats.scanned,
+            note: "Tổng file tìm thấy",
+          },
+          {
+            label: "Đã xử lý",
+            value: stats.processed,
+            note: "Ảnh đã tạo WebP + watermark",
+          },
+          {
+            label: "Bỏ qua",
+            value: stats.skipped,
+            note: "Ảnh đã xử lý hoặc file rỗng",
+          },
+          {
+            label: "Lỗi",
+            value: stats.failed,
+            note: "File xử lý thất bại",
+          },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5"
+          >
+            <p className="text-sm font-black text-neutral-400">{item.label}</p>
+
+            <p
+              className={`mt-2 text-3xl font-black ${
+                item.label === "Lỗi" ? "text-red-600" : "text-[#06113C]"
+              }`}
+            >
+              {item.value}
+            </p>
+
+            <p className="mt-2 text-xs font-bold text-neutral-400">
+              {item.note}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.2fr]">
+        <section className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+          <h2 className="text-2xl font-black text-[#06113C]">
+            Cấu hình xử lý
+          </h2>
+
+          <p className="mt-2 text-sm font-semibold leading-6 text-neutral-500">
+            Công cụ sẽ quét ảnh trong Supabase Storage, tạo ảnh mới dạng WebP,
+            thêm watermark và cập nhật đường dẫn ảnh trong database.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            {[
+              {
+                title: "Bucket sản phẩm",
+                desc: "product-images/products",
+              },
+              {
+                title: "Bucket banner",
+                desc: "banner-images/banners",
+              },
+              {
+                title: "Định dạng xuất",
+                desc: "WebP, tối đa 1200px, khoảng 0.5MB",
+              },
+              {
+                title: "Watermark",
+                desc: "Ăn Vặt Ngọc Trinh + anvatngoctrinh.vn",
+              },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl bg-[#F5FFF8] p-4">
+                <p className="font-black text-[#06113C]">{item.title}</p>
+                <p className="mt-1 text-sm font-semibold text-neutral-500">
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-[24px] bg-[#FFF7E8] p-4">
+            <p className="font-black text-[#06113C]">Lưu ý quan trọng</p>
+
+            <p className="mt-2 text-sm font-semibold leading-6 text-neutral-600">
+              Ảnh gốc vẫn được giữ lại. Tool chỉ tạo thêm file mới có đuôi
+              <span className="font-black"> -watermark.webp</span> và cập nhật
+              database sang ảnh mới.
+            </p>
+          </div>
+        </section>
+
+        <section className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-black text-[#06113C]">
+                Nhật ký xử lý
+              </h2>
+
+              <p className="mt-1 text-sm font-semibold text-neutral-500">
+                Theo dõi tiến trình tối ưu ảnh theo thời gian thực.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setLogs([])}
+              disabled={running}
+              className="rounded-2xl bg-neutral-100 px-4 py-3 text-xs font-black text-[#06113C] disabled:opacity-50"
+            >
+              Xóa log
+            </button>
+          </div>
+
+          <div className="mt-5 max-h-[560px] overflow-y-auto rounded-[24px] bg-[#06113C] p-4 text-sm font-bold leading-7 text-white">
+            {logs.length === 0 ? (
+              <p className="text-white/60">Chưa chạy.</p>
+            ) : (
+              logs.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)
+            )}
+          </div>
+        </section>
+      </div>
+    </AdminLayout>
   );
 }

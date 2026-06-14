@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import AdminLayout from "@/components/AdminLayout";
 type SeoSettings = {
   ga_id: string;
   clarity_id: string;
@@ -120,6 +120,7 @@ export default function AdminSeoPage() {
   }
 
   return (
+    <AdminLayout>
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
         <p className="text-sm font-black uppercase text-[#00B14F]">
@@ -268,5 +269,6 @@ export default function AdminSeoPage() {
         </div>
       )}
     </div>
+    </AdminLayout>
   );
 }

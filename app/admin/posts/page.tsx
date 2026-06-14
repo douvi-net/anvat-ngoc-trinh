@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
+import PostEditor from "@/components/PostEditor";
 
 type Post = {
   id: string;
@@ -550,15 +551,15 @@ export default function AdminPostsPage() {
               className="w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
             />
 
-            <textarea
-              value={form.content}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, content: e.target.value }))
-              }
-              placeholder="Nội dung bài viết. Có thể nhập text thường hoặc HTML."
-              rows={10}
-              className="w-full rounded-2xl border border-black/10 px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-            />
+<PostEditor
+  value={form.content}
+  onChange={(content) =>
+    setForm((prev) => ({
+      ...prev,
+      content,
+    }))
+  }
+/>
 
             <div className="rounded-2xl border border-[#00B14F]/20 bg-[#F5FFF8] p-4">
               <p className="font-black text-[#00B14F]">SEO</p>

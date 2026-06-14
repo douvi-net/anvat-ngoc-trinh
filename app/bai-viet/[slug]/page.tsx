@@ -12,6 +12,7 @@ type Post = {
   category: string | null;
   image_url: string | null;
   published_at: string | null;
+  updated_at: string | null;
   seo_title: string | null;
   seo_description: string | null;
   focus_keyword: string | null;
@@ -27,7 +28,7 @@ async function getPost(slug: string) {
   const { data } = await supabase
     .from("posts")
     .select(
-      "id,title,slug,excerpt,content,category,image_url,published_at,seo_title,seo_description,focus_keyword"
+      "id,title,slug,excerpt,content,category,image_url,published_at,updated_at,seo_title,seo_description,focus_keyword"
     )
     .eq("slug", slug)
     .eq("status", "published")
@@ -35,6 +36,10 @@ async function getPost(slug: string) {
     .single<Post>();
 
   return data;
+}
+
+function isHtml(content: string) {
+  return /<\/?[a-z][\s\S]*>/i.test(content);
 }
 
 export async function generateMetadata({
@@ -59,11 +64,24 @@ export async function generateMetadata({
     title,
     description,
     keywords: post.focus_keyword ? [post.focus_keyword] : undefined,
+    alternates: {
+      canonical: `https://anvatngoctrinh.vn/bai-viet/${post.slug}`,
+    },
     openGraph: {
       title,
       description,
+      url: `https://anvatngoctrinh.vn/bai-viet/${post.slug}`,
       type: "article",
-      images: post.image_url ? [{ url: post.image_url }] : [],
+      images: post.image_url
+        ? [
+            {
+              url: post.image_url,
+              width: 1200,
+              height: 630,
+              alt: post.title,
+            },
+          ]
+        : [],
     },
     twitter: {
       card: "summary_large_image",
@@ -82,7 +100,10 @@ export default async function PostDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const paragraphs = (post.content || "")
+  const content = post.content || "";
+  const contentIsHtml = isHtml(content);
+
+  const paragraphs = content
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
@@ -93,24 +114,59 @@ export default async function PostDetailPage({ params }: PageProps) {
     .eq("status", "published")
     .eq("is_active", true)
     .neq("id", post.id)
-    .eq("category", post.category || "")
     .limit(3);
 
   const articleSchema = {
     "@context": "https://schema.org",
     "@type": "Article",
+    "@id": `https://anvatngoctrinh.vn/bai-viet/${post.slug}#article`,
     headline: post.seo_title || post.title,
     description: post.seo_description || post.excerpt,
-    image: post.image_url,
+    image: post.image_url ? [post.image_url] : undefined,
     datePublished: post.published_at,
+    dateModified: post.updated_at || post.published_at,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": `https://anvatngoctrinh.vn/bai-viet/${post.slug}`,
+    },
     author: {
       "@type": "Organization",
       name: "Ăn Vặt Ngọc Trinh",
+      url: "https://anvatngoctrinh.vn",
     },
     publisher: {
       "@type": "Organization",
       name: "Ăn Vặt Ngọc Trinh",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://anvatngoctrinh.vn/icon.png",
+      },
     },
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Trang chủ",
+        item: "https://anvatngoctrinh.vn",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Bài viết",
+        item: "https://anvatngoctrinh.vn/bai-viet",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: post.title,
+        item: `https://anvatngoctrinh.vn/bai-viet/${post.slug}`,
+      },
+    ],
   };
 
   return (
@@ -119,6 +175,13 @@ export default async function PostDetailPage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(articleSchema),
+        }}
+      />
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbSchema),
         }}
       />
 
@@ -161,11 +224,16 @@ export default async function PostDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        <article className="max-w-none">
-          {paragraphs.length === 0 ? (
+        <article className="article-content max-w-none">
+          {!content ? (
             <p className="text-lg font-semibold leading-9 text-neutral-700">
               Đang cập nhật nội dung.
             </p>
+          ) : contentIsHtml ? (
+            <div
+              className="space-y-5 text-lg font-semibold leading-9 text-neutral-700 [&_a]:font-black [&_a]:text-[#00B14F] [&_h2]:mt-10 [&_h2]:text-3xl [&_h2]:font-black [&_h2]:leading-tight [&_h2]:text-[#06113C] [&_h3]:mt-7 [&_h3]:text-2xl [&_h3]:font-black [&_h3]:text-[#06113C] [&_li]:ml-6 [&_li]:list-disc [&_p]:mb-5 [&_strong]:font-black [&_strong]:text-[#06113C] [&_ul]:space-y-2"
+              dangerouslySetInnerHTML={{ __html: content }}
+            />
           ) : (
             paragraphs.map((paragraph, index) => (
               <p
@@ -184,7 +252,8 @@ export default async function PostDetailPage({ params }: PageProps) {
           </p>
 
           <p className="mt-2 font-semibold text-neutral-600">
-            Ghé Ăn Vặt Ngọc Trinh để đặt bánh tráng, nước uống và món hot trong ngày.
+            Ghé Ăn Vặt Ngọc Trinh để đặt bánh tráng, nước uống và món hot trong
+            ngày.
           </p>
 
           <Link
@@ -223,7 +292,7 @@ export default async function PostDetailPage({ params }: PageProps) {
                   </div>
 
                   <p className="mt-3 text-sm font-black text-[#00B14F]">
-                    {item.category}
+                    {item.category || "Ăn vặt"}
                   </p>
 
                   <h3 className="mt-2 font-black leading-6 text-[#06113C]">

@@ -15,6 +15,12 @@ type Article = {
   focus_keyword: string;
   category: string;
   content: string;
+  image_url: string;
+images?: {
+  url: string;
+  alt: string;
+  caption: string;
+}[];
 };
 
 const emptyArticle: Article = {
@@ -26,6 +32,8 @@ const emptyArticle: Article = {
   focus_keyword: "",
   category: "Ăn vặt Quận 6",
   content: "",
+  image_url: "",
+images: [],
 };
 
 export default function SeoAiPage() {
@@ -95,6 +103,7 @@ export default function SeoAiPage() {
         excerpt: article.excerpt.trim(),
         content: article.content.trim(),
         category: article.category.trim(),
+        image_url: article.image_url.trim(),
         seo_title: article.seo_title.trim(),
         seo_description: article.seo_description.trim(),
         focus_keyword: article.focus_keyword.trim(),
@@ -301,6 +310,38 @@ export default function SeoAiPage() {
               value={article.content}
               onChange={(content) => updateField("content", content)}
             />
+            {article.images && article.images.length > 0 && (
+  <div className="rounded-[28px] bg-[#F5FFF8] p-4">
+    <p className="font-black text-[#00B14F]">
+      Ảnh AI đã tạo ({article.images.length}/3)
+    </p>
+
+    <div className="mt-4 grid gap-4 md:grid-cols-3">
+      {article.images.map((image, index) => (
+        <div
+          key={image.url}
+          className="overflow-hidden rounded-[24px] bg-white shadow-lg shadow-neutral-950/5"
+        >
+          <img
+            src={image.url}
+            alt={image.alt}
+            className="h-40 w-full object-cover"
+          />
+
+          <div className="p-3">
+            <p className="text-xs font-black text-[#06113C]">
+              {index === 0 ? "Ảnh đại diện" : `Ảnh trong bài ${index}`}
+            </p>
+
+            <p className="mt-1 line-clamp-2 text-xs font-semibold text-neutral-500">
+              {image.alt}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
           </div>
         </section>
       </div>

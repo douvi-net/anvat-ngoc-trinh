@@ -63,7 +63,14 @@ export default function SeoAiPage() {
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+
+let data;
+try {
+  data = JSON.parse(text);
+} catch {
+  throw new Error(text || "API không trả JSON");
+}
 
       if (!res.ok) {
         throw new Error(data.detail || data.error || "Tạo bài viết thất bại");

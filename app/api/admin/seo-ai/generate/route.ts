@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const SITE_URL = "https://anvatngoctrinh.vn";
 const POST_BUCKET = "post-images";
@@ -10,6 +11,12 @@ const POST_BUCKET = "post-images";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const openAiKey = process.env.OPENAI_API_KEY;
+
+type UploadedImage = {
+  url: string;
+  alt: string;
+  caption: string;
+};
 
 function makeSlug(text: string) {
   return text
@@ -29,11 +36,7 @@ function getSupabaseAdmin() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-function imageFigure(image: {
-  url: string;
-  alt: string;
-  caption: string;
-}) {
+function imageFigure(image: UploadedImage) {
   return `
 <figure>
   <img src="${image.url}" alt="${image.alt}" loading="lazy" width="1200" height="800" />
@@ -42,65 +45,75 @@ function imageFigure(image: {
 `;
 }
 
-function insertImagesIntoContent(
-  content: string,
-  images: {
-    url: string;
-    alt: string;
-    caption: string;
-  }[]
-) {
+function insertImagesIntoContent(content: string, images: UploadedImage[]) {
   let html = content;
 
-  if (images[1]) {
-    html = html.replace("{{IMAGE_1}}", imageFigure(images[1]));
-  }
+  if (images[1]) html = html.replace("{{IMAGE_1}}", imageFigure(images[1]));
+  if (images[2]) html = html.replace("{{IMAGE_2}}", imageFigure(images[2]));
+  if (images[3]) html = html.replace("{{IMAGE_3}}", imageFigure(images[3]));
 
-  if (images[2]) {
-    html = html.replace("{{IMAGE_2}}", imageFigure(images[2]));
-  }
-
-  html = html.replaceAll("{{IMAGE_1}}", "");
-  html = html.replaceAll("{{IMAGE_2}}", "");
-
-  return html;
+  return html
+    .replaceAll("{{IMAGE_1}}", "")
+    .replaceAll("{{IMAGE_2}}", "")
+    .replaceAll("{{IMAGE_3}}", "");
 }
 
-async function createArticle(keyword: string) {
-  if (!openAiKey) {
-    throw new Error("Thiếu OPENAI_API_KEY trong .env.local");
-  }
+function buildPrompt(keyword: string) {
+  return `
+Bạn là chuyên gia SEO Local + Copywriter ngành F&B tại Việt Nam.
 
-  const prompt = `
-Bạn là chuyên gia SEO Local cho quán ăn vặt.
+Bạn đang viết bài cho:
+- Website: ${SITE_URL}
+- Thương hiệu: Ăn Vặt Ngọc Trinh
+- Khu vực chính: Quận 6, TP.HCM
+- Trang đặt món: ${SITE_URL}/dat-mon-nhanh
 
-Website: ${SITE_URL}
-Thương hiệu: Ăn Vặt Ngọc Trinh
-Khu vực chính: Quận 6, TP.HCM
-Trang đặt món: ${SITE_URL}/dat-mon-nhanh
+Từ khóa chính: "${keyword}"
 
-Từ khóa chính: ${keyword}
+Mục tiêu bài viết:
+- Kéo traffic Google từ khách có nhu cầu ăn vặt tại Quận 6.
+- Làm người đọc muốn bấm đặt món.
+- Nội dung phải giống người thật viết, không sáo rỗng, không văn AI.
+- Không khẳng định "ngon nhất", "số 1", "rẻ nhất" nếu không có bằng chứng.
 
-Yêu cầu bài viết:
-- Bài dài 1200-1800 từ.
-- Viết tự nhiên, không văn AI, không nói quá "số 1", "ngon nhất".
-- SEO Local: nhắc Quận 6, TP.HCM, đặt món online, giao tận nơi.
-- Có H2, H3, p, ul/li.
+Yêu cầu SEO:
+- Bài dài 1200–1600 từ.
+- SEO title tối đa 60 ký tự.
+- Meta description tối đa 155 ký tự.
+- Slug tiếng Việt không dấu.
+- Focus keyword xuất hiện tự nhiên trong title, meta, đoạn mở đầu, ít nhất 1 H2.
+- Có 5–8 từ khóa liên quan rải tự nhiên: ăn vặt Quận 6, giao tận nơi, đặt món online, bánh tráng, trà sữa, trà trái cây, TP.HCM.
+- Có internal link về /dat-mon-nhanh và /bai-viet.
 - Có CTA mềm giữa bài và CTA mạnh cuối bài.
-- Chèn đúng 2 placeholder ảnh trong content:
-  {{IMAGE_1}} sau H2 đầu tiên.
-  {{IMAGE_2}} ở khoảng 70% bài viết.
+
+Cấu trúc HTML bắt buộc:
 - Không dùng markdown.
-- Content phải là HTML hợp lệ.
+- Chỉ dùng HTML hợp lệ: h2, h3, p, ul, li, strong, a.
+- Không dùng h1 trong content.
+- Đoạn văn ngắn, dễ đọc trên mobile.
+- Chèn đúng 3 placeholder ảnh trong content:
+  {{IMAGE_1}} sau H2 đầu tiên.
+  {{IMAGE_2}} khoảng giữa bài.
+  {{IMAGE_3}} gần CTA cuối bài.
+- Có mục FAQ cuối bài với 5 câu hỏi, dùng h2 và h3.
 
-Tạo 3 prompt ảnh AI:
-1. featured_image_prompt: ảnh đại diện 1200x630.
-2. inline_image_1_prompt: ảnh chèn trong bài sau H2 đầu.
-3. inline_image_2_prompt: ảnh chèn gần cuối bài.
+Yêu cầu hình ảnh:
+Tạo 4 prompt ảnh AI đúng với món/ngữ cảnh của từ khóa:
+1. featured_image_prompt: ảnh đại diện, tập trung vào món chính hoặc chủ đề chính.
+2. inline_image_1_prompt: cận cảnh món/nguyên liệu/quy trình làm món.
+3. inline_image_2_prompt: bối cảnh ăn vặt/quán/takeaway phù hợp bài.
+4. cta_image_prompt: ảnh đặt món/giao hàng/takeaway gần cuối bài.
 
-Ảnh phải theo phong cách food photography chân thực, ánh sáng đẹp, không chữ, không watermark, không logo giả.
+Ảnh phải:
+- Đúng món ăn vặt Việt Nam theo từ khóa.
+- Realistic food photography.
+- Ánh sáng tự nhiên hoặc commercial food photography.
+- Không chữ, không watermark, không logo giả, không người nổi tiếng.
+- Không tạo món Tây nếu từ khóa là món Việt.
+- Nếu từ khóa là trà/trà sữa thì ảnh phải là ly nước rõ topping, đá, trái cây phù hợp.
+- Nếu từ khóa là bánh tráng/cuốn thì ảnh phải là bánh tráng Việt Nam, topping Việt Nam, nước chấm phù hợp.
 
-Trả JSON hợp lệ:
+Trả về JSON hợp lệ, không markdown:
 {
   "title": "",
   "slug": "",
@@ -108,6 +121,7 @@ Trả JSON hợp lệ:
   "seo_title": "",
   "seo_description": "",
   "focus_keyword": "",
+  "related_keywords": [],
   "category": "",
   "content": "",
   "featured_alt": "",
@@ -116,11 +130,20 @@ Trả JSON hợp lệ:
   "inline_image_1_caption": "",
   "inline_image_2_alt": "",
   "inline_image_2_caption": "",
+  "cta_image_alt": "",
+  "cta_image_caption": "",
   "featured_image_prompt": "",
   "inline_image_1_prompt": "",
-  "inline_image_2_prompt": ""
+  "inline_image_2_prompt": "",
+  "cta_image_prompt": ""
 }
 `;
+}
+
+async function createArticle(keyword: string) {
+  if (!openAiKey) {
+    throw new Error("Thiếu OPENAI_API_KEY");
+  }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -130,10 +153,8 @@ Trả JSON hợp lệ:
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.65,
-      response_format: {
-        type: "json_object",
-      },
+      temperature: 0.55,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -142,7 +163,7 @@ Trả JSON hợp lệ:
         },
         {
           role: "user",
-          content: prompt,
+          content: buildPrompt(keyword),
         },
       ],
     }),
@@ -177,6 +198,14 @@ async function generateImageBase64(prompt: string) {
     throw new Error("Thiếu OPENAI_API_KEY");
   }
 
+  const safePrompt = `
+${prompt}
+
+Style requirements:
+realistic Vietnamese food photography, natural lighting, appetizing, high detail,
+no text, no watermark, no fake logo, no distorted hands, no extra labels.
+`;
+
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: {
@@ -185,7 +214,7 @@ async function generateImageBase64(prompt: string) {
     },
     body: JSON.stringify({
       model: "gpt-image-1",
-      prompt,
+      prompt: safePrompt,
       size: "1536x1024",
       quality: "medium",
       n: 1,
@@ -262,9 +291,15 @@ export async function POST(req: NextRequest) {
         alt: article.inline_image_2_alt || article.title,
         caption: article.inline_image_2_caption || "",
       },
+      {
+        name: "cta",
+        prompt: article.cta_image_prompt,
+        alt: article.cta_image_alt || article.title,
+        caption: article.cta_image_caption || "",
+      },
     ];
 
-    const uploadedImages = [];
+    const uploadedImages: UploadedImage[] = [];
 
     for (const item of imagePrompts) {
       const base64 = await generateImageBase64(item.prompt);
@@ -298,6 +333,7 @@ export async function POST(req: NextRequest) {
         content: finalContent,
         image_url: uploadedImages[0]?.url || "",
         images: uploadedImages,
+        related_keywords: article.related_keywords || [],
       },
     });
   } catch (error) {

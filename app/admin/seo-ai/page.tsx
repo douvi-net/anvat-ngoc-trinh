@@ -313,7 +313,7 @@ export default function SeoAiPage() {
             {article.images && article.images.length > 0 && (
   <div className="rounded-[28px] bg-[#F5FFF8] p-4">
     <p className="font-black text-[#00B14F]">
-      Ảnh AI đã tạo ({article.images.length}/3)
+    Ảnh AI đã tạo ({article.images.length}/4)
     </p>
 
     <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -330,7 +330,11 @@ export default function SeoAiPage() {
 
           <div className="p-3">
             <p className="text-xs font-black text-[#06113C]">
-              {index === 0 ? "Ảnh đại diện" : `Ảnh trong bài ${index}`}
+            {index === 0
+  ? "Ảnh đại diện"
+  : index === 3
+  ? "Ảnh CTA"
+  : `Ảnh trong bài ${index}`}
             </p>
 
             <p className="mt-1 line-clamp-2 text-xs font-semibold text-neutral-500">

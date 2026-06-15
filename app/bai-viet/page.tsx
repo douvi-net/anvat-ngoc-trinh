@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "Bài viết ăn vặt Quận 6 | Ăn Vặt Ngọc Trinh",
   description:
@@ -30,8 +33,8 @@ type Post = {
   focus_keyword: string | null;
 };
 
-export default async function BaiVietPage() {
-  const { data: posts } = await supabase
+async function getPosts() {
+  const { data, error } = await supabase
     .from("posts")
     .select(
       "id,title,slug,excerpt,category,image_url,published_at,featured,focus_keyword"
@@ -42,9 +45,22 @@ export default async function BaiVietPage() {
     .order("sort_order", { ascending: true })
     .order("published_at", { ascending: false });
 
-  const featuredPost = posts?.find((post) => post.featured) || posts?.[0];
-  const normalPosts =
-    posts?.filter((post) => post.id !== featuredPost?.id) || [];
+  if (error) {
+    console.error("Load posts error:", error.message);
+    return [];
+  }
+
+  return (data || []) as Post[];
+}
+
+export default async function BaiVietPage() {
+  const posts = await getPosts();
+
+  const featuredPost = posts.length > 0 ? posts.find((p) => p.featured) || posts[0] : null;
+
+  const normalPosts = featuredPost
+    ? posts.filter((post) => post.id !== featuredPost.id)
+    : posts;
 
   const blogSchema = {
     "@context": "https://schema.org",
@@ -104,7 +120,7 @@ export default async function BaiVietPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-12 md:px-8">
-        {!posts || posts.length === 0 ? (
+        {posts.length === 0 ? (
           <div className="rounded-[32px] bg-[#F5FFF8] p-8 text-center">
             <p className="text-xl font-black text-[#06113C]">
               Chưa có bài viết nào.
@@ -131,7 +147,7 @@ export default async function BaiVietPage() {
                 <div className="p-6 md:p-8">
                   <div className="flex flex-wrap gap-2">
                     <span className="w-fit rounded-full bg-[#00B14F] px-4 py-2 text-xs font-black text-white">
-                      Bài nổi bật
+                      {featuredPost.featured ? "Bài nổi bật" : "Bài mới"}
                     </span>
 
                     <span className="w-fit rounded-full bg-white px-4 py-2 text-xs font-black text-[#00B14F]">
@@ -185,7 +201,7 @@ export default async function BaiVietPage() {
                 </div>
 
                 <div className="grid gap-5 md:grid-cols-3">
-                  {normalPosts.map((post: Post) => (
+                  {normalPosts.map((post) => (
                     <article
                       key={post.id}
                       className="overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-xl shadow-neutral-950/5"

@@ -18,6 +18,11 @@ type Post = {
   focus_keyword: string | null;
 };
 
+type FaqItem = {
+  question: string;
+  answer: string;
+};
+
 type PageProps = {
   params: Promise<{
     slug: string;
@@ -40,6 +45,39 @@ async function getPost(slug: string) {
 
 function isHtml(content: string) {
   return /<\/?[a-z][\s\S]*>/i.test(content);
+}
+
+function stripHtml(html: string) {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractFaqFromHtml(content: string): FaqItem[] {
+  const faqs: FaqItem[] = [];
+
+  const faqSectionMatch = content.match(
+    /<h2[^>]*>\s*(Câu hỏi thường gặp|FAQ|Hỏi đáp)[\s\S]*?<\/h2>([\s\S]*)/i
+  );
+
+  const faqHtml = faqSectionMatch ? faqSectionMatch[2] : content;
+
+  const h3Regex = /<h3[^>]*>(.*?)<\/h3>([\s\S]*?)(?=<h3[^>]*>|$)/gi;
+
+  let match;
+
+  while ((match = h3Regex.exec(faqHtml)) !== null) {
+    const question = stripHtml(match[1]);
+    const answerBlock = match[2];
+    const answer = stripHtml(answerBlock);
+
+    if (question && answer) {
+      faqs.push({
+        question,
+        answer,
+      });
+    }
+  }
+
+  return faqs.slice(0, 5);
 }
 
 export async function generateMetadata({
@@ -102,6 +140,7 @@ export default async function PostDetailPage({ params }: PageProps) {
 
   const content = post.content || "";
   const contentIsHtml = isHtml(content);
+  const faqs = contentIsHtml ? extractFaqFromHtml(content) : [];
 
   const paragraphs = content
     .split("\n")
@@ -169,6 +208,22 @@ export default async function PostDetailPage({ params }: PageProps) {
     ],
   };
 
+  const faqSchema =
+    faqs.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: faqs.map((faq) => ({
+            "@type": "Question",
+            name: faq.question,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: faq.answer,
+            },
+          })),
+        }
+      : null;
+
   return (
     <main className="bg-white">
       <script
@@ -184,6 +239,15 @@ export default async function PostDetailPage({ params }: PageProps) {
           __html: JSON.stringify(breadcrumbSchema),
         }}
       />
+
+      {faqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(faqSchema),
+          }}
+        />
+      )}
 
       <section className="bg-[#00B14F] px-4 py-14 text-white md:px-8">
         <div className="mx-auto max-w-4xl">
@@ -231,7 +295,7 @@ export default async function PostDetailPage({ params }: PageProps) {
             </p>
           ) : contentIsHtml ? (
             <div
-              className="space-y-5 text-lg font-semibold leading-9 text-neutral-700 [&_a]:font-black [&_a]:text-[#00B14F] [&_h2]:mt-10 [&_h2]:text-3xl [&_h2]:font-black [&_h2]:leading-tight [&_h2]:text-[#06113C] [&_h3]:mt-7 [&_h3]:text-2xl [&_h3]:font-black [&_h3]:text-[#06113C] [&_li]:ml-6 [&_li]:list-disc [&_p]:mb-5 [&_strong]:font-black [&_strong]:text-[#06113C] [&_ul]:space-y-2"
+              className="space-y-5 text-lg font-semibold leading-9 text-neutral-700 [&_a]:font-black [&_a]:text-[#00B14F] [&_figcaption]:mt-2 [&_figcaption]:text-center [&_figcaption]:text-sm [&_figcaption]:font-semibold [&_figcaption]:text-neutral-500 [&_figure]:my-8 [&_figure_img]:rounded-[28px] [&_figure_img]:shadow-xl [&_figure_img]:shadow-neutral-950/5 [&_h2]:mt-10 [&_h2]:text-3xl [&_h2]:font-black [&_h2]:leading-tight [&_h2]:text-[#06113C] [&_h3]:mt-7 [&_h3]:text-2xl [&_h3]:font-black [&_h3]:text-[#06113C] [&_li]:ml-6 [&_li]:list-disc [&_p]:mb-5 [&_strong]:font-black [&_strong]:text-[#06113C] [&_ul]:space-y-2"
               dangerouslySetInnerHTML={{ __html: content }}
             />
           ) : (
@@ -245,6 +309,25 @@ export default async function PostDetailPage({ params }: PageProps) {
             ))
           )}
         </article>
+
+        {faqs.length > 0 && (
+          <div className="mt-12 rounded-[32px] bg-[#F5FFF8] p-6">
+            <h2 className="text-3xl font-black text-[#06113C]">
+              Câu hỏi thường gặp
+            </h2>
+
+            <div className="mt-5 space-y-3">
+              {faqs.map((faq) => (
+                <div key={faq.question} className="rounded-2xl bg-white p-4">
+                  <h3 className="font-black text-[#06113C]">{faq.question}</h3>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-neutral-600">
+                    {faq.answer}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mt-10 rounded-[32px] bg-[#F5FFF8] p-6">
           <p className="text-xl font-black text-[#06113C]">

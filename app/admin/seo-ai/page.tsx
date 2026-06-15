@@ -43,16 +43,72 @@ export default function SeoAiPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
+  function imageFigure(image: { url: string; alt: string; caption: string }) {
+    return `
+  <figure>
+    <img src="${image.url}" alt="${image.alt}" loading="lazy" width="1200" height="800" />
+    <figcaption>${image.caption}</figcaption>
+  </figure>
+  `;
+  }
+  
+  function insertImagesIntoContent(
+    content: string,
+    images: { url: string; alt: string; caption: string }[]
+  ) {
+    let html = content;
+  
+    if (images[1]) html = html.replace("{{IMAGE_1}}", imageFigure(images[1]));
+    if (images[2]) html = html.replace("{{IMAGE_2}}", imageFigure(images[2]));
+    if (images[3]) html = html.replace("{{IMAGE_3}}", imageFigure(images[3]));
+  
+    return html
+      .replaceAll("{{IMAGE_1}}", "")
+      .replaceAll("{{IMAGE_2}}", "")
+      .replaceAll("{{IMAGE_3}}", "");
+  }
+  
+  async function generateOneImage(payload: {
+    slug: string;
+    name: string;
+    prompt: string;
+    alt: string;
+    caption: string;
+  }) {
+    const res = await fetch("/api/admin/seo-ai/generate-image", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  
+    const text = await res.text();
+  
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(text || "API tạo ảnh không trả JSON");
+    }
+  
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || "Tạo ảnh thất bại");
+    }
+  
+    return data.image;
+  }
+  
   async function generateArticle() {
     if (!keyword.trim()) {
       setMessage("❌ Nhập từ khóa trước.");
       return;
     }
-
+  
     try {
       setGenerating(true);
-      setMessage("");
-
+      setMessage("Đang tạo nội dung bài viết...");
+  
       const res = await fetch("/api/admin/seo-ai/generate", {
         method: "POST",
         headers: {
@@ -62,26 +118,91 @@ export default function SeoAiPage() {
           keyword: keyword.trim(),
         }),
       });
-
+  
       const text = await res.text();
-
-let data;
-try {
-  data = JSON.parse(text);
-} catch {
-  throw new Error(text || "API không trả JSON");
-}
-
+  
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text || "API không trả JSON");
+      }
+  
       if (!res.ok) {
         throw new Error(data.detail || data.error || "Tạo bài viết thất bại");
       }
-
-      setArticle({
+  
+      const aiArticle = {
         ...emptyArticle,
         ...data.article,
+        images: [],
+        image_url: "",
+      };
+  
+      setArticle(aiArticle);
+  
+      setMessage("Đang tạo 4 ảnh AI cho bài viết...");
+  
+      const imagePayloads = [
+        {
+          name: "featured",
+          prompt: data.article.featured_image_prompt,
+          alt: data.article.featured_alt || data.article.title,
+          caption: data.article.featured_caption || data.article.excerpt,
+        },
+        {
+          name: "inline-1",
+          prompt: data.article.inline_image_1_prompt,
+          alt: data.article.inline_image_1_alt || data.article.title,
+          caption: data.article.inline_image_1_caption || "",
+        },
+        {
+          name: "inline-2",
+          prompt: data.article.inline_image_2_prompt,
+          alt: data.article.inline_image_2_alt || data.article.title,
+          caption: data.article.inline_image_2_caption || "",
+        },
+        {
+          name: "cta",
+          prompt: data.article.cta_image_prompt,
+          alt: data.article.cta_image_alt || data.article.title,
+          caption: data.article.cta_image_caption || "",
+        },
+      ];
+  
+      const images: {
+        url: string;
+        alt: string;
+        caption: string;
+      }[] = [];
+  
+      for (let i = 0; i < imagePayloads.length; i++) {
+        setMessage(`Đang tạo ảnh ${i + 1}/4...`);
+  
+        const image = await generateOneImage({
+          slug: data.article.slug,
+          ...imagePayloads[i],
+        });
+  
+        images.push(image);
+  
+        setArticle((prev) => ({
+          ...prev,
+          images,
+          image_url: images[0]?.url || "",
+        }));
+      }
+  
+      const finalContent = insertImagesIntoContent(data.article.content, images);
+  
+      setArticle({
+        ...aiArticle,
+        content: finalContent,
+        image_url: images[0]?.url || "",
+        images,
       });
-
-      setMessage("✅ AI đã tạo bài viết. Kiểm tra lại rồi lưu nháp.");
+  
+      setMessage("✅ AI đã tạo bài viết + 4 ảnh. Kiểm tra lại rồi lưu nháp.");
     } catch (error) {
       setMessage(`❌ ${String(error)}`);
     } finally {

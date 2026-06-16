@@ -25,6 +25,24 @@ function initFirebaseAdmin() {
   });
 }
 
+function formatScheduledTime(value: string | null) {
+  if (!value) return "";
+
+  try {
+    const date = new Date(value);
+
+    return date.toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 export async function POST(request: Request) {
   try {
     initFirebaseAdmin();
@@ -32,9 +50,11 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const orderCode = body.orderCode || "Đơn mới";
-    const total = body.total || 0;
+    const total = Number(body.total || 0);
     const paymentMethod = body.paymentMethod || "cod";
     const status = body.status || "new";
+    const orderType = body.orderType || "now";
+    const scheduledAt = body.scheduledAt || null;
 
     const { data: devices, error } = await supabaseAdmin
       .from("merchant_devices")
@@ -54,19 +74,31 @@ export async function POST(request: Request) {
       });
     }
 
+    const isScheduled = orderType === "scheduled";
+    const scheduledText = formatScheduledTime(scheduledAt);
+
     const title =
       status === "waiting_payment"
         ? "💳 Đơn chờ thanh toán"
+        : isScheduled
+        ? "🕒 Có đơn đặt trước"
         : "🔔 Đơn hàng mới";
 
     const bodyText =
       paymentMethod === "momo"
         ? `#${orderCode} - Khách chọn chuyển khoản`
-        : `#${orderCode} - ${Number(total).toLocaleString("vi-VN")}đ`;
+        : isScheduled
+        ? `#${orderCode} - ${total.toLocaleString("vi-VN")}đ - Giao lúc ${scheduledText}`
+        : `#${orderCode} - ${total.toLocaleString("vi-VN")}đ`;
 
     const result = await getMessaging().sendEachForMulticast({
       tokens,
-    
+
+      notification: {
+        title,
+        body: bodyText,
+      },
+
       data: {
         title,
         body: bodyText,
@@ -74,14 +106,20 @@ export async function POST(request: Request) {
         total: String(total),
         payment_method: String(paymentMethod),
         status: String(status),
+        order_type: String(orderType),
+        scheduled_at: scheduledAt ? String(scheduledAt) : "",
       },
+
       android: {
         priority: "high",
+        ttl: 60 * 60 * 1000,
         notification: {
           channelId: "avnt_new_order_channel_v5",
           sound: "default",
-          priority: "high",
+          priority: "max",
           visibility: "public",
+          defaultSound: true,
+          defaultVibrateTimings: true,
         },
       },
     });
@@ -90,6 +128,10 @@ export async function POST(request: Request) {
       success: true,
       successCount: result.successCount,
       failureCount: result.failureCount,
+      responses: result.responses.map((item) => ({
+        success: item.success,
+        error: item.error?.message || null,
+      })),
     });
   } catch (error) {
     console.error("notify-new-order error:", error);
@@ -98,6 +140,7 @@ export async function POST(request: Request) {
       {
         success: false,
         message: "Lỗi gửi thông báo",
+        detail: String(error),
       },
       { status: 500 }
     );

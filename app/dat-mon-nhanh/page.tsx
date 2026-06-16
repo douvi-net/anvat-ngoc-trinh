@@ -517,7 +517,7 @@ setUsePointsDiscount(0);
             cartKey,
             quantity: 1,
             selectedToppings: [],
-            spicyLevel: "Cay vừa",
+            spicyLevel: "",
             itemNote: "",
           },
         ];
@@ -1332,7 +1332,7 @@ scheduled_at:
           unit_price: getItemUnitTotal(item),
           total: getItemUnitTotal(item) * item.quantity,
           note: item.itemNote || null,
-          spicy_level: item.spicyLevel,
+          spicy_level: item.spicyLevel || null,
           toppings: item.selectedToppings.map((topping) => ({
             id: topping.id,
             name: topping.name,
@@ -1895,9 +1895,11 @@ setScheduledNote("");
                           </p>
                         )}
 
-                        <p className="mt-1 text-xs font-bold text-neutral-500">
-                        Tùy chọn: {item.spicyLevel}
-                        </p>
+{item.spicyLevel && (
+  <p className="mt-1 text-xs font-bold text-neutral-500">
+    Tùy chọn: {item.spicyLevel}
+  </p>
+)}
 
                         {item.itemNote && (
                           <p className="mt-1 text-xs font-bold text-neutral-500">

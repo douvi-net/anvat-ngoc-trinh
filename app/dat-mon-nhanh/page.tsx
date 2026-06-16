@@ -1287,7 +1287,7 @@ total_spent: 0,
           discount_amount: discountAmount + shippingDiscount + usePointsDiscount,
 
           points_used: totalPointsUsed,
-          
+          points_earned: rewardPoints,
           points_discount: usePointsDiscount,
           
           coupon_code: selectedCoupon?.code || null,
@@ -1375,23 +1375,13 @@ scheduled_at:
         });
       }
 
-      const currentPoints = Number(customer.total_points || customerPoints || 0);
-      const currentSpent = Number(customer.total_spent || 0);
-      
-      const newTotalPoints = Math.max(
-        0,
-        currentPoints - totalPointsUsed + rewardPoints
-      );
-      
       await supabase
-        .from("customers")
-        .update({
-          total_orders: (customer.total_orders || 0) + 1,
-          total_points: newTotalPoints,
-          total_spent: currentSpent + totalAfterPoints,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", customer.id);
+      .from("customers")
+      .update({
+        total_orders: (customer.total_orders || 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", customer.id);
 
       await fetch("/api/notify-new-order", {
         method: "POST",

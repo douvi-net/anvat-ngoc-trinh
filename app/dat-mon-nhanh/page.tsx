@@ -1220,7 +1220,6 @@ const amountToNextShippingPromo = nextShippingPromotion
       alert("Quà đã chọn chưa đủ điều kiện. Anh/chị bỏ quà hoặc chọn quà khác giúp em nha.");
       return;
     }
-    setSubmitting(true);
     const scheduledDateTime = getScheduledDateTime();
 
     if (orderType === "scheduled") {
@@ -1236,6 +1235,8 @@ const amountToNextShippingPromo = nextShippingPromotion
         return;
       }
     }
+    
+    setSubmitting(true);
     try {
       saveCustomerLocal();
 
@@ -1260,6 +1261,11 @@ const amountToNextShippingPromo = nextShippingPromotion
           customer_phone: customerPhone.trim(),
           customer_address: customerAddress.trim(),
           note: [
+            orderType === "scheduled" && scheduledDateTime
+              ? `⏰ Đơn đặt trước: ${scheduledDateTime.toLocaleString("vi-VN")}${
+                  scheduledNote.trim() ? `\nGhi chú đặt trước: ${scheduledNote.trim()}` : ""
+                }`
+              : "",
             note.trim(),
             latestFlag?.status === "warning"
               ? `⚠️ Khách cần xác nhận trước: ${latestFlag.note || "Admin đã đánh dấu cần xác nhận."}`
@@ -1395,6 +1401,10 @@ scheduled_note: scheduledNote.trim() || null,
       setNote("");
       setSelectedCoupon(null);
       setSelectedRewardId("");
+      setOrderType("now");
+setScheduledDate("");
+setScheduledTime("");
+setScheduledNote("");
       setCheckoutOpen(false);
       playSound("success");
       router.push(`/tra-cuu-don?code=${orderCode}`);

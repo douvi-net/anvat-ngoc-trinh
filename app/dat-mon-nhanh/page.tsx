@@ -50,6 +50,7 @@ type Customer = {
   last_lat?: number | null;
   last_lng?: number | null;
   total_orders: number | null;
+  total_points?: number | null;
 };
 
 type ShippingZone = {
@@ -848,6 +849,10 @@ const totalAfterPoints = Math.max(
 );
 const estimatedReceive = getEstimatedReceiveTime();
 const rewardPoints = Math.floor(totalAfterPoints / 10000);
+const pointsDiscountUsed =
+  usePointsDiscount === 10000 ? 100 : usePointsDiscount === 5000 ? 50 : 0;
+
+const totalPointsUsed = pointsDiscountUsed + rewardPointsUsed;
 const nextPointTarget =
   Math.ceil(totalAfterPoints / 10000) * 10000;
 
@@ -988,16 +993,17 @@ const amountToNextShippingPromo = nextShippingPromotion
     }
 
     const { data, error } = await supabase
-      .from("customers")
-      .insert({
-        name: customerName.trim(),
-        phone: cleanPhone,
-        last_address: customerAddress.trim(),
-        last_payment_method: paymentMethod,
-        last_lat: deliveryLat,
-        last_lng: deliveryLng,
-        total_orders: 0,
-      })
+  .from("customers")
+  .insert({
+    name: customerName.trim(),
+    phone: cleanPhone,
+    last_address: customerAddress.trim(),
+    last_payment_method: paymentMethod,
+    last_lat: deliveryLat,
+    last_lng: deliveryLng,
+    total_orders: 0,
+    total_points: 0,
+  })
       .select()
       .single();
 
@@ -1278,12 +1284,7 @@ const amountToNextShippingPromo = nextShippingPromotion
           shipping_fee: finalShippingFee,
           discount_amount: discountAmount + shippingDiscount + usePointsDiscount,
 
-          points_used:
-            (usePointsDiscount === 10000
-              ? 100
-              : usePointsDiscount === 5000
-              ? 50
-              : 0) + rewardPointsUsed,
+          points_used: totalPointsUsed,
           
           points_discount: usePointsDiscount,
           
@@ -1311,7 +1312,8 @@ scheduled_at:
   orderType === "scheduled" && scheduledDateTime
     ? scheduledDateTime.toISOString()
     : null,
-scheduled_note: scheduledNote.trim() || null,
+    scheduled_note:
+    orderType === "scheduled" ? scheduledNote.trim() || null : null,
         })
         .select()
         .single();
@@ -1371,13 +1373,21 @@ scheduled_note: scheduledNote.trim() || null,
         });
       }
 
-      await supabase
-        .from("customers")
-        .update({
-          total_orders: (customer.total_orders || 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", customer.id);
+      const currentPoints = Number(customer.total_points || customerPoints || 0);
+
+const newTotalPoints = Math.max(
+  0,
+  currentPoints - totalPointsUsed + rewardPoints
+);
+
+await supabase
+  .from("customers")
+  .update({
+    total_orders: (customer.total_orders || 0) + 1,
+    total_points: newTotalPoints,
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", customer.id);
 
       await fetch("/api/notify-new-order", {
         method: "POST",
@@ -1386,9 +1396,15 @@ scheduled_note: scheduledNote.trim() || null,
         },
         body: JSON.stringify({
           orderCode,
-          total,
+          total: totalAfterPoints,
           paymentMethod,
+          orderType,
+          scheduledAt:
+            orderType === "scheduled" && scheduledDateTime
+              ? scheduledDateTime.toISOString()
+              : null,
           status:
+          
             paymentMethod === "momo"
               ? "waiting_payment"
               : latestFlag?.status === "warning"

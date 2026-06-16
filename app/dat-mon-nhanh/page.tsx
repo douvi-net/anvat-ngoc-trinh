@@ -190,6 +190,10 @@ const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thư�
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [orderType, setOrderType] = useState<"now" | "scheduled">("now");
+const [scheduledDate, setScheduledDate] = useState("");
+const [scheduledTime, setScheduledTime] = useState("");
+const [scheduledNote, setScheduledNote] = useState("");
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [routeLoading, setRouteLoading] = useState(false);
 const [routeMessage, setRouteMessage] = useState("");
@@ -1146,7 +1150,16 @@ const amountToNextShippingPromo = nextShippingPromotion
       minute: "2-digit",
     });
   }
+  function getScheduledDateTime() {
+    if (orderType !== "scheduled") return null;
+    if (!scheduledDate || !scheduledTime) return null;
   
+    const date = new Date(`${scheduledDate}T${scheduledTime}:00`);
+  
+    if (Number.isNaN(date.getTime())) return null;
+  
+    return date;
+  }
   function getEstimatedReceiveTime() {
     const prepMinutes = estimatePreparationMinutes(cartCount);
     const deliveryMinutes = estimateDeliveryMinutes(deliveryDistanceKm);
@@ -1208,7 +1221,21 @@ const amountToNextShippingPromo = nextShippingPromotion
       return;
     }
     setSubmitting(true);
+    const scheduledDateTime = getScheduledDateTime();
 
+    if (orderType === "scheduled") {
+      if (!scheduledDateTime) {
+        alert("Anh/chị chọn ngày và giờ nhận món giúp em nha.");
+        return;
+      }
+    
+      const minTime = new Date(Date.now() + 30 * 60 * 1000);
+    
+      if (scheduledDateTime < minTime) {
+        alert("Đơn đặt trước cần cách hiện tại ít nhất 30 phút nha.");
+        return;
+      }
+    }
     try {
       saveCustomerLocal();
 
@@ -1273,6 +1300,12 @@ const amountToNextShippingPromo = nextShippingPromotion
           estimated_delivery_from: estimatedFrom.toISOString(),
           estimated_delivery_to: estimatedTo.toISOString(),
           confirmed_at: paymentMethod === "cod" ? new Date().toISOString() : null,
+          order_type: orderType,
+scheduled_at:
+  orderType === "scheduled" && scheduledDateTime
+    ? scheduledDateTime.toISOString()
+    : null,
+scheduled_note: scheduledNote.trim() || null,
         })
         .select()
         .single();
@@ -2090,7 +2123,61 @@ const amountToNextShippingPromo = nextShippingPromotion
               <p className="font-black text-[#06113C]">Giao hàng & thanh toán</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-        
+              <div className="col-span-2 rounded-2xl bg-white p-4 ring-1 ring-black/10">
+  <p className="font-black text-[#06113C]">Thời gian nhận món</p>
+
+  <div className="mt-3 grid grid-cols-2 gap-2">
+    <button
+      type="button"
+      onClick={() => setOrderType("now")}
+      className={`rounded-xl px-4 py-3 text-sm font-black ${
+        orderType === "now"
+          ? "bg-[#00B14F] text-white"
+          : "bg-[#F5FFF8] text-[#06113C]"
+      }`}
+    >
+      Càng sớm càng tốt
+    </button>
+
+    <button
+      type="button"
+      onClick={() => setOrderType("scheduled")}
+      className={`rounded-xl px-4 py-3 text-sm font-black ${
+        orderType === "scheduled"
+          ? "bg-[#00B14F] text-white"
+          : "bg-[#F5FFF8] text-[#06113C]"
+      }`}
+    >
+      Đặt trước
+    </button>
+  </div>
+
+  {orderType === "scheduled" && (
+    <div className="mt-4 grid grid-cols-2 gap-3">
+      <input
+        type="date"
+        value={scheduledDate}
+        onChange={(e) => setScheduledDate(e.target.value)}
+        className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+      />
+
+      <input
+        type="time"
+        value={scheduledTime}
+        onChange={(e) => setScheduledTime(e.target.value)}
+        className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
+      />
+
+      <textarea
+        value={scheduledNote}
+        onChange={(e) => setScheduledNote(e.target.value)}
+        placeholder="Ghi chú thời gian, ví dụ: giao đúng 18:30 giúp em"
+        rows={2}
+        className="col-span-2 rounded-2xl border border-black/10 bg-white px-4 py-4 text-sm font-bold outline-none focus:border-[#00B14F]"
+      />
+    </div>
+  )}
+</div>
 
 <select
   value={paymentMethod}
@@ -2521,6 +2608,8 @@ const amountToNextShippingPromo = nextShippingPromotion
                 ? "Số điện thoại đang bị hạn chế"
                 : customerFlag?.status === "warning"
                 ? `Gửi đơn chờ xác nhận · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
+                : orderType === "scheduled"
+                ? `Đặt trước · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
                 : `Đặt hàng · ${totalAfterPoints.toLocaleString("vi-VN")}đ`}
             </button>
           </div>

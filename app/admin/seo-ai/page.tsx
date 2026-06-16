@@ -6,6 +6,12 @@ import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
 import PostEditor from "@/components/PostEditor";
 
+type GeneratedImage = {
+  url: string;
+  alt: string;
+  caption: string;
+};
+
 type Article = {
   title: string;
   slug: string;
@@ -16,11 +22,7 @@ type Article = {
   category: string;
   content: string;
   image_url: string;
-images?: {
-  url: string;
-  alt: string;
-  caption: string;
-}[];
+  images: GeneratedImage[];
 };
 
 const emptyArticle: Article = {
@@ -33,8 +35,98 @@ const emptyArticle: Article = {
   category: "Ăn vặt Quận 6",
   content: "",
   image_url: "",
-images: [],
+  images: [],
 };
+
+function stripHtml(html: string) {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function getWordCount(content: string) {
+  const text = stripHtml(content);
+  if (!text) return 0;
+  return text.split(/\s+/).length;
+}
+
+function getSeoChecks(article: Article) {
+  const keyword = article.focus_keyword.trim().toLowerCase();
+
+  const checks = [
+    { label: "Có tiêu đề bài viết", ok: article.title.trim().length >= 20, point: 10 },
+    { label: "Có slug URL", ok: Boolean(article.slug.trim()), point: 8 },
+    {
+      label: "SEO title 20–60 ký tự",
+      ok: article.seo_title.trim().length >= 20 && article.seo_title.trim().length <= 60,
+      point: 12,
+    },
+    {
+      label: "Meta description 80–155 ký tự",
+      ok:
+        article.seo_description.trim().length >= 80 &&
+        article.seo_description.trim().length <= 155,
+      point: 12,
+    },
+    { label: "Có focus keyword", ok: Boolean(keyword), point: 8 },
+    {
+      label: "Keyword có trong tiêu đề",
+      ok: keyword ? article.title.toLowerCase().includes(keyword) : false,
+      point: 8,
+    },
+    {
+      label: "Keyword có trong meta",
+      ok: keyword ? article.seo_description.toLowerCase().includes(keyword) : false,
+      point: 8,
+    },
+    { label: "Bài viết trên 900 từ", ok: getWordCount(article.content) >= 900, point: 10 },
+    {
+      label: "Có ít nhất 2 thẻ H2",
+      ok: (article.content.match(/<h2/gi) || []).length >= 2,
+      point: 8,
+    },
+    {
+      label: "Có FAQ cuối bài",
+      ok:
+        article.content.toLowerCase().includes("câu hỏi thường gặp") ||
+        article.content.toLowerCase().includes("faq"),
+      point: 6,
+    },
+    {
+      label: "Có link đặt món",
+      ok: article.content.includes("/dat-mon-nhanh"),
+      point: 5,
+    },
+    {
+      label: "Có đủ 3 ảnh",
+      ok: article.images.length >= 3,
+      point: 5,
+    },
+  ];
+
+  const score = checks.reduce((total, item) => total + (item.ok ? item.point : 0), 0);
+
+  return {
+    score: Math.min(score, 100),
+    checks,
+  };
+}
+
+function imageFigure(image: GeneratedImage) {
+  return `
+<figure>
+  <img src="${image.url}" alt="${image.alt}" loading="lazy" width="1200" height="800" />
+  <figcaption>${image.caption}</figcaption>
+</figure>
+`;
+}
+
+function insertImagesIntoContent(content: string, images: GeneratedImage[]) {
+  let html = content;
+
+  if (images[1]) html = html.replace("{{IMAGE_1}}", imageFigure(images[1]));
+  if (images[2]) html = html.replace("{{IMAGE_2}}", imageFigure(images[2]));
+
+  return html.replaceAll("{{IMAGE_1}}", "").replaceAll("{{IMAGE_2}}", "");
+}
 
 export default function SeoAiPage() {
   const [keyword, setKeyword] = useState("");
@@ -43,31 +135,8 @@ export default function SeoAiPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  function imageFigure(image: { url: string; alt: string; caption: string }) {
-    return `
-  <figure>
-    <img src="${image.url}" alt="${image.alt}" loading="lazy" width="1200" height="800" />
-    <figcaption>${image.caption}</figcaption>
-  </figure>
-  `;
-  }
-  
-  function insertImagesIntoContent(
-    content: string,
-    images: { url: string; alt: string; caption: string }[]
-  ) {
-    let html = content;
-  
-    if (images[1]) html = html.replace("{{IMAGE_1}}", imageFigure(images[1]));
-    if (images[2]) html = html.replace("{{IMAGE_2}}", imageFigure(images[2]));
-    if (images[3]) html = html.replace("{{IMAGE_3}}", imageFigure(images[3]));
-  
-    return html
-      .replaceAll("{{IMAGE_1}}", "")
-      .replaceAll("{{IMAGE_2}}", "")
-      .replaceAll("{{IMAGE_3}}", "");
-  }
-  
+  const seoResult = getSeoChecks(article);
+
   async function generateOneImage(payload: {
     slug: string;
     name: string;
@@ -82,33 +151,33 @@ export default function SeoAiPage() {
       },
       body: JSON.stringify(payload),
     });
-  
+
     const text = await res.text();
-  
+
     let data;
     try {
       data = JSON.parse(text);
     } catch {
       throw new Error(text || "API tạo ảnh không trả JSON");
     }
-  
+
     if (!res.ok) {
       throw new Error(data.detail || data.error || "Tạo ảnh thất bại");
     }
-  
-    return data.image;
+
+    return data.image as GeneratedImage;
   }
-  
+
   async function generateArticle() {
     if (!keyword.trim()) {
       setMessage("❌ Nhập từ khóa trước.");
       return;
     }
-  
+
     try {
       setGenerating(true);
       setMessage("Đang tạo nội dung bài viết...");
-  
+
       const res = await fetch("/api/admin/seo-ai/generate", {
         method: "POST",
         headers: {
@@ -118,31 +187,30 @@ export default function SeoAiPage() {
           keyword: keyword.trim(),
         }),
       });
-  
+
       const text = await res.text();
-  
+
       let data;
       try {
         data = JSON.parse(text);
       } catch {
         throw new Error(text || "API không trả JSON");
       }
-  
+
       if (!res.ok) {
         throw new Error(data.detail || data.error || "Tạo bài viết thất bại");
       }
-  
-      const aiArticle = {
+
+      const aiArticle: Article = {
         ...emptyArticle,
         ...data.article,
         images: [],
         image_url: "",
       };
-  
+
       setArticle(aiArticle);
-  
-      setMessage("Đang tạo 4 ảnh AI cho bài viết...");
-  
+      setMessage("Đang tạo 3 ảnh AI cho bài viết...");
+
       const imagePayloads = [
         {
           name: "featured",
@@ -157,52 +225,42 @@ export default function SeoAiPage() {
           caption: data.article.inline_image_1_caption || "",
         },
         {
-          name: "inline-2",
-          prompt: data.article.inline_image_2_prompt,
-          alt: data.article.inline_image_2_alt || data.article.title,
-          caption: data.article.inline_image_2_caption || "",
-        },
-        {
           name: "cta",
           prompt: data.article.cta_image_prompt,
           alt: data.article.cta_image_alt || data.article.title,
           caption: data.article.cta_image_caption || "",
         },
       ];
-  
-      const images: {
-        url: string;
-        alt: string;
-        caption: string;
-      }[] = [];
-  
+
+      const images: GeneratedImage[] = [];
+
       for (let i = 0; i < imagePayloads.length; i++) {
-        setMessage(`Đang tạo ảnh ${i + 1}/4...`);
-  
+        setMessage(`Đang tạo ảnh ${i + 1}/3...`);
+
         const image = await generateOneImage({
           slug: data.article.slug,
           ...imagePayloads[i],
         });
-  
+
         images.push(image);
-  
+
         setArticle((prev) => ({
           ...prev,
-          images,
+          images: [...images],
           image_url: images[0]?.url || "",
         }));
       }
-  
+
       const finalContent = insertImagesIntoContent(data.article.content, images);
-  
+
       setArticle({
         ...aiArticle,
         content: finalContent,
         image_url: images[0]?.url || "",
         images,
       });
-  
-      setMessage("✅ AI đã tạo bài viết + 4 ảnh. Kiểm tra lại rồi lưu nháp.");
+
+      setMessage("✅ AI đã tạo bài viết + 3 ảnh. Kiểm tra lại rồi lưu nháp.");
     } catch (error) {
       setMessage(`❌ ${String(error)}`);
     } finally {
@@ -273,8 +331,7 @@ export default function SeoAiPage() {
           </h1>
 
           <p className="mt-2 text-sm font-semibold text-neutral-500">
-            Tạo bài viết SEO bằng AI, chỉnh sửa lại nội dung rồi lưu vào bản
-            nháp để đăng sau.
+            Tạo bài viết SEO bằng AI, tạo 3 ảnh tự động rồi lưu vào bản nháp.
           </p>
         </div>
 
@@ -299,6 +356,60 @@ export default function SeoAiPage() {
       {message && (
         <div className="mt-6 rounded-[24px] bg-white p-4 text-sm font-black text-[#06113C] shadow-lg shadow-neutral-950/5">
           {message}
+        </div>
+      )}
+
+      {article.title && (
+        <div className="mt-6 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
+            <p className="font-black text-[#00B14F]">SEO Score</p>
+
+            <p
+              className={`mt-2 text-5xl font-black ${
+                seoResult.score >= 80
+                  ? "text-green-600"
+                  : seoResult.score >= 50
+                  ? "text-yellow-600"
+                  : "text-red-600"
+              }`}
+            >
+              {seoResult.score}/100
+            </p>
+
+            <div className="mt-4 space-y-2">
+              {seoResult.checks.map((check) => (
+                <div
+                  key={check.label}
+                  className="flex items-start gap-2 text-sm font-bold"
+                >
+                  <span>{check.ok ? "✅" : "⚠️"}</span>
+                  <span className={check.ok ? "text-[#06113C]" : "text-neutral-500"}>
+                    {check.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
+            <p className="font-black text-[#00B14F]">Google Snippet Preview</p>
+
+            <div className="mt-4 rounded-2xl border border-black/10 bg-white p-4">
+              <p className="text-lg font-semibold text-[#1a0dab]">
+                {article.seo_title || article.title || "SEO title"}
+              </p>
+
+              <p className="mt-1 text-sm text-[#006621]">
+                anvatngoctrinh.vn › bai-viet › {article.slug || "slug-bai-viet"}
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-neutral-600">
+                {article.seo_description ||
+                  article.excerpt ||
+                  "Meta description sẽ hiển thị tại đây."}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -438,42 +549,43 @@ export default function SeoAiPage() {
               value={article.content}
               onChange={(content) => updateField("content", content)}
             />
-            {article.images && article.images.length > 0 && (
-  <div className="rounded-[28px] bg-[#F5FFF8] p-4">
-    <p className="font-black text-[#00B14F]">
-    Ảnh AI đã tạo ({article.images.length}/4)
-    </p>
 
-    <div className="mt-4 grid gap-4 md:grid-cols-3">
-      {article.images.map((image, index) => (
-        <div
-          key={image.url}
-          className="overflow-hidden rounded-[24px] bg-white shadow-lg shadow-neutral-950/5"
-        >
-          <img
-            src={image.url}
-            alt={image.alt}
-            className="h-40 w-full object-cover"
-          />
+            {article.images.length > 0 && (
+              <div className="rounded-[28px] bg-[#F5FFF8] p-4">
+                <p className="font-black text-[#00B14F]">
+                  Ảnh AI đã tạo ({article.images.length}/3)
+                </p>
 
-          <div className="p-3">
-            <p className="text-xs font-black text-[#06113C]">
-            {index === 0
-  ? "Ảnh đại diện"
-  : index === 3
-  ? "Ảnh CTA"
-  : `Ảnh trong bài ${index}`}
-            </p>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  {article.images.map((image, index) => (
+                    <div
+                      key={image.url}
+                      className="overflow-hidden rounded-[24px] bg-white shadow-lg shadow-neutral-950/5"
+                    >
+                      <img
+                        src={image.url}
+                        alt={image.alt}
+                        className="h-40 w-full object-cover"
+                      />
 
-            <p className="mt-1 line-clamp-2 text-xs font-semibold text-neutral-500">
-              {image.alt}
-            </p>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+                      <div className="p-3">
+                        <p className="text-xs font-black text-[#06113C]">
+                          {index === 0
+                            ? "Ảnh đại diện"
+                            : index === 2
+                            ? "Ảnh CTA"
+                            : "Ảnh trong bài"}
+                        </p>
+
+                        <p className="mt-1 line-clamp-2 text-xs font-semibold text-neutral-500">
+                          {image.alt}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </div>

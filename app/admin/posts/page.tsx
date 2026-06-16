@@ -286,116 +286,122 @@ export default function AdminPostsPage() {
 
   async function savePost() {
     if (!form.title.trim()) {
-      setMessage("❌ Nhập tiêu đề bài viết.");
+      alert("Nhập tiêu đề bài viết.");
       return;
     }
-
+  
     if (uploading) {
-      setMessage("❌ Ảnh đang upload, đợi xong rồi lưu bài.");
+      alert("Ảnh đang upload, đợi xong rồi lưu bài.");
       return;
     }
-
-    try {
-      setSaving(true);
-      setMessage("");
-
-      const slug = form.slug.trim() || makeSlug(form.title);
-
-      const payload = {
-        title: form.title.trim(),
-        slug,
-        excerpt: form.excerpt.trim(),
-        content: form.content.trim(),
-        category: form.category.trim(),
-        image_url: form.image_url.trim(),
-        seo_title: form.seo_title.trim(),
-        seo_description: form.seo_description.trim(),
-        focus_keyword: form.focus_keyword.trim(),
-        featured: form.featured,
-        status: form.status,
-        is_active: form.status === "published",
-        sort_order: Number(form.sort_order || 99),
-        published_at:
-          form.status === "published"
-            ? editingPost?.published_at || new Date().toISOString()
-            : null,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (editingPost) {
-        const { error } = await supabase
-          .from("posts")
-          .update(payload)
-          .eq("id", editingPost.id);
-
-        if (error) {
-          setMessage(`❌ Sửa bài viết thất bại: ${error.message}`);
-          return;
-        }
-      } else {
-        const { error } = await supabase.from("posts").insert(payload);
-
-        if (error) {
-          setMessage(`❌ Thêm bài viết thất bại: ${error.message}`);
-          return;
-        }
+  
+    const slug = form.slug.trim() || makeSlug(form.title);
+    const isPublished = form.status === "published";
+  
+    const payload = {
+      title: form.title.trim(),
+      slug,
+      excerpt: form.excerpt.trim(),
+      content: form.content.trim(),
+      category: form.category.trim(),
+      image_url: form.image_url.trim(),
+      status: form.status,
+      is_active: isPublished,
+      sort_order: Number(form.sort_order || 99),
+      published_at: isPublished
+        ? editingPost?.published_at || new Date().toISOString()
+        : null,
+      updated_at: new Date().toISOString(),
+      seo_title: form.seo_title.trim(),
+      seo_description: form.seo_description.trim(),
+      focus_keyword: form.focus_keyword.trim(),
+      featured: form.featured,
+    };
+  
+    if (editingPost) {
+      const { error } = await supabase
+        .from("posts")
+        .update(payload)
+        .eq("id", editingPost.id);
+  
+      if (error) {
+        alert("Sửa bài viết thất bại. Có thể slug bị trùng.");
+        console.error(error);
+        return;
       }
-
-      if (payload.status === "published") {
-        await pingIndexNow([
-          `https://anvatngoctrinh.vn/bai-viet/${slug}`,
-          "https://anvatngoctrinh.vn/bai-viet",
-        ]);
+    } else {
+      const { error } = await supabase.from("posts").insert(payload);
+  
+      if (error) {
+        alert("Thêm bài viết thất bại. Có thể slug bị trùng.");
+        console.error(error);
+        return;
       }
-
-      setMessage("✅ Đã lưu bài viết thành công");
-      setEditingPost(null);
-      setForm(emptyForm);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
-      fetchPosts();
-    } finally {
-      setSaving(false);
     }
+  
+    if (isPublished) {
+      await pingIndexNow([
+        `https://anvatngoctrinh.vn/bai-viet/${slug}`,
+        "https://anvatngoctrinh.vn/bai-viet",
+        "https://anvatngoctrinh.vn/sitemap.xml",
+      ]);
+    }
+  
+    setMessage(
+      isPublished
+        ? "✅ Đã lưu bài viết và ping IndexNow."
+        : "✅ Đã lưu bản nháp."
+    );
+  
+    setEditingPost(null);
+    setForm(emptyForm);
+  
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  
+    fetchPosts();
   }
 
   async function togglePost(post: Post) {
     const nextStatus = post.status === "published" ? "draft" : "published";
-
+    const isPublishing = nextStatus === "published";
+  
     const { error } = await supabase
       .from("posts")
       .update({
         status: nextStatus,
-        is_active: nextStatus === "published",
-        published_at:
-          nextStatus === "published"
-            ? post.published_at || new Date().toISOString()
-            : null,
+        is_active: isPublishing,
+        published_at: isPublishing
+          ? post.published_at || new Date().toISOString()
+          : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", post.id);
-
+  
     if (error) {
-      setMessage(`❌ Không đổi được trạng thái bài viết: ${error.message}`);
+      alert("Không đổi được trạng thái bài viết.");
+      console.error(error);
       return;
     }
-
-    if (nextStatus === "published") {
+  
+    if (isPublishing) {
       await pingIndexNow([
         `https://anvatngoctrinh.vn/bai-viet/${post.slug}`,
         "https://anvatngoctrinh.vn/bai-viet",
+        "https://anvatngoctrinh.vn/sitemap.xml",
       ]);
+  
+      setMessage("✅ Đã đăng bài và ping IndexNow.");
+    } else {
+      await pingIndexNow([
+        "https://anvatngoctrinh.vn/bai-viet",
+        "https://anvatngoctrinh.vn/sitemap.xml",
+      ]);
+  
+      setMessage("✅ Đã chuyển bài về nháp.");
     }
-
-    setMessage(
-      nextStatus === "published"
-        ? "✅ Đã đăng bài và ping IndexNow"
-        : "✅ Đã chuyển bài về nháp"
-    );
-
+  
     fetchPosts();
   }
 

@@ -12,6 +12,7 @@ type Customer = {
   last_payment_method: string | null;
   total_orders: number | null;
   total_points?: number | null;
+  total_spent?: number | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -284,7 +285,8 @@ export default function AdminCustomersPage() {
         pendingGoogleReviewCount: pendingGoogleReviews.length,
         flag,
         flagStatus,
-        totalPoints: Number((customer as any).total_points || 0),
+        totalPoints: Number(customer.total_points || 0),
+totalSpent: Number(customer.total_spent || revenue),
       };
     });
   }, [customers, orders, flags, reviews, googleReviews]);
@@ -681,7 +683,7 @@ export default function AdminCustomersPage() {
                       <div className="rounded-2xl bg-[#F5FFF8] p-4">
                         <p className="text-xs font-black text-neutral-400">Tổng mua</p>
                         <p className="mt-1 text-xl font-black text-[#00B14F]">
-                          {customer.revenue.toLocaleString("vi-VN")}đ
+                        {customer.totalSpent.toLocaleString("vi-VN")}đ
                         </p>
                       </div>
 

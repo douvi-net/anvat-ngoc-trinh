@@ -50,7 +50,8 @@ type Customer = {
   last_lat?: number | null;
   last_lng?: number | null;
   total_orders: number | null;
-  total_points?: number | null;
+total_points?: number | null;
+total_spent?: number | null;
 };
 
 type ShippingZone = {
@@ -1002,7 +1003,8 @@ const amountToNextShippingPromo = nextShippingPromotion
     last_lat: deliveryLat,
     last_lng: deliveryLng,
     total_orders: 0,
-    total_points: 0,
+total_points: 0,
+total_spent: 0,
   })
       .select()
       .single();
@@ -1374,20 +1376,22 @@ scheduled_at:
       }
 
       const currentPoints = Number(customer.total_points || customerPoints || 0);
-
-const newTotalPoints = Math.max(
-  0,
-  currentPoints - totalPointsUsed + rewardPoints
-);
-
-await supabase
-  .from("customers")
-  .update({
-    total_orders: (customer.total_orders || 0) + 1,
-    total_points: newTotalPoints,
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", customer.id);
+      const currentSpent = Number(customer.total_spent || 0);
+      
+      const newTotalPoints = Math.max(
+        0,
+        currentPoints - totalPointsUsed + rewardPoints
+      );
+      
+      await supabase
+        .from("customers")
+        .update({
+          total_orders: (customer.total_orders || 0) + 1,
+          total_points: newTotalPoints,
+          total_spent: currentSpent + totalAfterPoints,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", customer.id);
 
       await fetch("/api/notify-new-order", {
         method: "POST",

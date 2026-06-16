@@ -247,6 +247,8 @@ export default function AdminCustomersPage() {
         (sum, order) => sum + Number(order.total || 0),
         0
       );
+      const finalSpent = Number(customer.total_spent || 0) || revenue;
+const finalOrders = Number(customer.total_orders || 0) || completedOrders.length;
       const activeRevenue = activeOrders.reduce(
         (sum, order) => sum + Number(order.total || 0),
         0
@@ -268,11 +270,13 @@ export default function AdminCustomersPage() {
 
       return {
         ...customer,
-        orderCount: activeOrders.length,
+        orderCount: finalOrders,
         totalOrderCount: customerOrders.length,
         completedOrderCount: completedOrders.length,
         cancelledOrderCount: cancelledOrders.length,
-        revenue,
+        revenue: finalSpent,
+        computedRevenue: revenue,
+      
         activeRevenue,
         lastOrder,
         reviewCount: customerReviews.length,
@@ -685,6 +689,12 @@ totalSpent: Number(customer.total_spent || revenue),
                         <p className="mt-1 text-xl font-black text-[#00B14F]">
                         {customer.totalSpent.toLocaleString("vi-VN")}đ
                         </p>
+                        {customer.totalSpent !== customer.computedRevenue && (
+  <p className="mt-1 text-xs font-bold text-yellow-600">
+    DB: {customer.totalSpent.toLocaleString("vi-VN")}đ · tính lại:{" "}
+    {customer.computedRevenue.toLocaleString("vi-VN")}đ
+  </p>
+)}
                       </div>
 
                       <div className="rounded-2xl bg-[#F5FFF8] p-4">

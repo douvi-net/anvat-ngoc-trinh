@@ -910,14 +910,42 @@ const amountToNextShippingPromo = nextShippingPromotion
 
     return Number(selectedProduct.price) + toppingTotal;
   }, [selectedProduct, selectedToppings]);
-
+  function isNowWithinShopHours(openTime?: string | null, closeTime?: string | null) {
+    if (!openTime || !closeTime) return true;
+  
+    const openParts = openTime.split(":").map(Number);
+    const closeParts = closeTime.split(":").map(Number);
+  
+    if (openParts.length < 2 || closeParts.length < 2) return true;
+  
+    const openMinutes = openParts[0] * 60 + openParts[1];
+    const closeMinutes = closeParts[0] * 60 + closeParts[1];
+  
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  
+    if (openMinutes === closeMinutes) return true;
+  
+    if (openMinutes < closeMinutes) {
+      return nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
+    }
+  
+    return nowMinutes >= openMinutes || nowMinutes <= closeMinutes;
+  }
+  
+  const isWithinShopHours = isNowWithinShopHours(
+    shopSettings?.open_time,
+    shopSettings?.close_time
+  );
   const isShopOpen =
-    shopSettings?.order_status === "closed" ||
-    shopSettings?.order_status === "paused"
-      ? false
-      : shopSettings?.is_open === false
-      ? false
-      : true;
+  shopSettings?.order_status === "closed" ||
+  shopSettings?.order_status === "paused"
+    ? false
+    : shopSettings?.is_open === false
+    ? false
+    : !isWithinShopHours
+    ? false
+    : true;
 
   function applyCoupon(coupon: Coupon) {
     const minOrder = getCouponMinOrder(coupon);

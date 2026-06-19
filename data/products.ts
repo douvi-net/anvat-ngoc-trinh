@@ -8,21 +8,21 @@ export const products = [
   },
   {
     name: "Cuốn trứng tóp mỡ",
-    price: 25000,
+    price: 42000,
     image: "/images/cuon-trung-top-mo.jpg",
     description: "Cuốn mới khi khách đặt, topping thơm béo, dễ ghiền.",
     badge: "BEST SELLER",
   },
   {
     name: "Bánh tráng trộn mỡ hành tóp mỡ",
-    price: 25000,
+    price: 37000,
     image: "/images/banh-trang-tron-mo-hanh-top-mo.jpg",
     description: "Bánh tráng trộn đậm vị, thêm mỡ hành và tóp mỡ giòn.",
     badge: "MÓN HOT",
   },
   {
     name: "Bánh tráng chấm",
-    price: 20000,
+    price: 22000,
     image: "/images/banh-trang-cham.jpg",
     description: "Bánh tráng chấm sốt riêng, hợp ăn vặt buổi chiều và tối.",
     badge: "DỄ GHIỀN",
@@ -36,7 +36,7 @@ export const products = [
   },
   {
     name: "Trà đào",
-    price: 25000,
+    price: 27000,
     image: "/images/tra-dao.jpg",
     description: "Trà đào uống kèm bánh tráng, hợp đặt combo ăn vặt.",
     badge: "NƯỚC UỐNG",

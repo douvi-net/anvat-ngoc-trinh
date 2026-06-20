@@ -12,6 +12,7 @@ type Category = {
 type Expense = {
   id: string;
   expense_date: string;
+  category_id: string | null;
   item_name: string;
   quantity: number;
   unit: string | null;
@@ -72,6 +73,9 @@ export default function ExpensesPage() {
   const [rows, setRows] = useState<FormRow[]>([emptyRow()]);
   const [saving, setSaving] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<FormRow>(emptyRow());
+
   useEffect(() => {
     fetchCategories();
   }, []);
@@ -122,6 +126,10 @@ export default function ExpensesPage() {
     setRows((prev) =>
       prev.map((row, i) => (i === index ? { ...row, [key]: value } : row))
     );
+  }
+
+  function updateEditForm(key: keyof FormRow, value: string | number) {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
   }
 
   function addRow() {
@@ -207,9 +215,81 @@ export default function ExpensesPage() {
       },
     ]);
 
-    setTimeout(() => {
-      fetchExpenses();
-    }, 100);
+    setTimeout(fetchExpenses, 100);
+  }
+
+  function startEdit(item: Expense) {
+    setEditingId(item.id);
+    setEditForm({
+      expense_date: item.expense_date,
+      category_id: item.category_id || "",
+      item_name: item.item_name || "",
+      quantity: Number(item.quantity || 1),
+      unit: item.unit || "",
+      unit_price: Number(item.unit_price || 0),
+      supplier: item.supplier || "",
+      payment_method: item.payment_method || "cash",
+      spender: item.spender || "Trung",
+      branch: item.branch || "Q6",
+      note: item.note || "",
+    });
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(emptyRow());
+  }
+
+  async function updateExpense() {
+    if (!editingId) return;
+
+    if (!editForm.item_name.trim()) {
+      alert("Nhập tên mặt hàng.");
+      return;
+    }
+
+    if (Number(editForm.quantity || 0) <= 0 || Number(editForm.unit_price || 0) <= 0) {
+      alert("Số lượng và đơn giá phải lớn hơn 0.");
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("expenses")
+      .update({
+        expense_date: editForm.expense_date,
+        category_id: editForm.category_id || null,
+        item_name: editForm.item_name.trim(),
+        quantity: Number(editForm.quantity || 1),
+        unit: editForm.unit || null,
+        unit_price: Number(editForm.unit_price || 0),
+        amount: Math.round(
+          Number(editForm.quantity || 1) * Number(editForm.unit_price || 0)
+        ),
+        supplier: editForm.supplier || null,
+        payment_method: editForm.payment_method,
+        spender: editForm.spender,
+        branch: editForm.branch,
+        note: editForm.note || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", editingId);
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setSelectedMonth(editForm.expense_date.slice(0, 7));
+    setEditingId(null);
+    setEditForm(emptyRow());
+
+    setTimeout(fetchExpenses, 100);
   }
 
   async function deleteExpense(id: string) {
@@ -221,6 +301,8 @@ export default function ExpensesPage() {
       alert(error.message);
       return;
     }
+
+    if (editingId === id) cancelEdit();
 
     fetchExpenses();
   }
@@ -237,6 +319,39 @@ export default function ExpensesPage() {
             Nhập bất cứ lúc nào, chỉ cần chọn đúng ngày chi. Danh sách bên dưới hiển thị theo tháng.
           </p>
         </div>
+
+        {editingId && (
+          <section className="rounded-3xl border-2 border-[#00B14F] bg-white p-5 shadow-xl shadow-neutral-950/5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-xl font-black text-[#06113C]">
+                Đang sửa khoản chi
+              </h2>
+
+              <button
+                onClick={cancelEdit}
+                className="rounded-2xl bg-neutral-100 px-5 py-3 text-sm font-black text-neutral-700"
+              >
+                Hủy sửa
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 rounded-2xl bg-[#F9FFFB] p-4 md:grid-cols-12">
+              <ExpenseFormFields
+                row={editForm}
+                categories={categories}
+                update={(key, value) => updateEditForm(key, value)}
+              />
+
+              <button
+                onClick={updateExpense}
+                disabled={saving}
+                className="rounded-xl bg-[#00B14F] px-4 py-3 font-black text-white disabled:opacity-50 md:col-span-2"
+              >
+                {saving ? "Đang cập nhật..." : "Cập nhật"}
+              </button>
+            </div>
+          </section>
+        )}
 
         <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -258,56 +373,10 @@ export default function ExpensesPage() {
                 key={index}
                 className="grid gap-3 rounded-2xl border border-neutral-100 bg-[#F9FFFB] p-4 md:grid-cols-12"
               >
-                <input
-                  type="date"
-                  value={row.expense_date}
-                  onChange={(e) => updateRow(index, "expense_date", e.target.value)}
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
-                />
-
-                <select
-                  value={row.category_id}
-                  onChange={(e) => updateRow(index, "category_id", e.target.value)}
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
-                >
-                  <option value="">Nhóm chi</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  value={row.item_name}
-                  onChange={(e) => updateRow(index, "item_name", e.target.value)}
-                  placeholder="Tên mặt hàng"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-3"
-                />
-
-                <input
-                  type="number"
-                  value={row.quantity}
-                  onChange={(e) => updateRow(index, "quantity", Number(e.target.value))}
-                  placeholder="SL"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-1"
-                />
-
-                <input
-                  value={row.unit}
-                  onChange={(e) => updateRow(index, "unit", e.target.value)}
-                  placeholder="Đơn vị"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-1"
-                />
-
-                <input
-                  type="number"
-                  value={row.unit_price}
-                  onChange={(e) =>
-                    updateRow(index, "unit_price", Number(e.target.value))
-                  }
-                  placeholder="Đơn giá"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+                <ExpenseFormFields
+                  row={row}
+                  categories={categories}
+                  update={(key, value) => updateRow(index, key, value)}
                 />
 
                 <button
@@ -316,52 +385,6 @@ export default function ExpensesPage() {
                 >
                   Xóa
                 </button>
-
-                <input
-                  value={row.supplier}
-                  onChange={(e) => updateRow(index, "supplier", e.target.value)}
-                  placeholder="Nhà cung cấp / chợ"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-3"
-                />
-
-                <select
-                  value={row.payment_method}
-                  onChange={(e) =>
-                    updateRow(index, "payment_method", e.target.value)
-                  }
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
-                >
-                  <option value="cash">Tiền mặt</option>
-                  <option value="bank">Chuyển khoản</option>
-                  <option value="momo">Momo</option>
-                  <option value="other">Khác</option>
-                </select>
-
-                <select
-                  value={row.spender}
-                  onChange={(e) => updateRow(index, "spender", e.target.value)}
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
-                >
-                  <option value="Trung">Trung</option>
-                  <option value="Ngọc Trinh">Ngọc Trinh</option>
-                  <option value="Nhân viên">Nhân viên</option>
-                </select>
-
-                <select
-                  value={row.branch}
-                  onChange={(e) => updateRow(index, "branch", e.target.value)}
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
-                >
-                  <option value="Q6">Q6</option>
-                  <option value="Q1">Q1</option>
-                </select>
-
-                <input
-                  value={row.note}
-                  onChange={(e) => updateRow(index, "note", e.target.value)}
-                  placeholder="Ghi chú"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-4"
-                />
 
                 <div className="rounded-xl bg-white px-3 py-2 text-right font-black md:col-span-2">
                   {money(Number(row.quantity || 0) * Number(row.unit_price || 0))}
@@ -399,7 +422,7 @@ export default function ExpensesPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead>
                 <tr className="bg-[#F5FFF8] text-left">
                   <th className="p-3">Ngày</th>
@@ -418,7 +441,12 @@ export default function ExpensesPage() {
 
               <tbody>
                 {expenses.map((item) => (
-                  <tr key={item.id} className="border-b">
+                  <tr
+                    key={item.id}
+                    className={`border-b ${
+                      editingId === item.id ? "bg-[#E8FFF1]" : ""
+                    }`}
+                  >
                     <td className="p-3 font-bold">{item.expense_date}</td>
                     <td className="p-3">{item.expense_categories?.name || "-"}</td>
                     <td className="p-3 font-black">{item.item_name}</td>
@@ -434,12 +462,21 @@ export default function ExpensesPage() {
                       {money(item.amount)}
                     </td>
                     <td className="p-3 text-right">
-                      <button
-                        onClick={() => deleteExpense(item.id)}
-                        className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-600"
-                      >
-                        Xóa
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => startEdit(item)}
+                          className="rounded-xl bg-[#E8FFF1] px-3 py-2 font-black text-[#00B14F]"
+                        >
+                          Sửa
+                        </button>
+
+                        <button
+                          onClick={() => deleteExpense(item.id)}
+                          className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-600"
+                        >
+                          Xóa
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -460,5 +497,113 @@ export default function ExpensesPage() {
         </section>
       </div>
     </AdminLayout>
+  );
+}
+
+function ExpenseFormFields({
+  row,
+  categories,
+  update,
+}: {
+  row: FormRow;
+  categories: Category[];
+  update: (key: keyof FormRow, value: string | number) => void;
+}) {
+  return (
+    <>
+      <input
+        type="date"
+        value={row.expense_date}
+        onChange={(e) => update("expense_date", e.target.value)}
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+      />
+
+      <select
+        value={row.category_id}
+        onChange={(e) => update("category_id", e.target.value)}
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+      >
+        <option value="">Nhóm chi</option>
+        {categories.map((cat) => (
+          <option key={cat.id} value={cat.id}>
+            {cat.name}
+          </option>
+        ))}
+      </select>
+
+      <input
+        value={row.item_name}
+        onChange={(e) => update("item_name", e.target.value)}
+        placeholder="Tên mặt hàng"
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-3"
+      />
+
+      <input
+        type="number"
+        value={row.quantity}
+        onChange={(e) => update("quantity", Number(e.target.value))}
+        placeholder="SL"
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-1"
+      />
+
+      <input
+        value={row.unit}
+        onChange={(e) => update("unit", e.target.value)}
+        placeholder="Đơn vị"
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-1"
+      />
+
+      <input
+        type="number"
+        value={row.unit_price}
+        onChange={(e) => update("unit_price", Number(e.target.value))}
+        placeholder="Đơn giá"
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+      />
+
+      <input
+        value={row.supplier}
+        onChange={(e) => update("supplier", e.target.value)}
+        placeholder="Nhà cung cấp / chợ"
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-3"
+      />
+
+      <select
+        value={row.payment_method}
+        onChange={(e) => update("payment_method", e.target.value)}
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+      >
+        <option value="cash">Tiền mặt</option>
+        <option value="bank">Chuyển khoản</option>
+        <option value="momo">Momo</option>
+        <option value="other">Khác</option>
+      </select>
+
+      <select
+        value={row.spender}
+        onChange={(e) => update("spender", e.target.value)}
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+      >
+        <option value="Trung">Trung</option>
+        <option value="Ngọc Trinh">Ngọc Trinh</option>
+        <option value="Nhân viên">Nhân viên</option>
+      </select>
+
+      <select
+        value={row.branch}
+        onChange={(e) => update("branch", e.target.value)}
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+      >
+        <option value="Q6">Q6</option>
+        <option value="Q1">Q1</option>
+      </select>
+
+      <input
+        value={row.note}
+        onChange={(e) => update("note", e.target.value)}
+        placeholder="Ghi chú"
+        className="rounded-xl border px-3 py-2 font-bold md:col-span-3"
+      />
+    </>
   );
 }

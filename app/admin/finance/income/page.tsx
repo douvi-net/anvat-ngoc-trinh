@@ -17,12 +17,16 @@ function todayVN() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
 
 export default function IncomePage() {
-  const [selectedDate, setSelectedDate] = useState(todayVN());
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [entries, setEntries] = useState<CashEntry[]>([]);
   const [form, setForm] = useState({
     entry_date: todayVN(),
@@ -35,14 +39,27 @@ export default function IncomePage() {
 
   useEffect(() => {
     fetchEntries();
-  }, [selectedDate]);
+  }, [selectedMonth]);
 
   async function fetchEntries() {
-    const { data } = await supabase
+    const start = `${selectedMonth}-01`;
+
+    const endDate = new Date(`${selectedMonth}-01T00:00:00`);
+    endDate.setMonth(endDate.getMonth() + 1);
+    const end = endDate.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
       .from("cash_entries")
       .select("*")
-      .eq("entry_date", selectedDate)
+      .gte("entry_date", start)
+      .lt("entry_date", end)
+      .order("entry_date", { ascending: false })
       .order("created_at", { ascending: false });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
     setEntries((data || []) as CashEntry[]);
   }
@@ -70,15 +87,20 @@ export default function IncomePage() {
       return;
     }
 
+    const monthOfEntry = form.entry_date.slice(0, 7);
+    setSelectedMonth(monthOfEntry);
+
     setForm({
-      entry_date: selectedDate,
+      entry_date: form.entry_date,
       source: "Bán ngoài",
       amount: 0,
       payment_method: "cash",
       note: "",
     });
 
-    fetchEntries();
+    setTimeout(() => {
+      fetchEntries();
+    }, 100);
   }
 
   async function deleteEntry(id: string) {
@@ -164,7 +186,7 @@ export default function IncomePage() {
               disabled={saving}
               className="rounded-xl bg-[#00B14F] px-4 py-3 font-black text-white disabled:opacity-50 md:col-span-1"
             >
-              Lưu
+              {saving ? "Đang lưu..." : "Lưu"}
             </button>
           </div>
         </section>
@@ -173,18 +195,17 @@ export default function IncomePage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-xl font-black text-[#06113C]">
-                Danh sách tiền thu ngoài
+                Danh sách tiền thu ngoài theo tháng
               </h2>
-              <p className="mt-1 font-black text-[#00B14F]">Tổng thu ngoài: {money(total)}</p>
+              <p className="mt-1 font-black text-[#00B14F]">
+                Tổng thu ngoài: {money(total)}
+              </p>
             </div>
 
             <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                setForm({ ...form, entry_date: e.target.value });
-              }}
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
               className="rounded-2xl border px-4 py-3 font-black"
             />
           </div>
@@ -224,7 +245,7 @@ export default function IncomePage() {
                 {entries.length === 0 && (
                   <tr>
                     <td colSpan={6} className="p-6 text-center font-bold text-neutral-400">
-                      Chưa có khoản thu ngoài nào.
+                      Chưa có khoản thu ngoài nào trong tháng này.
                     </td>
                   </tr>
                 )}

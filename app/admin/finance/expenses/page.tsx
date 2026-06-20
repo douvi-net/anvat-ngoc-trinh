@@ -39,12 +39,16 @@ function todayVN() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
 
-const emptyRow = (): FormRow => ({
-  expense_date: todayVN(),
+const emptyRow = (date?: string): FormRow => ({
+  expense_date: date || todayVN(),
   category_id: "",
   item_name: "",
   quantity: 1,
@@ -58,8 +62,8 @@ const emptyRow = (): FormRow => ({
 export default function ExpensesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [rows, setRows] = useState<FormRow[]>([emptyRow()]);
-  const [selectedDate, setSelectedDate] = useState(todayVN());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -68,24 +72,42 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     fetchExpenses();
-  }, [selectedDate]);
+  }, [selectedMonth]);
 
   async function fetchCategories() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("expense_categories")
       .select("id, name")
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
 
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
     setCategories((data || []) as Category[]);
   }
 
   async function fetchExpenses() {
-    const { data } = await supabase
+    const start = `${selectedMonth}-01`;
+
+    const endDate = new Date(`${selectedMonth}-01T00:00:00`);
+    endDate.setMonth(endDate.getMonth() + 1);
+    const end = endDate.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
       .from("expenses")
       .select("*, expense_categories(name)")
-      .eq("expense_date", selectedDate)
+      .gte("expense_date", start)
+      .lt("expense_date", end)
+      .order("expense_date", { ascending: false })
       .order("created_at", { ascending: false });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
     setExpenses((data || []) as Expense[]);
   }
@@ -97,10 +119,16 @@ export default function ExpensesPage() {
   }
 
   function addRow() {
-    setRows((prev) => [...prev, { ...emptyRow(), expense_date: selectedDate }]);
+    const lastDate = rows[rows.length - 1]?.expense_date || todayVN();
+    setRows((prev) => [...prev, emptyRow(lastDate)]);
   }
 
   function removeRow(index: number) {
+    if (rows.length === 1) {
+      setRows([emptyRow(rows[0].expense_date)]);
+      return;
+    }
+
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -136,8 +164,15 @@ export default function ExpensesPage() {
       return;
     }
 
-    setRows([{ ...emptyRow(), expense_date: selectedDate }]);
-    fetchExpenses();
+    const monthOfFirstRow = validRows[0].expense_date.slice(0, 7);
+    const lastDate = validRows[validRows.length - 1].expense_date;
+
+    setSelectedMonth(monthOfFirstRow);
+    setRows([emptyRow(lastDate)]);
+
+    setTimeout(() => {
+      fetchExpenses();
+    }, 100);
   }
 
   async function deleteExpense(id: string) {
@@ -162,13 +197,15 @@ export default function ExpensesPage() {
           <p className="text-sm font-black text-[#00B14F]">TÀI CHÍNH</p>
           <h1 className="text-3xl font-black text-[#06113C]">Nhập tiền chi</h1>
           <p className="mt-1 text-sm font-bold text-neutral-500">
-            Có thể nhập bất cứ lúc nào, miễn chọn đúng ngày chi.
+            Nhập bất cứ lúc nào, chỉ cần chọn đúng ngày chi. Danh sách bên dưới hiển thị theo tháng.
           </p>
         </div>
 
         <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-xl font-black text-[#06113C]">Nhập nhanh nhiều dòng</h2>
+            <h2 className="text-xl font-black text-[#06113C]">
+              Nhập nhanh nhiều dòng
+            </h2>
 
             <button
               onClick={addRow}
@@ -229,7 +266,9 @@ export default function ExpensesPage() {
                 <input
                   type="number"
                   value={row.unit_price}
-                  onChange={(e) => updateRow(index, "unit_price", Number(e.target.value))}
+                  onChange={(e) =>
+                    updateRow(index, "unit_price", Number(e.target.value))
+                  }
                   placeholder="Đơn giá"
                   className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
                 />
@@ -250,7 +289,9 @@ export default function ExpensesPage() {
 
                 <select
                   value={row.payment_method}
-                  onChange={(e) => updateRow(index, "payment_method", e.target.value)}
+                  onChange={(e) =>
+                    updateRow(index, "payment_method", e.target.value)
+                  }
                   className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
                 >
                   <option value="cash">Tiền mặt</option>
@@ -286,18 +327,17 @@ export default function ExpensesPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-xl font-black text-[#06113C]">
-                Danh sách chi trong ngày
+                Danh sách chi theo tháng
               </h2>
-              <p className="mt-1 font-black text-red-500">Tổng chi: {money(total)}</p>
+              <p className="mt-1 font-black text-red-500">
+                Tổng chi: {money(total)}
+              </p>
             </div>
 
             <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                setRows([{ ...emptyRow(), expense_date: e.target.value }]);
-              }}
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
               className="rounded-2xl border px-4 py-3 font-black"
             />
           </div>
@@ -306,6 +346,7 @@ export default function ExpensesPage() {
             <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="bg-[#F5FFF8] text-left">
+                  <th className="p-3">Ngày</th>
                   <th className="p-3">Nhóm</th>
                   <th className="p-3">Mặt hàng</th>
                   <th className="p-3">SL</th>
@@ -320,6 +361,7 @@ export default function ExpensesPage() {
               <tbody>
                 {expenses.map((item) => (
                   <tr key={item.id} className="border-b">
+                    <td className="p-3 font-bold">{item.expense_date}</td>
                     <td className="p-3">{item.expense_categories?.name || "-"}</td>
                     <td className="p-3 font-black">{item.item_name}</td>
                     <td className="p-3">
@@ -328,7 +370,9 @@ export default function ExpensesPage() {
                     <td className="p-3">{money(item.unit_price)}</td>
                     <td className="p-3">{item.supplier || "-"}</td>
                     <td className="p-3">{item.payment_method || "-"}</td>
-                    <td className="p-3 text-right font-black">{money(item.amount)}</td>
+                    <td className="p-3 text-right font-black">
+                      {money(item.amount)}
+                    </td>
                     <td className="p-3 text-right">
                       <button
                         onClick={() => deleteExpense(item.id)}
@@ -342,8 +386,11 @@ export default function ExpensesPage() {
 
                 {expenses.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center font-bold text-neutral-400">
-                      Chưa có khoản chi nào trong ngày này.
+                    <td
+                      colSpan={9}
+                      className="p-6 text-center font-bold text-neutral-400"
+                    >
+                      Chưa có khoản chi nào trong tháng này.
                     </td>
                   </tr>
                 )}

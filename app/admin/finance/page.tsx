@@ -40,7 +40,24 @@ function currentMonth() {
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
-
+function downloadCsv(filename: string, rows: string[][]) {
+    const csv = rows
+      .map((row) =>
+        row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")
+      )
+      .join("\n");
+  
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+  
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 export default function FinancePage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [orders, setOrders] = useState<Order[]>([]);
@@ -129,7 +146,49 @@ export default function FinancePage() {
       orderCount: orders.length,
     };
   }, [orders, expenses, cashEntries]);
-
+  function exportFinanceReport() {
+    const rows = [
+      ["BÁO CÁO THU CHI", selectedMonth],
+      [],
+      ["Tổng thu", String(report.revenue)],
+      ["Doanh thu đơn hàng", String(report.orderRevenue)],
+      ["Thu ngoài", String(report.manualIncome)],
+      ["Tổng chi", String(report.expenseTotal)],
+      ["Lãi tạm tính", String(report.profit)],
+      ["Số đơn hoàn thành", String(report.orderCount)],
+      [],
+      ["DANH SÁCH THU NGOÀI"],
+      ["Ngày", "Nguồn", "Thanh toán", "Ghi chú", "Số tiền"],
+      ...cashEntries.map((item) => [
+        item.entry_date,
+        item.source,
+        item.payment_method || "",
+        item.note || "",
+        String(item.amount || 0),
+      ]),
+      [],
+      ["DANH SÁCH CHI"],
+      ["Ngày", "Nhóm", "Mặt hàng", "Thanh toán", "Số tiền"],
+      ...expenses.map((item) => [
+        item.expense_date,
+        item.expense_categories?.name || "",
+        item.item_name,
+        item.payment_method || "",
+        String(item.amount || 0),
+      ]),
+      [],
+      ["DANH SÁCH ĐƠN HÀNG"],
+      ["Mã đơn", "Nguồn", "Thanh toán", "Tổng"],
+      ...orders.map((item) => [
+        item.order_code,
+        item.source || "website",
+        item.payment_method || "",
+        String(item.total || 0),
+      ]),
+    ];
+  
+    downloadCsv(`bao-cao-thu-chi-${selectedMonth}.csv`, rows);
+  }
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -144,12 +203,21 @@ export default function FinancePage() {
             </p>
           </div>
 
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 font-black outline-none"
-          />
+          <div className="flex flex-col gap-3 md:flex-row">
+  <input
+    type="month"
+    value={selectedMonth}
+    onChange={(e) => setSelectedMonth(e.target.value)}
+    className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 font-black outline-none"
+  />
+
+  <button
+    onClick={exportFinanceReport}
+    className="rounded-2xl bg-[#06113C] px-5 py-3 font-black text-white"
+  >
+    Xuất Excel
+  </button>
+</div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-5">

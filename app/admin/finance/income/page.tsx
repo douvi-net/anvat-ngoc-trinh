@@ -25,9 +25,33 @@ function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
 
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows
+    .map((row) =>
+      row
+        .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
+        .join(",")
+    )
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function IncomePage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [entries, setEntries] = useState<CashEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     entry_date: todayVN(),
     source: "Bán ngoài",
@@ -35,7 +59,6 @@ export default function IncomePage() {
     payment_method: "cash",
     note: "",
   });
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchEntries();
@@ -64,6 +87,17 @@ export default function IncomePage() {
     setEntries((data || []) as CashEntry[]);
   }
 
+  function resetForm(date?: string) {
+    setForm({
+      entry_date: date || todayVN(),
+      source: "Bán ngoài",
+      amount: 0,
+      payment_method: "cash",
+      note: "",
+    });
+    setEditingId(null);
+  }
+
   async function saveEntry() {
     if (!form.amount || Number(form.amount) <= 0) {
       alert("Nhập số tiền thu.");
@@ -72,13 +106,18 @@ export default function IncomePage() {
 
     setSaving(true);
 
-    const { error } = await supabase.from("cash_entries").insert({
+    const payload = {
       entry_date: form.entry_date,
       source: form.source,
       amount: Number(form.amount),
       payment_method: form.payment_method,
       note: form.note || null,
-    });
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = editingId
+      ? await supabase.from("cash_entries").update(payload).eq("id", editingId)
+      : await supabase.from("cash_entries").insert(payload);
 
     setSaving(false);
 
@@ -87,20 +126,23 @@ export default function IncomePage() {
       return;
     }
 
-    const monthOfEntry = form.entry_date.slice(0, 7);
-    setSelectedMonth(monthOfEntry);
+    setSelectedMonth(form.entry_date.slice(0, 7));
+    resetForm(form.entry_date);
 
+    setTimeout(fetchEntries, 100);
+  }
+
+  function startEdit(item: CashEntry) {
+    setEditingId(item.id);
     setForm({
-      entry_date: form.entry_date,
-      source: "Bán ngoài",
-      amount: 0,
-      payment_method: "cash",
-      note: "",
+      entry_date: item.entry_date,
+      source: item.source,
+      amount: Number(item.amount || 0),
+      payment_method: item.payment_method || "cash",
+      note: item.note || "",
     });
 
-    setTimeout(() => {
-      fetchEntries();
-    }, 100);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function deleteEntry(id: string) {
@@ -113,7 +155,25 @@ export default function IncomePage() {
       return;
     }
 
+    if (editingId === id) resetForm();
     fetchEntries();
+  }
+
+  function exportExcel() {
+    const rows = [
+      ["Ngày", "Nguồn", "Thanh toán", "Ghi chú", "Số tiền"],
+      ...entries.map((item) => [
+        item.entry_date,
+        item.source,
+        item.payment_method || "",
+        item.note || "",
+        String(item.amount || 0),
+      ]),
+      [],
+      ["Tổng thu ngoài", "", "", "", String(total)],
+    ];
+
+    downloadCsv(`tien-thu-ngoai-${selectedMonth}.csv`, rows);
   }
 
   const total = entries.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -129,8 +189,25 @@ export default function IncomePage() {
           </p>
         </div>
 
-        <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
-          <h2 className="text-xl font-black text-[#06113C]">Nhập khoản thu</h2>
+        <section
+          className={`rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5 ${
+            editingId ? "border-2 border-[#00B14F]" : ""
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl font-black text-[#06113C]">
+              {editingId ? "Đang sửa khoản thu" : "Nhập khoản thu"}
+            </h2>
+
+            {editingId && (
+              <button
+                onClick={() => resetForm(form.entry_date)}
+                className="rounded-2xl bg-neutral-100 px-5 py-3 text-sm font-black text-neutral-700"
+              >
+                Hủy sửa
+              </button>
+            )}
+          </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-12">
             <input
@@ -186,7 +263,7 @@ export default function IncomePage() {
               disabled={saving}
               className="rounded-xl bg-[#00B14F] px-4 py-3 font-black text-white disabled:opacity-50 md:col-span-1"
             >
-              {saving ? "Đang lưu..." : "Lưu"}
+              {saving ? "Đang lưu..." : editingId ? "Cập nhật" : "Lưu"}
             </button>
           </div>
         </section>
@@ -202,16 +279,25 @@ export default function IncomePage() {
               </p>
             </div>
 
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="rounded-2xl border px-4 py-3 font-black"
-            />
+            <div className="flex flex-col gap-3 md:flex-row">
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="rounded-2xl border px-4 py-3 font-black"
+              />
+
+              <button
+                onClick={exportExcel}
+                className="rounded-2xl bg-[#06113C] px-5 py-3 font-black text-white"
+              >
+                Xuất Excel
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="bg-[#F5FFF8] text-left">
                   <th className="p-3">Ngày</th>
@@ -225,19 +311,35 @@ export default function IncomePage() {
 
               <tbody>
                 {entries.map((item) => (
-                  <tr key={item.id} className="border-b">
+                  <tr
+                    key={item.id}
+                    className={`border-b ${
+                      editingId === item.id ? "bg-[#E8FFF1]" : ""
+                    }`}
+                  >
                     <td className="p-3 font-bold">{item.entry_date}</td>
                     <td className="p-3 font-black">{item.source}</td>
                     <td className="p-3">{item.payment_method || "-"}</td>
                     <td className="p-3">{item.note || "-"}</td>
-                    <td className="p-3 text-right font-black">{money(item.amount)}</td>
+                    <td className="p-3 text-right font-black">
+                      {money(item.amount)}
+                    </td>
                     <td className="p-3 text-right">
-                      <button
-                        onClick={() => deleteEntry(item.id)}
-                        className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-600"
-                      >
-                        Xóa
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => startEdit(item)}
+                          className="rounded-xl bg-[#E8FFF1] px-3 py-2 font-black text-[#00B14F]"
+                        >
+                          Sửa
+                        </button>
+
+                        <button
+                          onClick={() => deleteEntry(item.id)}
+                          className="rounded-xl bg-red-50 px-3 py-2 font-black text-red-600"
+                        >
+                          Xóa
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

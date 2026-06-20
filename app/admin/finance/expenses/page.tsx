@@ -19,6 +19,8 @@ type Expense = {
   amount: number;
   supplier: string | null;
   payment_method: string | null;
+  spender: string | null;
+  branch: string | null;
   note: string | null;
   expense_categories?: { name: string } | null;
 };
@@ -32,6 +34,8 @@ type FormRow = {
   unit_price: number;
   supplier: string;
   payment_method: string;
+  spender: string;
+  branch: string;
   note: string;
 };
 
@@ -56,6 +60,8 @@ const emptyRow = (date?: string): FormRow => ({
   unit_price: 0,
   supplier: "",
   payment_method: "cash",
+  spender: "Trung",
+  branch: "Q6",
   note: "",
 });
 
@@ -119,8 +125,19 @@ export default function ExpensesPage() {
   }
 
   function addRow() {
-    const lastDate = rows[rows.length - 1]?.expense_date || todayVN();
-    setRows((prev) => [...prev, emptyRow(lastDate)]);
+    const lastRow = rows[rows.length - 1];
+
+    setRows((prev) => [
+      ...prev,
+      {
+        ...emptyRow(lastRow?.expense_date || todayVN()),
+        category_id: lastRow?.category_id || "",
+        supplier: lastRow?.supplier || "",
+        payment_method: lastRow?.payment_method || "cash",
+        spender: lastRow?.spender || "Trung",
+        branch: lastRow?.branch || "Q6",
+      },
+    ]);
   }
 
   function removeRow(index: number) {
@@ -140,6 +157,15 @@ export default function ExpensesPage() {
       return;
     }
 
+    const invalidAmount = validRows.some(
+      (row) => Number(row.quantity || 0) <= 0 || Number(row.unit_price || 0) <= 0
+    );
+
+    if (invalidAmount) {
+      alert("Số lượng và đơn giá phải lớn hơn 0.");
+      return;
+    }
+
     setSaving(true);
 
     const payload = validRows.map((row) => ({
@@ -152,6 +178,8 @@ export default function ExpensesPage() {
       amount: Math.round(Number(row.quantity || 1) * Number(row.unit_price || 0)),
       supplier: row.supplier || null,
       payment_method: row.payment_method,
+      spender: row.spender,
+      branch: row.branch,
       note: row.note || null,
     }));
 
@@ -165,10 +193,19 @@ export default function ExpensesPage() {
     }
 
     const monthOfFirstRow = validRows[0].expense_date.slice(0, 7);
-    const lastDate = validRows[validRows.length - 1].expense_date;
+    const lastRow = validRows[validRows.length - 1];
 
     setSelectedMonth(monthOfFirstRow);
-    setRows([emptyRow(lastDate)]);
+    setRows([
+      {
+        ...emptyRow(lastRow.expense_date),
+        category_id: lastRow.category_id,
+        supplier: lastRow.supplier,
+        payment_method: lastRow.payment_method,
+        spender: lastRow.spender,
+        branch: lastRow.branch,
+      },
+    ]);
 
     setTimeout(() => {
       fetchExpenses();
@@ -300,11 +337,30 @@ export default function ExpensesPage() {
                   <option value="other">Khác</option>
                 </select>
 
+                <select
+                  value={row.spender}
+                  onChange={(e) => updateRow(index, "spender", e.target.value)}
+                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+                >
+                  <option value="Trung">Trung</option>
+                  <option value="Ngọc Trinh">Ngọc Trinh</option>
+                  <option value="Nhân viên">Nhân viên</option>
+                </select>
+
+                <select
+                  value={row.branch}
+                  onChange={(e) => updateRow(index, "branch", e.target.value)}
+                  className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
+                >
+                  <option value="Q6">Q6</option>
+                  <option value="Q1">Q1</option>
+                </select>
+
                 <input
                   value={row.note}
                   onChange={(e) => updateRow(index, "note", e.target.value)}
                   placeholder="Ghi chú"
-                  className="rounded-xl border px-3 py-2 font-bold md:col-span-5"
+                  className="rounded-xl border px-3 py-2 font-bold md:col-span-4"
                 />
 
                 <div className="rounded-xl bg-white px-3 py-2 text-right font-black md:col-span-2">
@@ -343,7 +399,7 @@ export default function ExpensesPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1080px] text-sm">
               <thead>
                 <tr className="bg-[#F5FFF8] text-left">
                   <th className="p-3">Ngày</th>
@@ -352,6 +408,8 @@ export default function ExpensesPage() {
                   <th className="p-3">SL</th>
                   <th className="p-3">Đơn giá</th>
                   <th className="p-3">Nhà cung cấp</th>
+                  <th className="p-3">Người chi</th>
+                  <th className="p-3">Chi nhánh</th>
                   <th className="p-3">Thanh toán</th>
                   <th className="p-3 text-right">Thành tiền</th>
                   <th className="p-3"></th>
@@ -369,6 +427,8 @@ export default function ExpensesPage() {
                     </td>
                     <td className="p-3">{money(item.unit_price)}</td>
                     <td className="p-3">{item.supplier || "-"}</td>
+                    <td className="p-3">{item.spender || "-"}</td>
+                    <td className="p-3">{item.branch || "-"}</td>
                     <td className="p-3">{item.payment_method || "-"}</td>
                     <td className="p-3 text-right font-black">
                       {money(item.amount)}
@@ -387,7 +447,7 @@ export default function ExpensesPage() {
                 {expenses.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={11}
                       className="p-6 text-center font-bold text-neutral-400"
                     >
                       Chưa có khoản chi nào trong tháng này.

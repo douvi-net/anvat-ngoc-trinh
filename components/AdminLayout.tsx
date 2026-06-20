@@ -10,6 +10,14 @@ const menuGroups = [
     items: [{ label: "Đơn hàng", href: "/admin/orders", icon: "📦" }],
   },
   {
+    title: "TÀI CHÍNH",
+    items: [
+      { label: "Thu chi", href: "/admin/finance", icon: "💰" },
+      { label: "Tiền chi", href: "/admin/finance/expenses", icon: "🧾" },
+      { label: "Tiền thu ngoài", href: "/admin/finance/income", icon: "💵" },
+    ],
+  },
+  {
     title: "KHÁCH HÀNG",
     items: [
       { label: "Khách hàng", href: "/admin/customers", icon: "👥" },

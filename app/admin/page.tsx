@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
+import AdminFinanceSummary from "@/components/AdminFinanceSummary";
 
 type OrderItem = {
   product_name: string;
@@ -457,7 +458,9 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           </div>
-
+          <div className="mt-8">
+  <AdminFinanceSummary />
+</div>
           <div className="mt-8 rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-2xl font-black text-[#06113C]">

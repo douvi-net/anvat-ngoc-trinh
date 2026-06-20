@@ -33,8 +33,8 @@ type CashEntry = {
   note: string | null;
 };
 
-function todayVN() {
-  return new Date().toISOString().slice(0, 10);
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
 }
 
 function money(value: number) {
@@ -42,7 +42,7 @@ function money(value: number) {
 }
 
 export default function FinancePage() {
-  const [selectedDate, setSelectedDate] = useState(todayVN());
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [orders, setOrders] = useState<Order[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cashEntries, setCashEntries] = useState<CashEntry[]>([]);
@@ -50,35 +50,51 @@ export default function FinancePage() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedDate]);
+  }, [selectedMonth]);
 
   async function fetchData() {
     setLoading(true);
 
-    const start = `${selectedDate}T00:00:00+07:00`;
-    const end = `${selectedDate}T23:59:59+07:00`;
+    const startDate = `${selectedMonth}-01`;
+
+    const endDate = new Date(`${selectedMonth}-01T00:00:00`);
+    endDate.setMonth(endDate.getMonth() + 1);
+    const endDateText = endDate.toISOString().slice(0, 10);
+
+    const start = `${startDate}T00:00:00+07:00`;
+    const end = `${endDateText}T00:00:00+07:00`;
 
     const [ordersRes, expensesRes, cashRes] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, order_code, total, status, source, payment_method, created_at, confirmed_at")
+        .select(
+          "id, order_code, total, status, source, payment_method, created_at, confirmed_at"
+        )
         .eq("status", "completed")
         .gte("created_at", start)
-        .lte("created_at", end)
+        .lt("created_at", end)
         .order("created_at", { ascending: false }),
 
       supabase
         .from("expenses")
         .select("*, expense_categories(name)")
-        .eq("expense_date", selectedDate)
+        .gte("expense_date", startDate)
+        .lt("expense_date", endDateText)
+        .order("expense_date", { ascending: false })
         .order("created_at", { ascending: false }),
 
       supabase
         .from("cash_entries")
         .select("*")
-        .eq("entry_date", selectedDate)
+        .gte("entry_date", startDate)
+        .lt("entry_date", endDateText)
+        .order("entry_date", { ascending: false })
         .order("created_at", { ascending: false }),
     ]);
+
+    if (ordersRes.error) alert(ordersRes.error.message);
+    if (expensesRes.error) alert(expensesRes.error.message);
+    if (cashRes.error) alert(cashRes.error.message);
 
     setOrders((ordersRes.data || []) as Order[]);
     setExpenses((expensesRes.data || []) as Expense[]);
@@ -87,9 +103,21 @@ export default function FinancePage() {
   }
 
   const report = useMemo(() => {
-    const orderRevenue = orders.reduce((sum, item) => sum + Number(item.total || 0), 0);
-    const manualIncome = cashEntries.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const expenseTotal = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const orderRevenue = orders.reduce(
+      (sum, item) => sum + Number(item.total || 0),
+      0
+    );
+
+    const manualIncome = cashEntries.reduce(
+      (sum, item) => sum + Number(item.amount || 0),
+      0
+    );
+
+    const expenseTotal = expenses.reduce(
+      (sum, item) => sum + Number(item.amount || 0),
+      0
+    );
+
     const revenue = orderRevenue + manualIncome;
 
     return {
@@ -108,16 +136,18 @@ export default function FinancePage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-black text-[#00B14F]">TÀI CHÍNH</p>
-            <h1 className="text-3xl font-black text-[#06113C]">Tổng quan thu chi</h1>
+            <h1 className="text-3xl font-black text-[#06113C]">
+              Tổng quan thu chi
+            </h1>
             <p className="mt-1 text-sm font-bold text-neutral-500">
-              Doanh thu tự lấy từ đơn hoàn thành + tiền thu ngoài + chi phí nhập tay.
+              Báo cáo theo tháng: đơn hoàn thành + tiền thu ngoài + chi phí nhập tay.
             </p>
           </div>
 
           <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
             className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 font-black outline-none"
           />
         </div>
@@ -127,15 +157,23 @@ export default function FinancePage() {
           <Card title="Đơn website/POS" value={money(report.orderRevenue)} />
           <Card title="Thu ngoài" value={money(report.manualIncome)} />
           <Card title="Tổng chi" value={money(report.expenseTotal)} />
-          <Card title="Lãi tạm tính" value={money(report.profit)} highlight={report.profit >= 0} />
+          <Card
+            title="Lãi tạm tính"
+            value={money(report.profit)}
+            highlight={report.profit >= 0}
+          />
         </div>
 
         {loading ? (
-          <div className="rounded-3xl bg-white p-6 font-black">Đang tải dữ liệu...</div>
+          <div className="rounded-3xl bg-white p-6 font-black">
+            Đang tải dữ liệu...
+          </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-2">
             <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
-              <h2 className="text-xl font-black text-[#06113C]">Tiền thu từ đơn hàng</h2>
+              <h2 className="text-xl font-black text-[#06113C]">
+                Tiền thu từ đơn hàng trong tháng
+              </h2>
               <p className="mt-1 text-sm font-bold text-neutral-500">
                 {report.orderCount} đơn hoàn thành
               </p>
@@ -150,20 +188,26 @@ export default function FinancePage() {
                       <th className="p-3 text-right">Tổng</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {orders.map((item) => (
                       <tr key={item.id} className="border-b">
                         <td className="p-3 font-black">#{item.order_code}</td>
                         <td className="p-3">{item.source || "website"}</td>
                         <td className="p-3">{item.payment_method || "-"}</td>
-                        <td className="p-3 text-right font-black">{money(item.total)}</td>
+                        <td className="p-3 text-right font-black">
+                          {money(item.total)}
+                        </td>
                       </tr>
                     ))}
 
                     {orders.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-6 text-center font-bold text-neutral-400">
-                          Chưa có đơn hoàn thành trong ngày này.
+                        <td
+                          colSpan={4}
+                          className="p-6 text-center font-bold text-neutral-400"
+                        >
+                          Chưa có đơn hoàn thành trong tháng này.
                         </td>
                       </tr>
                     )}
@@ -173,32 +217,44 @@ export default function FinancePage() {
             </section>
 
             <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
-              <h2 className="text-xl font-black text-[#06113C]">Tiền chi trong ngày</h2>
+              <h2 className="text-xl font-black text-[#06113C]">
+                Tiền chi trong tháng
+              </h2>
 
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="bg-[#F5FFF8] text-left">
+                      <th className="p-3">Ngày</th>
                       <th className="p-3">Nhóm</th>
                       <th className="p-3">Mặt hàng</th>
                       <th className="p-3">Thanh toán</th>
                       <th className="p-3 text-right">Tiền</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {expenses.map((item) => (
                       <tr key={item.id} className="border-b">
-                        <td className="p-3">{item.expense_categories?.name || "-"}</td>
+                        <td className="p-3 font-bold">{item.expense_date}</td>
+                        <td className="p-3">
+                          {item.expense_categories?.name || "-"}
+                        </td>
                         <td className="p-3 font-bold">{item.item_name}</td>
                         <td className="p-3">{item.payment_method || "-"}</td>
-                        <td className="p-3 text-right font-black">{money(item.amount)}</td>
+                        <td className="p-3 text-right font-black">
+                          {money(item.amount)}
+                        </td>
                       </tr>
                     ))}
 
                     {expenses.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-6 text-center font-bold text-neutral-400">
-                          Chưa có khoản chi nào.
+                        <td
+                          colSpan={5}
+                          className="p-6 text-center font-bold text-neutral-400"
+                        >
+                          Chưa có khoản chi nào trong tháng này.
                         </td>
                       </tr>
                     )}

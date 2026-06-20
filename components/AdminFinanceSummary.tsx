@@ -81,7 +81,14 @@ export default function AdminFinanceSummary() {
     if (cashRes.error) alert(cashRes.error.message);
 
     setOrders((ordersRes.data || []) as Order[]);
-    setExpenses((expensesRes.data || []) as Expense[]);
+    setExpenses(
+        ((expensesRes.data || []) as any[]).map((item) => ({
+          ...item,
+          expense_categories: Array.isArray(item.expense_categories)
+            ? item.expense_categories[0] || null
+            : item.expense_categories,
+        }))
+      );
     setCashEntries((cashRes.data || []) as CashEntry[]);
     setLoading(false);
   }

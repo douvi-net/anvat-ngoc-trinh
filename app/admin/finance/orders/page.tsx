@@ -39,7 +39,25 @@ function money(value: number) {
 function dateTime(value: string) {
   return new Date(value).toLocaleString("vi-VN");
 }
-
+function formatToppings(value: any) {
+    if (!value) return "";
+  
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text || text === "[]" || text === "{}") return "";
+      return text;
+    }
+  
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "";
+      return value.join(", ");
+    }
+  
+    const text = JSON.stringify(value);
+    if (!text || text === "[]" || text === "{}") return "";
+  
+    return text;
+  }
 export default function FinanceOrdersPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -325,13 +343,11 @@ export default function FinanceOrdersPage() {
                         <p className="font-black text-[#06113C]">
                           {item.product_name} x{item.quantity}
                         </p>
-                        {item.toppings && (
-                          <p className="mt-1 text-sm font-bold text-neutral-500">
-                            {typeof item.toppings === "string"
-                              ? item.toppings
-                              : JSON.stringify(item.toppings)}
-                          </p>
-                        )}
+                        {formatToppings(item.toppings) && (
+  <p className="mt-1 text-sm font-bold text-neutral-500">
+    {formatToppings(item.toppings)}
+  </p>
+)}
                         {item.note && (
                           <p className="mt-1 text-sm font-bold text-red-500">
                             Ghi chú: {item.note}

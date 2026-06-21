@@ -51,7 +51,24 @@ function currentMonth() {
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows
+    .map((row) =>
+      row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")
+    )
+    .join("\n");
 
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 const emptyRow = (date?: string): FormRow => ({
   expense_date: date || todayVN(),
   category_id: "",
@@ -306,7 +323,45 @@ export default function ExpensesPage() {
 
     fetchExpenses();
   }
-
+  function exportExpenses() {
+    const rows = [
+      ["BÁO CÁO TIỀN CHI", selectedMonth],
+      [],
+      ["Tổng chi", String(total)],
+      ["Số khoản chi", String(expenses.length)],
+      [],
+      [
+        "Ngày",
+        "Nhóm",
+        "Mặt hàng",
+        "Số lượng",
+        "Đơn vị",
+        "Đơn giá",
+        "Nhà cung cấp",
+        "Người chi",
+        "Chi nhánh",
+        "Thanh toán",
+        "Ghi chú",
+        "Thành tiền",
+      ],
+      ...expenses.map((item) => [
+        item.expense_date,
+        item.expense_categories?.name || "",
+        item.item_name,
+        String(item.quantity || 0),
+        item.unit || "",
+        String(item.unit_price || 0),
+        item.supplier || "",
+        item.spender || "",
+        item.branch || "",
+        item.payment_method || "",
+        item.note || "",
+        String(item.amount || 0),
+      ]),
+    ];
+  
+    downloadCsv(`tien-chi-${selectedMonth}.csv`, rows);
+  }
   const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   return (
@@ -413,12 +468,21 @@ export default function ExpensesPage() {
               </p>
             </div>
 
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="rounded-2xl border px-4 py-3 font-black"
-            />
+            <div className="flex flex-col gap-3 md:flex-row">
+  <input
+    type="month"
+    value={selectedMonth}
+    onChange={(e) => setSelectedMonth(e.target.value)}
+    className="rounded-2xl border px-4 py-3 font-black"
+  />
+
+  <button
+    onClick={exportExpenses}
+    className="rounded-2xl bg-[#06113C] px-5 py-3 font-black text-white"
+  >
+    Xuất Excel
+  </button>
+</div>
           </div>
 
           <div className="mt-4 overflow-x-auto">

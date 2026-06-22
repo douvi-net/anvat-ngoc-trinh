@@ -11,7 +11,6 @@ import CopyProtection from "@/components/CopyProtection";
 import InstallAppPrompt from "@/components/InstallAppPrompt";
 import CustomerPushPrompt from "@/components/CustomerPushPrompt";
 import Script from "next/script";
-import AdminAwareLayout from "@/components/AdminAwareLayout";
 const beVietnam = Be_Vietnam_Pro({
   subsets: ["vietnamese"],
   weight: ["400", "500", "600", "700", "800", "900"],
@@ -106,7 +105,19 @@ export default function RootLayout({
   <InstallAppPrompt />
   <CopyProtection />
 
-  <AdminAwareLayout />
+  <HideOnOrderMobile>
+    <Header />
+  </HideOnOrderMobile>
+
+  {children}
+
+  <HideOnOrderMobile>
+    <Footer />
+  </HideOnOrderMobile>
+
+  <LiveOrder />
+  <MobileBottomBar />
+  <FloatingOrderButton />
 </body>
     </html>
   );

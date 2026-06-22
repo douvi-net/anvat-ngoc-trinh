@@ -28,6 +28,8 @@ type Order = {
   order_items: OrderItem[];
 };
 
+const pageSize = 100;
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -36,32 +38,40 @@ function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
 
+function dateOnly(value: string) {
+  return new Date(value).toLocaleDateString("vi-VN");
+}
+
 function dateTime(value: string) {
   return new Date(value).toLocaleString("vi-VN");
 }
+
 function formatToppings(value: any) {
-    if (!value) return "";
-  
-    if (typeof value === "string") {
-      const text = value.trim();
-      if (!text || text === "[]" || text === "{}") return "";
-      return text;
-    }
-  
-    if (Array.isArray(value)) {
-      if (value.length === 0) return "";
-      return value.join(", ");
-    }
-  
-    const text = JSON.stringify(value);
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const text = value.trim();
     if (!text || text === "[]" || text === "{}") return "";
-  
     return text;
   }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "";
+    return value.join(", ");
+  }
+
+  const text = JSON.stringify(value);
+  if (!text || text === "[]" || text === "{}") return "";
+
+  return text;
+}
+
 export default function FinanceOrdersPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
   const [sourceFilter, setSourceFilter] = useState("all");
   const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +79,10 @@ export default function FinanceOrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, [selectedMonth, sourceFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedMonth, sourceFilter, keyword]);
 
   async function fetchOrders() {
     setLoading(true);
@@ -103,7 +117,9 @@ export default function FinanceOrdersPage() {
   }
 
   async function cancelOrder(order: Order) {
-    if (!confirm(`Hủy đơn #${order.order_code}? Đơn sẽ không tính doanh thu.`)) return;
+    if (!confirm(`Hủy đơn #${order.order_code}? Đơn sẽ không tính doanh thu.`)) {
+      return;
+    }
 
     const { error } = await supabase
       .from("orders")
@@ -165,8 +181,13 @@ export default function FinanceOrdersPage() {
     });
   }, [orders, keyword]);
 
-  const completedOrders = filteredOrders.filter((item) => item.status === "completed");
-  const cancelledOrders = filteredOrders.filter((item) => item.status === "cancelled");
+  const completedOrders = filteredOrders.filter(
+    (item) => item.status === "completed"
+  );
+
+  const cancelledOrders = filteredOrders.filter(
+    (item) => item.status === "cancelled"
+  );
 
   const totalRevenue = completedOrders.reduce(
     (sum, item) => sum + Number(item.total || 0),
@@ -174,7 +195,16 @@ export default function FinanceOrdersPage() {
   );
 
   const avgOrder =
-    completedOrders.length > 0 ? Math.round(totalRevenue / completedOrders.length) : 0;
+    completedOrders.length > 0
+      ? Math.round(totalRevenue / completedOrders.length)
+      : 0;
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+
+  const pagedOrders = filteredOrders.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   return (
     <AdminLayout>
@@ -184,7 +214,7 @@ export default function FinanceOrdersPage() {
             <p className="text-sm font-black text-[#00B14F]">TÀI CHÍNH</p>
             <h1 className="text-3xl font-black text-[#06113C]">Doanh thu đơn</h1>
             <p className="mt-1 text-sm font-bold text-neutral-500">
-              Xem đơn website/POS, món đã bán, ngày đặt và hủy đơn khi cần.
+              Xem đơn website/POS, ngày đặt, tổng tiền và chi tiết món khi cần.
             </p>
           </div>
 
@@ -217,9 +247,14 @@ export default function FinanceOrdersPage() {
 
         <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-xl font-black text-[#06113C]">
-              Danh sách đơn trong tháng
-            </h2>
+            <div>
+              <h2 className="text-xl font-black text-[#06113C]">
+                Danh sách đơn trong tháng
+              </h2>
+              <p className="mt-1 text-sm font-bold text-neutral-500">
+                Hiển thị 100 đơn mỗi trang.
+              </p>
+            </div>
 
             <input
               value={keyword}
@@ -230,15 +265,13 @@ export default function FinanceOrdersPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="bg-[#F5FFF8] text-left">
                   <th className="p-3">Ngày đặt</th>
                   <th className="p-3">Mã đơn</th>
                   <th className="p-3">Nguồn</th>
-                  <th className="p-3">Món</th>
                   <th className="p-3">Thanh toán</th>
-                  <th className="p-3">Trạng thái</th>
                   <th className="p-3 text-right">Tổng</th>
                   <th className="p-3"></th>
                 </tr>
@@ -247,45 +280,30 @@ export default function FinanceOrdersPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center font-bold">
+                    <td colSpan={6} className="p-6 text-center font-bold">
                       Đang tải đơn...
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((order) => (
+                  pagedOrders.map((order) => (
                     <tr
                       key={order.id}
                       className={`border-b ${
                         order.status === "cancelled" ? "bg-red-50/60" : ""
                       }`}
                     >
-                      <td className="p-3 font-bold">{dateTime(order.created_at)}</td>
+                      <td className="p-3 font-bold">{dateOnly(order.created_at)}</td>
+
                       <td className="p-3 font-black">#{order.order_code}</td>
+
                       <td className="p-3">{order.source || "website"}</td>
-                      <td className="p-3">
-                        {(order.order_items || [])
-                          .slice(0, 2)
-                          .map((item) => `${item.product_name} x${item.quantity}`)
-                          .join(", ")}
-                        {(order.order_items || []).length > 2
-                          ? ` +${order.order_items.length - 2} món`
-                          : ""}
-                      </td>
+
                       <td className="p-3">{order.payment_method || "-"}</td>
-                      <td className="p-3">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-black ${
-                            order.status === "completed"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {order.status === "completed" ? "Hoàn thành" : "Đã hủy"}
-                        </span>
-                      </td>
+
                       <td className="p-3 text-right font-black">
                         {money(order.total)}
                       </td>
+
                       <td className="p-3 text-right">
                         <button
                           onClick={() => setSelectedOrder(order)}
@@ -300,7 +318,10 @@ export default function FinanceOrdersPage() {
 
                 {!loading && filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center font-bold text-neutral-400">
+                    <td
+                      colSpan={6}
+                      className="p-6 text-center font-bold text-neutral-400"
+                    >
                       Chưa có đơn trong tháng này.
                     </td>
                   </tr>
@@ -308,6 +329,28 @@ export default function FinanceOrdersPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && totalPages > 1 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {Array.from({ length: totalPages }).map((_, index) => {
+                const page = index + 1;
+
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`rounded-xl px-4 py-2 font-black ${
+                      currentPage === page
+                        ? "bg-[#06113C] text-white"
+                        : "bg-[#F5FFF8] text-[#06113C]"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {selectedOrder && (
@@ -315,12 +358,21 @@ export default function FinanceOrdersPage() {
             <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-black text-[#00B14F]">CHI TIẾT ĐƠN</p>
+                  <p className="text-sm font-black text-[#00B14F]">
+                    CHI TIẾT ĐƠN
+                  </p>
+
                   <h2 className="text-2xl font-black text-[#06113C]">
                     #{selectedOrder.order_code}
                   </h2>
+
                   <p className="mt-1 text-sm font-bold text-neutral-500">
                     {dateTime(selectedOrder.created_at)}
+                  </p>
+
+                  <p className="mt-1 text-sm font-bold text-neutral-500">
+                    Nguồn: {selectedOrder.source || "website"} • Thanh toán:{" "}
+                    {selectedOrder.payment_method || "-"}
                   </p>
                 </div>
 
@@ -334,20 +386,19 @@ export default function FinanceOrdersPage() {
 
               <div className="mt-5 space-y-3">
                 {(selectedOrder.order_items || []).map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-2xl bg-[#F5FFF8] p-4"
-                  >
+                  <div key={item.id} className="rounded-2xl bg-[#F5FFF8] p-4">
                     <div className="flex justify-between gap-3">
                       <div>
                         <p className="font-black text-[#06113C]">
                           {item.product_name} x{item.quantity}
                         </p>
+
                         {formatToppings(item.toppings) && (
-  <p className="mt-1 text-sm font-bold text-neutral-500">
-    {formatToppings(item.toppings)}
-  </p>
-)}
+                          <p className="mt-1 text-sm font-bold text-neutral-500">
+                            {formatToppings(item.toppings)}
+                          </p>
+                        )}
+
                         {item.note && (
                           <p className="mt-1 text-sm font-bold text-red-500">
                             Ghi chú: {item.note}

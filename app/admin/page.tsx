@@ -188,15 +188,21 @@ export default function AdminDashboardPage() {
 
     validOrders.forEach((order) => {
       order.order_items?.forEach((item) => {
-        item.toppings?.forEach((topping) => {
-          const current = map.get(topping.name) || {
-            name: topping.name,
-            quantity: 0,
-          };
-
-          current.quantity += Number(item.quantity || 0);
-          map.set(topping.name, current);
-        });
+        if (Array.isArray(item.toppings)) {
+          item.toppings.forEach((topping: any) => {
+            const name = topping?.name || topping;
+        
+            if (!name || name === "[]" || name === "{}") return;
+        
+            const current = map.get(name) || {
+              name,
+              quantity: 0,
+            };
+        
+            current.quantity += Number(item.quantity || 0);
+            map.set(name, current);
+          });
+        }
       });
     });
 

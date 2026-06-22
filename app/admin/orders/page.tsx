@@ -13,7 +13,7 @@ type OrderItem = {
   total: number;
   note: string | null;
   spicy_level: string | null;
-  toppings: { id: string; name: string; price: number }[] | null;
+  toppings: any;
 };
 
 type Order = {
@@ -133,7 +133,29 @@ const filters = [
   { key: "completed", label: "Hoàn thành" },
   { key: "cancelled", label: "Đã huỷ" },
 ];
+function formatToppings(value: any) {
+  if (!value) return "";
 
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text || text === "[]" || text === "{}") return "";
+    return text;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "";
+
+    return value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        return item?.name || "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return "";
+}
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [googleReviewRewards, setGoogleReviewRewards] = useState<Record<string, GoogleReviewReward>>({});
@@ -752,10 +774,8 @@ if (!currentOrder) {
             <strong>${item.product_name} x${item.quantity}</strong>
             <div>${item.total.toLocaleString("vi-VN")}đ</div>
             ${
-              item.toppings?.length
-                ? `<div>Topping: ${item.toppings
-                    .map((topping) => topping.name)
-                    .join(", ")}</div>`
+              formatToppings(item.toppings)
+                ? `<div>Topping: ${formatToppings(item.toppings)}</div>`
                 : ""
             }
             ${item.spicy_level ? `<div>Độ cay: ${item.spicy_level}</div>` : ""}
@@ -1157,14 +1177,11 @@ if (!currentOrder) {
                                   </span>
                                 </div>
 
-                                {item.toppings && item.toppings.length > 0 && (
-                                  <p className="mt-1 text-xs font-bold text-neutral-500">
-                                    Topping:{" "}
-                                    {item.toppings
-                                      .map((topping) => topping.name)
-                                      .join(", ")}
-                                  </p>
-                                )}
+                                {formatToppings(item.toppings) && (
+  <p className="mt-1 text-xs font-bold text-neutral-500">
+    Topping: {formatToppings(item.toppings)}
+  </p>
+)}
 
                                 {item.spicy_level && (
                                   <p className="mt-1 text-xs font-bold text-neutral-500">

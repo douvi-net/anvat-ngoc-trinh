@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/AdminLayout";
-import { supabase } from "@/lib/supabase";
 import AdminFinanceSummary from "@/components/AdminFinanceSummary";
+import { supabase } from "@/lib/supabase";
 
 type OrderItem = {
   product_name: string;
@@ -90,13 +90,9 @@ export default function AdminDashboardPage() {
         .select("id,name,phone,created_at")
         .order("created_at", { ascending: false }),
 
-      supabase
-        .from("products")
-        .select("id,name,is_active,is_sold_out"),
+      supabase.from("products").select("id,name,is_active,is_sold_out"),
 
-      supabase
-        .from("toppings")
-        .select("id,name,is_active,is_sold_out"),
+      supabase.from("toppings").select("id,name,is_active,is_sold_out"),
     ]);
 
     setOrders((orderData || []) as Order[]);
@@ -115,11 +111,14 @@ export default function AdminDashboardPage() {
       new Date(order.created_at).toLocaleDateString("vi-VN") === todayText
   );
 
-  const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0);
+  const todayRevenue = todayOrders.reduce(
+    (sum, order) => sum + Number(order.total || 0),
+    0
+  );
 
   const completedRevenue = validOrders
     .filter((order) => order.status === "completed")
-    .reduce((sum, order) => sum + order.total, 0);
+    .reduce((sum, order) => sum + Number(order.total || 0), 0);
 
   const waitingPayment = orders.filter(
     (order) => order.status === "waiting_payment"
@@ -131,9 +130,7 @@ export default function AdminDashboardPage() {
 
   const newOrders = orders.filter((order) => order.status === "new").length;
 
-  const makingOrders = orders.filter(
-    (order) => order.status === "making"
-  ).length;
+  const makingOrders = orders.filter((order) => order.status === "making").length;
 
   const completedToday = todayOrders.filter(
     (order) => order.status === "completed"
@@ -174,8 +171,8 @@ export default function AdminDashboardPage() {
           total: 0,
         };
 
-        current.quantity += item.quantity;
-        current.total += item.total;
+        current.quantity += Number(item.quantity || 0);
+        current.total += Number(item.total || 0);
 
         map.set(item.product_name, current);
       });
@@ -197,7 +194,7 @@ export default function AdminDashboardPage() {
             quantity: 0,
           };
 
-          current.quantity += item.quantity;
+          current.quantity += Number(item.quantity || 0);
           map.set(topping.name, current);
         });
       });
@@ -249,112 +246,76 @@ export default function AdminDashboardPage() {
       ) : (
         <>
           <div className="mt-8 grid gap-4 md:grid-cols-4">
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">
-                Doanh thu hôm nay
-              </p>
-              <p className="mt-2 text-3xl font-black text-[#06113C]">
-                {todayRevenue.toLocaleString("vi-VN")}đ
-              </p>
-              <p className="mt-2 text-xs font-bold text-neutral-400">
-                {todayOrders.length} đơn hợp lệ
-              </p>
-            </div>
+            <DashboardCard
+              title="Doanh thu hôm nay"
+              value={`${todayRevenue.toLocaleString("vi-VN")}đ`}
+              note={`${todayOrders.length} đơn hợp lệ`}
+            />
 
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">
-                Giá trị đơn TB
-              </p>
-              <p className="mt-2 text-3xl font-black text-[#06113C]">
-                {averageOrderValue.toLocaleString("vi-VN")}đ
-              </p>
-              <p className="mt-2 text-xs font-bold text-neutral-400">
-                Tính theo hôm nay
-              </p>
-            </div>
+            <DashboardCard
+              title="Giá trị đơn TB"
+              value={`${averageOrderValue.toLocaleString("vi-VN")}đ`}
+              note="Tính theo hôm nay"
+            />
 
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">Khách hàng</p>
-              <p className="mt-2 text-3xl font-black text-[#00B14F]">
-                {customers.length}
-              </p>
-              <p className="mt-2 text-xs font-bold text-neutral-400">
-                Tổng khách đã lưu
-              </p>
-            </div>
+            <DashboardCard
+              title="Khách hàng"
+              value={customers.length.toString()}
+              note="Tổng khách đã lưu"
+              green
+            />
 
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">
-                Doanh thu hoàn thành
-              </p>
-              <p className="mt-2 text-3xl font-black text-[#06113C]">
-                {completedRevenue.toLocaleString("vi-VN")}đ
-              </p>
-              <p className="mt-2 text-xs font-bold text-neutral-400">
-                Không tính đơn huỷ
-              </p>
-            </div>
+            <DashboardCard
+              title="Doanh thu hoàn thành"
+              value={`${completedRevenue.toLocaleString("vi-VN")}đ`}
+              note="Không tính đơn huỷ"
+            />
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-5">
-            <Link href="/admin/orders" className="rounded-[28px] bg-orange-50 p-5">
-              <p className="text-sm font-black text-orange-700">
-                Chờ thanh toán
-              </p>
-              <p className="mt-2 text-3xl font-black text-orange-700">
-                {waitingPayment}
-              </p>
-            </Link>
+            <StatusCard
+              href="/admin/orders"
+              title="Chờ thanh toán"
+              value={waitingPayment}
+              color="orange"
+            />
 
-            <Link href="/admin/orders" className="rounded-[28px] bg-yellow-50 p-5">
-              <p className="text-sm font-black text-yellow-700">
-                Khách báo CK
-              </p>
-              <p className="mt-2 text-3xl font-black text-yellow-700">
-                {customerSentPayment}
-              </p>
-            </Link>
+            <StatusCard
+              href="/admin/orders"
+              title="Khách báo CK"
+              value={customerSentPayment}
+              color="yellow"
+            />
 
-            <Link href="/admin/orders" className="rounded-[28px] bg-blue-50 p-5">
-              <p className="text-sm font-black text-blue-700">Đơn mới</p>
-              <p className="mt-2 text-3xl font-black text-blue-700">
-                {newOrders}
-              </p>
-            </Link>
+            <StatusCard
+              href="/admin/orders"
+              title="Đơn mới"
+              value={newOrders}
+              color="blue"
+            />
 
-            <Link href="/admin/orders" className="rounded-[28px] bg-amber-50 p-5">
-              <p className="text-sm font-black text-amber-700">Đang làm</p>
-              <p className="mt-2 text-3xl font-black text-amber-700">
-                {makingOrders}
-              </p>
-            </Link>
+            <StatusCard
+              href="/admin/orders"
+              title="Đang làm"
+              value={makingOrders}
+              color="amber"
+            />
 
-            <Link href="/admin/orders" className="rounded-[28px] bg-green-50 p-5">
-              <p className="text-sm font-black text-green-700">
-                Hoàn thành hôm nay
-              </p>
-              <p className="mt-2 text-3xl font-black text-green-700">
-                {completedToday}
-              </p>
-            </Link>
+            <StatusCard
+              href="/admin/orders"
+              title="Hoàn thành hôm nay"
+              value={completedToday}
+              color="green"
+            />
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">COD hôm nay</p>
-              <p className="mt-2 text-3xl font-black text-[#06113C]">
-                {codToday}
-              </p>
-            </div>
+            <DashboardCard title="COD hôm nay" value={codToday.toString()} />
 
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">
-                Momo/CK hôm nay
-              </p>
-              <p className="mt-2 text-3xl font-black text-[#06113C]">
-                {momoToday}
-              </p>
-            </div>
+            <DashboardCard
+              title="Momo/CK hôm nay"
+              value={momoToday.toString()}
+            />
 
             <div className="rounded-[28px] bg-red-50 p-5">
               <p className="text-sm font-black text-red-700">Huỷ hôm nay</p>
@@ -363,21 +324,16 @@ export default function AdminDashboardPage() {
               </p>
             </div>
 
-            <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
-              <p className="text-sm font-black text-neutral-400">
-                Món đang bán
-              </p>
-              <p className="mt-2 text-3xl font-black text-[#00B14F]">
-                {activeProducts}
-              </p>
-              <p className="mt-2 text-xs font-bold text-neutral-400">
-                {soldOutProducts} món tạm hết · {soldOutToppings} topping tạm hết
-              </p>
-            </div>
+            <DashboardCard
+              title="Món đang bán"
+              value={activeProducts.toString()}
+              note={`${soldOutProducts} món tạm hết · ${soldOutToppings} topping tạm hết`}
+              green
+            />
           </div>
 
-          <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1fr]">
-            <div className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+          <div className="mt-8 grid gap-6 xl:grid-cols-2">
+            <section className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-black text-[#06113C]">
                   Món bán chạy
@@ -393,9 +349,7 @@ export default function AdminDashboardPage() {
 
               <div className="mt-5 space-y-3">
                 {topProducts.length === 0 ? (
-                  <p className="rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
-                    Chưa có dữ liệu.
-                  </p>
+                  <EmptyBox text="Chưa có dữ liệu." />
                 ) : (
                   topProducts.map((item, index) => (
                     <div
@@ -418,9 +372,9 @@ export default function AdminDashboardPage() {
                   ))
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+            <section className="rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-black text-[#06113C]">
                   Topping hot
@@ -436,9 +390,7 @@ export default function AdminDashboardPage() {
 
               <div className="mt-5 space-y-3">
                 {topToppings.length === 0 ? (
-                  <p className="rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
-                    Chưa có dữ liệu topping.
-                  </p>
+                  <EmptyBox text="Chưa có dữ liệu topping." />
                 ) : (
                   topToppings.map((item, index) => (
                     <div
@@ -456,12 +408,14 @@ export default function AdminDashboardPage() {
                   ))
                 )}
               </div>
-            </div>
+            </section>
           </div>
+
           <div className="mt-8">
-  <AdminFinanceSummary />
-</div>
-          <div className="mt-8 rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
+            <AdminFinanceSummary />
+          </div>
+
+          <section className="mt-8 rounded-[32px] bg-white p-5 shadow-xl shadow-neutral-950/5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-2xl font-black text-[#06113C]">
                 Đơn gần đây
@@ -477,9 +431,7 @@ export default function AdminDashboardPage() {
 
             <div className="mt-5 space-y-3">
               {recentOrders.length === 0 ? (
-                <p className="rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
-                  Chưa có đơn gần đây.
-                </p>
+                <EmptyBox text="Chưa có đơn gần đây." />
               ) : (
                 recentOrders.map((order) => (
                   <div
@@ -492,18 +444,18 @@ export default function AdminDashboardPage() {
                   >
                     <div>
                       <p className="font-black text-[#06113C]">
-                        #{order.order_code} · {order.customer_name}
+                        #{order.order_code} · {order.customer_name || "Khách"}
                       </p>
 
                       <p className="mt-1 text-sm font-bold text-neutral-500">
-                        {order.customer_phone} ·{" "}
+                        {order.customer_phone || "Chưa có SĐT"} ·{" "}
                         {new Date(order.created_at).toLocaleString("vi-VN")}
                       </p>
                     </div>
 
                     <div className="text-left md:text-right">
                       <p className="font-black text-[#00B14F]">
-                        {order.total.toLocaleString("vi-VN")}đ
+                        {Number(order.total || 0).toLocaleString("vi-VN")}đ
                       </p>
 
                       <p className="mt-1 text-xs font-black text-neutral-500">
@@ -520,9 +472,70 @@ export default function AdminDashboardPage() {
                 ))
               )}
             </div>
-          </div>
+          </section>
         </>
       )}
     </AdminLayout>
+  );
+}
+
+function DashboardCard({
+  title,
+  value,
+  note,
+  green,
+}: {
+  title: string;
+  value: string;
+  note?: string;
+  green?: boolean;
+}) {
+  return (
+    <div className="rounded-[28px] bg-white p-5 shadow-lg shadow-neutral-950/5">
+      <p className="text-sm font-black text-neutral-400">{title}</p>
+      <p
+        className={`mt-2 text-3xl font-black ${
+          green ? "text-[#00B14F]" : "text-[#06113C]"
+        }`}
+      >
+        {value}
+      </p>
+      {note && <p className="mt-2 text-xs font-bold text-neutral-400">{note}</p>}
+    </div>
+  );
+}
+
+function StatusCard({
+  href,
+  title,
+  value,
+  color,
+}: {
+  href: string;
+  title: string;
+  value: number;
+  color: "orange" | "yellow" | "blue" | "amber" | "green";
+}) {
+  const styles: Record<typeof color, string> = {
+    orange: "bg-orange-50 text-orange-700",
+    yellow: "bg-yellow-50 text-yellow-700",
+    blue: "bg-blue-50 text-blue-700",
+    amber: "bg-amber-50 text-amber-700",
+    green: "bg-green-50 text-green-700",
+  };
+
+  return (
+    <Link href={href} className={`rounded-[28px] p-5 ${styles[color]}`}>
+      <p className="text-sm font-black">{title}</p>
+      <p className="mt-2 text-3xl font-black">{value}</p>
+    </Link>
+  );
+}
+
+function EmptyBox({ text }: { text: string }) {
+  return (
+    <p className="rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
+      {text}
+    </p>
   );
 }

@@ -93,11 +93,9 @@ export default function AdminFinanceSummary() {
     setLoading(false);
   }
 
-  const report = useMemo(() => {
-    const orderRevenue = orders.reduce(
-      (sum, item) => sum + Number(item.total || 0),
-      0
-    );
+  const orderRevenue = orders
+  .filter((item) => item.source !== "pos")
+  .reduce((sum, item) => sum + Number(item.total || 0), 0);
 
     const manualIncome = cashEntries.reduce(
       (sum, item) => sum + Number(item.amount || 0),
@@ -164,7 +162,7 @@ export default function AdminFinanceSummary() {
         <>
           <div className="grid gap-4 md:grid-cols-5">
             <FinanceCard title="Tổng thu" value={money(report.revenue)} />
-            <FinanceCard title="Đơn hoàn thành" value={money(report.orderRevenue)} />
+            <FinanceCard title="Đơn website" value={money(report.orderRevenue)} />
             <FinanceCard title="Thu ngoài" value={money(report.manualIncome)} />
             <FinanceCard title="Tổng chi" value={money(report.expenseTotal)} danger />
             <FinanceCard

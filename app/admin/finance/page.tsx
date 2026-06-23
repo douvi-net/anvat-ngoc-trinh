@@ -119,11 +119,9 @@ export default function FinancePage() {
     setLoading(false);
   }
 
-  const report = useMemo(() => {
-    const orderRevenue = orders.reduce(
-      (sum, item) => sum + Number(item.total || 0),
-      0
-    );
+  const orderRevenue = orders
+  .filter((item) => item.source !== "pos")
+  .reduce((sum, item) => sum + Number(item.total || 0), 0);
 
     const manualIncome = cashEntries.reduce(
       (sum, item) => sum + Number(item.amount || 0),
@@ -135,7 +133,7 @@ export default function FinancePage() {
       0
     );
 
-    const revenue = orderRevenue + manualIncome;
+    const revenue = manualIncome;
 
     return {
       orderRevenue,
@@ -222,7 +220,7 @@ export default function FinancePage() {
 
         <div className="grid gap-4 md:grid-cols-5">
           <Card title="Tổng thu" value={money(report.revenue)} />
-          <Card title="Đơn website/POS" value={money(report.orderRevenue)} />
+          <Card title="Đơn website" value={money(report.orderRevenue)} />
           <Card title="Thu ngoài" value={money(report.manualIncome)} />
           <Card title="Tổng chi" value={money(report.expenseTotal)} />
           <Card

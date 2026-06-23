@@ -7,6 +7,7 @@ type Order = {
   id: string;
   total: number;
   status: string;
+  source: string | null;
   created_at: string;
 };
 
@@ -58,7 +59,7 @@ export default function AdminFinanceSummary() {
     const [ordersRes, expensesRes, cashRes] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, total, status, created_at")
+        .select("id, total, status, source, created_at")
         .eq("status", "completed")
         .gte("created_at", start)
         .lt("created_at", end),
@@ -81,21 +82,24 @@ export default function AdminFinanceSummary() {
     if (cashRes.error) alert(cashRes.error.message);
 
     setOrders((ordersRes.data || []) as Order[]);
+
     setExpenses(
-        ((expensesRes.data || []) as any[]).map((item) => ({
-          ...item,
-          expense_categories: Array.isArray(item.expense_categories)
-            ? item.expense_categories[0] || null
-            : item.expense_categories,
-        }))
-      );
+      ((expensesRes.data || []) as any[]).map((item) => ({
+        ...item,
+        expense_categories: Array.isArray(item.expense_categories)
+          ? item.expense_categories[0] || null
+          : item.expense_categories,
+      }))
+    );
+
     setCashEntries((cashRes.data || []) as CashEntry[]);
     setLoading(false);
   }
 
-  const orderRevenue = orders
-  .filter((item) => item.source !== "pos")
-  .reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const report = useMemo(() => {
+    const orderRevenue = orders
+      .filter((item) => item.source !== "pos")
+      .reduce((sum, item) => sum + Number(item.total || 0), 0);
 
     const manualIncome = cashEntries.reduce(
       (sum, item) => sum + Number(item.amount || 0),
@@ -127,7 +131,7 @@ export default function AdminFinanceSummary() {
       expenseTotal,
       revenue,
       profit: revenue - expenseTotal,
-      orderCount: orders.length,
+      orderCount: orders.filter((item) => item.source !== "pos").length,
       expenseCount: expenses.length,
       expenseByCategory,
     };
@@ -142,7 +146,7 @@ export default function AdminFinanceSummary() {
             Tổng quan thu chi tháng
           </h2>
           <p className="mt-1 text-sm font-bold text-neutral-500">
-            Đơn hoàn thành + thu ngoài + chi phí đã nhập.
+            Tạm thời chỉ tính đơn website + thu ngoài + chi phí nhập tay.
           </p>
         </div>
 
@@ -206,10 +210,22 @@ export default function AdminFinanceSummary() {
               </h3>
 
               <div className="mt-4 grid gap-3">
-                <SummaryRow label="Số đơn hoàn thành" value={`${report.orderCount} đơn`} />
-                <SummaryRow label="Số khoản chi" value={`${report.expenseCount} khoản`} />
-                <SummaryRow label="Doanh thu từ đơn" value={money(report.orderRevenue)} />
-                <SummaryRow label="Doanh thu nhập tay" value={money(report.manualIncome)} />
+                <SummaryRow
+                  label="Số đơn website hoàn thành"
+                  value={`${report.orderCount} đơn`}
+                />
+                <SummaryRow
+                  label="Số khoản chi"
+                  value={`${report.expenseCount} khoản`}
+                />
+                <SummaryRow
+                  label="Doanh thu đơn website"
+                  value={money(report.orderRevenue)}
+                />
+                <SummaryRow
+                  label="Doanh thu nhập tay"
+                  value={money(report.manualIncome)}
+                />
               </div>
             </div>
           </div>

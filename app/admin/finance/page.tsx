@@ -119,29 +119,30 @@ export default function FinancePage() {
     setLoading(false);
   }
 
-  const orderRevenue = orders
-  .filter((item) => item.source !== "pos")
-  .reduce((sum, item) => sum + Number(item.total || 0), 0);
-
+  const report = useMemo(() => {
+    const orderRevenue = orders
+      .filter((item) => item.source !== "pos")
+      .reduce((sum, item) => sum + Number(item.total || 0), 0);
+  
     const manualIncome = cashEntries.reduce(
       (sum, item) => sum + Number(item.amount || 0),
       0
     );
-
+  
     const expenseTotal = expenses.reduce(
       (sum, item) => sum + Number(item.amount || 0),
       0
     );
-
+  
     const revenue = manualIncome;
-
+  
     return {
       orderRevenue,
       manualIncome,
       expenseTotal,
       revenue,
       profit: revenue - expenseTotal,
-      orderCount: orders.length,
+      orderCount: orders.filter((item) => item.source !== "pos").length,
     };
   }, [orders, expenses, cashEntries]);
   function exportFinanceReport() {

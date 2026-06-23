@@ -622,11 +622,11 @@ alert(uploadError?.message || "Upload thất bại");
         
 
           <h1 className="mt-2 text-4xl font-black text-[#06113C]">
-            Tra cứu đơn hàng
+          🎁 Tra cứu đơn hàng & điểm thưởng
           </h1>
 
           <p className="mt-3 text-sm font-semibold leading-6 text-neutral-500">
-            Nhập mã đơn hoặc số điện thoại để xem trạng thái đơn hàng.
+          Nhập mã đơn hoặc số điện thoại để xem đơn hàng, điểm thưởng và quà đổi.
           </p>
 
           <div className="mt-6 flex flex-col gap-3 md:flex-row">

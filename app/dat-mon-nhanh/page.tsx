@@ -2229,14 +2229,35 @@ setScheduledNote("");
   )}
 </div>
 
-<select
-  value={paymentMethod}
-  onChange={(e) => setPaymentMethod(e.target.value)}
- className="col-span-2 rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
->
-<option value="momo">Chuyển khoản</option>
-<option value="cod">Tiền mặt</option>
-</select>
+<div className="col-span-2 rounded-2xl bg-white p-4 ring-1 ring-black/10">
+  <p className="font-black text-[#06113C]">Phương thức thanh toán</p>
+
+  <div className="mt-3 grid grid-cols-2 gap-2">
+    <button
+      type="button"
+      onClick={() => setPaymentMethod("momo")}
+      className={`rounded-xl px-3 py-3 text-sm font-black ${
+        paymentMethod === "momo"
+          ? "bg-[#00B14F] text-white"
+          : "bg-[#F5FFF8] text-[#06113C]"
+      }`}
+    >
+      Chuyển khoản
+    </button>
+
+    <button
+      type="button"
+      onClick={() => setPaymentMethod("cod")}
+      className={`rounded-xl px-3 py-3 text-sm font-black ${
+        paymentMethod === "cod"
+          ? "bg-[#00B14F] text-white"
+          : "bg-[#F5FFF8] text-[#06113C]"
+      }`}
+    >
+      Tiền mặt
+    </button>
+  </div>
+</div>
 
 <button
   type="button"

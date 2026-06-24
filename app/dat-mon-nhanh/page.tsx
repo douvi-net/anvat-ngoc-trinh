@@ -191,7 +191,7 @@ const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thư�
   const [addressSelected, setAddressSelected] = useState(false);
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [paymentMethod, setPaymentMethod] = useState("momo");
   const [orderType, setOrderType] = useState<"now" | "scheduled">("now");
 const [scheduledDate, setScheduledDate] = useState("");
 const [scheduledTime, setScheduledTime] = useState("");
@@ -350,7 +350,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
     setCustomerPhone(localStorage.getItem("avnt_customer_phone") || "");
     setCustomerName(localStorage.getItem("avnt_customer_name") || "");
     setCustomerAddress(localStorage.getItem("avnt_customer_address") || "");
-    setPaymentMethod(localStorage.getItem("avnt_payment_method") || "cod");
+    setPaymentMethod(localStorage.getItem("avnt_payment_method") || "momo");
   }
   function playSound(type: "add" | "open" | "success") {
     if (typeof window === "undefined") return;
@@ -426,7 +426,7 @@ const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
       setCustomerId(customer.id);
       setCustomerName(customer.name || "");
       setCustomerAddress(customer.last_address || "");
-      setPaymentMethod(customer.last_payment_method || "cod");
+      setPaymentMethod(customer.last_payment_method || "momo");
       setCustomerPoints(Number((customer as any).total_points || 0));
 
       if (Number((customer as any).total_points || 0) < 50) {
@@ -2234,8 +2234,8 @@ setScheduledNote("");
   onChange={(e) => setPaymentMethod(e.target.value)}
  className="col-span-2 rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
 >
-  <option value="cod">COD</option>
-  <option value="momo">Momo/CK</option>
+<option value="momo">Chuyển khoản</option>
+<option value="cod">Tiền mặt</option>
 </select>
 
 <button

@@ -93,6 +93,9 @@ type Coupon = {
   min_order_value?: number | null;
   max_discount?: number | null;
   is_active?: boolean | null;
+  gift_product_id?: string | null;
+gift_product_name?: string | null;
+gift_quantity?: number | null;
 };
 type Reward = {
   id: string;
@@ -201,7 +204,8 @@ const [scheduledNote, setScheduledNote] = useState("");
 const [routeMessage, setRouteMessage] = useState("");
 const [googleShippingFee, setGoogleShippingFee] = useState<number | null>(null);
   const [note, setNote] = useState("");
-  const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
+  const [selectedDiscountCoupon, setSelectedDiscountCoupon] = useState<Coupon | null>(null);
+const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null);
   const [customerPoints, setCustomerPoints] = useState(0);
   const [usePointsDiscount, setUsePointsDiscount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -752,7 +756,13 @@ setSelectedSugarLevel("Ngọt bình thường");
   function getCouponType(coupon: Coupon) {
     return String(coupon.discount_type || coupon.type || "fixed").toLowerCase();
   }
-
+  function isGiftCoupon(coupon: Coupon) {
+    return (
+      getCouponType(coupon) === "gift" ||
+      !!coupon.gift_product_id ||
+      !!coupon.gift_product_name
+    );
+  }
   function getCouponMinOrder(coupon: Coupon) {
     return Number(coupon.min_order || coupon.min_order_value || 0);
   }
@@ -781,7 +791,7 @@ setSelectedSugarLevel("Ngọt bình thường");
     return Math.min(discount, subtotal);
   }
 
-  const discountAmount = calculateDiscount(selectedCoupon);
+  const discountAmount = calculateDiscount(selectedDiscountCoupon);
 
 const validShippingPromotions = shippingPromotions.filter((promo) => {
   const maxDistance = Number(promo.max_distance_km || 0);
@@ -947,22 +957,28 @@ const amountToNextShippingPromo = nextShippingPromotion
     ? false
     : true;
 
-  function applyCoupon(coupon: Coupon) {
-    const minOrder = getCouponMinOrder(coupon);
-
-    if (subtotal < minOrder) {
-      alert(
-        `Mã này cần đơn tối thiểu ${minOrder.toLocaleString(
-          "vi-VN"
-        )}đ để áp dụng.`
-      );
-      return;
+    function applyCoupon(coupon: Coupon) {
+      const minOrder = getCouponMinOrder(coupon);
+    
+      if (subtotal < minOrder) {
+        alert(
+          `Khuyến mãi này cần đơn tối thiểu ${minOrder.toLocaleString(
+            "vi-VN"
+          )}đ để áp dụng.`
+        );
+        return;
+      }
+    
+      if (isGiftCoupon(coupon)) {
+        setSelectedGiftCoupon(coupon);
+        showToast("Đã chọn quà tặng");
+      } else {
+        setSelectedDiscountCoupon(coupon);
+        showToast("Đã áp dụng mã giảm giá");
+      }
+    
+      // Không đóng popup để khách chọn tiếp mã khác
     }
-
-    setSelectedCoupon(coupon);
-    setCouponOpen(false);
-    showToast("Đã áp dụng ưu đãi");
-  }
 
   async function upsertCustomer() {
     const cleanPhone = customerPhone.trim();
@@ -1332,7 +1348,12 @@ total_spent: 0,
           points_earned: rewardPoints,
           points_discount: usePointsDiscount,
           
-          coupon_code: selectedCoupon?.code || null,
+          coupon_code: [
+            selectedDiscountCoupon?.code || "",
+            selectedGiftCoupon?.code || "",
+          ]
+            .filter(Boolean)
+            .join(", ") || null,
           total: totalAfterPoints,
           status:
             paymentMethod === "momo"
@@ -1382,6 +1403,22 @@ scheduled_at:
             category: topping.category || null,
           })),
         })),
+        ...(selectedGiftCoupon
+          ? [
+              {
+                order_id: order.id,
+                product_id: selectedGiftCoupon.gift_product_id || null,
+                product_name: `🎁 Món tặng: ${selectedGiftCoupon.gift_product_name}`,
+                quantity: Number(selectedGiftCoupon.gift_quantity || 1),
+                price: 0,
+                unit_price: 0,
+                total: 0,
+                note: `Tặng theo chương trình ${selectedGiftCoupon.code}`,
+                spicy_level: null,
+                toppings: [],
+              },
+            ]
+          : []),
         ...(selectedReward
           ? [
               {
@@ -1451,7 +1488,8 @@ scheduled_at:
 
       setCart([]);
       setNote("");
-      setSelectedCoupon(null);
+      setSelectedDiscountCoupon(null);
+setSelectedGiftCoupon(null);
       setSelectedRewardId("");
       setOrderType("now");
 setScheduledDate("");
@@ -2056,16 +2094,32 @@ setScheduledNote("");
     <div>
       <p className="font-black text-[#06113C]">
         🎟️{" "}
-        {selectedCoupon
-  ? selectedCoupon.title || selectedCoupon.name || selectedCoupon.code
-  : "Chọn mã giảm giá nếu có"}
+        {selectedDiscountCoupon || selectedGiftCoupon
+  ? [
+      selectedDiscountCoupon?.title ||
+        selectedDiscountCoupon?.name ||
+        selectedDiscountCoupon?.code,
+      selectedGiftCoupon?.title ||
+        selectedGiftCoupon?.name ||
+        selectedGiftCoupon?.code,
+    ]
+      .filter(Boolean)
+      .join(" + ")
+  : "Chọn khuyến mãi nếu có"}
       </p>
 
-      {selectedCoupon && (
-        <p className="mt-1 text-sm font-bold text-[#00B14F]">
-          Giảm {discountAmount.toLocaleString("vi-VN")}đ
-        </p>
-      )}
+      {selectedDiscountCoupon && discountAmount > 0 && (
+  <p className="mt-1 text-sm font-bold text-[#00B14F]">
+    Giảm {discountAmount.toLocaleString("vi-VN")}đ
+  </p>
+)}
+
+{selectedGiftCoupon && (
+  <p className="mt-1 text-sm font-bold text-[#00B14F]">
+    Tặng {selectedGiftCoupon.gift_product_name || "món quà"} x
+    {selectedGiftCoupon.gift_quantity || 1}
+  </p>
+)}
     </div>
 
     <span className="text-2xl font-black">›</span>
@@ -2774,7 +2828,7 @@ setScheduledNote("");
     <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[32px] bg-white p-5 md:max-w-xl md:rounded-[32px]">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-black text-[#06113C]">
-          Chọn mã giảm giá
+        Chọn khuyến mãi
         </h2>
 
         <button
@@ -2798,7 +2852,9 @@ setScheduledNote("");
           coupons.map((coupon) => {
             const minOrder = getCouponMinOrder(coupon);
             const canUse = subtotal >= minOrder;
-            const isSelected = selectedCoupon?.id === coupon.id;
+            const isSelected = isGiftCoupon(coupon)
+            ? selectedGiftCoupon?.id === coupon.id
+            : selectedDiscountCoupon?.id === coupon.id;
 
             return (
               <button
@@ -2816,7 +2872,8 @@ setScheduledNote("");
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-black text-[#06113C]">
-                      🎟️ {coupon.title || coupon.name || coupon.code}
+                    {isGiftCoupon(coupon) ? "🎁" : "🎟️"}{" "}
+                    {coupon.title || coupon.name || coupon.code}
                     </p>
 
                     <p className="mt-1 text-sm font-bold text-neutral-600">
@@ -2824,11 +2881,13 @@ setScheduledNote("");
                     </p>
 
                     <p className="mt-1 text-sm font-black text-[#00B14F]">
-                      {getCouponType(coupon).includes("percent")
-                        ? `Giảm ${getCouponValue(coupon)}%`
-                        : `Giảm ${getCouponValue(coupon).toLocaleString(
-                            "vi-VN"
-                          )}đ`}
+                    {isGiftCoupon(coupon)
+  ? `Tặng ${coupon.gift_product_name || "món quà"} x${
+      coupon.gift_quantity || 1
+    }`
+  : getCouponType(coupon).includes("percent")
+  ? `Giảm ${getCouponValue(coupon)}%`
+  : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`}
                     </p>
 
                     {minOrder > 0 && (
@@ -2856,10 +2915,11 @@ setScheduledNote("");
         )}
       </div>
 
-      {selectedCoupon && (
+      {(selectedDiscountCoupon || selectedGiftCoupon) && (
         <button
           onClick={() => {
-            setSelectedCoupon(null);
+            setSelectedDiscountCoupon(null);
+setSelectedGiftCoupon(null);
             setCouponOpen(false);
           }}
           className="mt-5 w-full rounded-2xl bg-red-50 px-5 py-4 font-black text-red-600"

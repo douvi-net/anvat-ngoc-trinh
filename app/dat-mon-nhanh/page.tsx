@@ -793,6 +793,24 @@ setSelectedSugarLevel("Ngọt bình thường");
 
   const discountAmount = calculateDiscount(selectedDiscountCoupon);
 
+useEffect(() => {
+  if (
+    selectedDiscountCoupon &&
+    subtotal < getCouponMinOrder(selectedDiscountCoupon)
+  ) {
+    setSelectedDiscountCoupon(null);
+    showToast("Đã bỏ mã giảm giá vì đơn chưa đủ điều kiện");
+  }
+
+  if (
+    selectedGiftCoupon &&
+    subtotal < getCouponMinOrder(selectedGiftCoupon)
+  ) {
+    setSelectedGiftCoupon(null);
+    showToast("Đã bỏ quà tặng vì đơn chưa đủ điều kiện");
+  }
+}, [subtotal, selectedDiscountCoupon, selectedGiftCoupon]);
+
 const validShippingPromotions = shippingPromotions.filter((promo) => {
   const maxDistance = Number(promo.max_distance_km || 0);
 

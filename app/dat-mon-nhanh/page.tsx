@@ -903,6 +903,37 @@ const amountToNextPoint =
 const amountToNextShippingPromo = nextShippingPromotion
   ? Number(nextShippingPromotion.min_order_value) - subtotal
   : 0;
+  const homepagePromotions = [
+    ...coupons.slice(0, 4).map((coupon) => ({
+      id: coupon.id,
+      icon: isGiftCoupon(coupon) ? "🎁" : "🎟️",
+      title: isGiftCoupon(coupon)
+        ? coupon.gift_product_name || coupon.name || coupon.code
+        : coupon.name || coupon.title || coupon.code,
+      desc: isGiftCoupon(coupon)
+        ? `Đơn từ ${getCouponMinOrder(coupon).toLocaleString("vi-VN")}đ`
+        : getCouponType(coupon).includes("percent")
+        ? `Giảm ${getCouponValue(coupon)}%`
+        : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`,
+      type: "coupon",
+    })),
+    ...shippingPromotions.slice(0, 3).map((promo) => ({
+      id: promo.id,
+      icon: "🚚",
+      title: promo.name,
+      desc: `Đơn từ ${Number(promo.min_order_value || 0).toLocaleString(
+        "vi-VN"
+      )}đ`,
+      type: "shipping",
+    })),
+    {
+      id: "points",
+      icon: "⭐",
+      title: "Tích điểm đổi quà",
+      desc: "Mỗi đơn đều có xu",
+      type: "points",
+    },
+  ];
   const shippingProgress = nextShippingPromotion
   ? Math.min(
       100,
@@ -1596,7 +1627,46 @@ setScheduledNote("");
           </div>
         </div>
       </section>
+      <section className="mx-auto mt-5 max-w-6xl px-4">
+  <div className="flex gap-3 overflow-x-auto pb-2">
+    {homepagePromotions.map((promo) => (
+      <button
+        key={`${promo.type}-${promo.id}`}
+        type="button"
+        onClick={() => {
+          if (promo.type === "coupon") {
+            setCheckoutOpen(true);
+            setCouponOpen(true);
+            return;
+          }
 
+          if (promo.type === "points") {
+            setCheckoutOpen(true);
+            return;
+          }
+
+          showToast("Ưu đãi ship sẽ tự áp dụng khi đơn đủ điều kiện");
+        }}
+        className="min-w-[170px] rounded-2xl bg-white px-4 py-3 text-left shadow-lg shadow-neutral-950/5 ring-1 ring-black/5 active:scale-[0.98]"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#F5FFF8] text-xl">
+            {promo.icon}
+          </span>
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-[#06113C]">
+              {promo.title}
+            </p>
+            <p className="mt-0.5 truncate text-xs font-bold text-neutral-500">
+              {promo.desc}
+            </p>
+          </div>
+        </div>
+      </button>
+    ))}
+  </div>
+</section>
       {banners.length > 0 && (
         <section className="mx-auto mt-6 max-w-6xl px-4">
           <h2 className="text-2xl font-black text-[#06113C]">Ưu đãi hôm nay</h2>
@@ -2864,7 +2934,7 @@ setScheduledNote("");
       <div className="mt-5 space-y-3">
         {coupons.length === 0 ? (
           <p className="font-semibold text-neutral-500">
-            Hiện chưa có mã giảm giá.
+            Hiện chưa có khuyến mãi.
           </p>
         ) : (
           coupons.map((coupon) => {

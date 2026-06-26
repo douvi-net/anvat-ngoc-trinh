@@ -1215,6 +1215,20 @@ total_spent: 0,
       toText: formatTime(to),
     };
   }
+  function todayInputValue() {
+    const now = new Date();
+    return now.toISOString().slice(0, 10);
+  }
+  
+  function suggestedScheduledTime() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 60);
+  
+    const hour = String(now.getHours()).padStart(2, "0");
+    const minute = String(now.getMinutes()).padStart(2, "0");
+  
+    return `${hour}:${minute}`;
+  }
   async function submitOrder() {
     if (!isShopOpen) {
       alert("Hiện tại quán chưa nhận đơn. Anh quay lại sau giúp em nha.");
@@ -2173,57 +2187,125 @@ setScheduledNote("");
               <p className="font-black text-[#06113C]">Giao hàng & thanh toán</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="col-span-2 rounded-2xl bg-white p-4 ring-1 ring-black/10">
-  <p className="font-black text-[#06113C]">Thời gian nhận món</p>
+              <div className="col-span-2 rounded-[24px] bg-white p-4 ring-1 ring-black/10">
+  <div className="flex items-start justify-between gap-3">
+    <div>
+      <p className="text-lg font-black text-[#06113C]">
+        Thời gian nhận món
+      </p>
+      <p className="mt-1 text-xs font-bold text-neutral-500">
+        Chọn giao ngay hoặc hẹn giờ để quán chuẩn bị đúng lúc.
+      </p>
+    </div>
 
-  <div className="mt-3 grid grid-cols-2 gap-2">
+    <span
+      className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+        orderType === "scheduled"
+          ? "bg-[#FFF7E8] text-[#B45309]"
+          : "bg-[#E8FFF1] text-[#00B14F]"
+      }`}
+    >
+      {orderType === "scheduled" ? "Đặt trước" : "Giao ngay"}
+    </span>
+  </div>
+
+  <div className="mt-4 grid grid-cols-2 gap-3">
     <button
       type="button"
-      onClick={() => setOrderType("now")}
-      className={`rounded-xl px-4 py-3 text-sm font-black ${
+      onClick={() => {
+        setOrderType("now");
+        setScheduledNote("");
+      }}
+      className={`rounded-2xl px-3 py-4 text-center font-black transition active:scale-[0.98] ${
         orderType === "now"
-          ? "bg-[#00B14F] text-white"
+          ? "bg-[#00B14F] text-white shadow-lg shadow-[#00B14F]/20"
           : "bg-[#F5FFF8] text-[#06113C]"
       }`}
     >
-      Càng sớm càng tốt
+      <span className="block text-lg">⚡</span>
+      <span className="mt-1 block text-sm">Giao ngay</span>
+      <span
+        className={`mt-1 block text-[11px] font-bold ${
+          orderType === "now" ? "text-white/80" : "text-neutral-500"
+        }`}
+      >
+        Càng sớm càng tốt
+      </span>
     </button>
 
     <button
       type="button"
-      onClick={() => setOrderType("scheduled")}
-      className={`rounded-xl px-4 py-3 text-sm font-black ${
+      onClick={() => {
+        setOrderType("scheduled");
+
+        if (!scheduledDate) {
+          setScheduledDate(todayInputValue());
+        }
+
+        if (!scheduledTime) {
+          setScheduledTime(suggestedScheduledTime());
+        }
+      }}
+      className={`rounded-2xl px-3 py-4 text-center font-black transition active:scale-[0.98] ${
         orderType === "scheduled"
-          ? "bg-[#00B14F] text-white"
+          ? "bg-[#00B14F] text-white shadow-lg shadow-[#00B14F]/20"
           : "bg-[#F5FFF8] text-[#06113C]"
       }`}
     >
-      Đặt trước
+      <span className="block text-lg">🕒</span>
+      <span className="mt-1 block text-sm">Đặt trước</span>
+      <span
+        className={`mt-1 block text-[11px] font-bold ${
+          orderType === "scheduled" ? "text-white/80" : "text-neutral-500"
+        }`}
+      >
+        Hẹn giờ nhận món
+      </span>
     </button>
   </div>
 
   {orderType === "scheduled" && (
-    <div className="mt-4 grid grid-cols-2 gap-3">
-      <input
-        type="date"
-        value={scheduledDate}
-        onChange={(e) => setScheduledDate(e.target.value)}
-        className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-      />
+    <div className="mt-4 rounded-[22px] border border-[#00B14F]/20 bg-[#F5FFF8] p-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-2 block text-xs font-black text-neutral-500">
+            Ngày nhận món
+          </span>
+          <input
+            type="date"
+            value={scheduledDate}
+            min={todayInputValue()}
+            onChange={(e) => setScheduledDate(e.target.value)}
+            className="h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base font-black text-[#06113C] outline-none focus:border-[#00B14F]"
+          />
+        </label>
 
-      <input
-        type="time"
-        value={scheduledTime}
-        onChange={(e) => setScheduledTime(e.target.value)}
-        className="rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
-      />
+        <label className="block">
+          <span className="mb-2 block text-xs font-black text-neutral-500">
+            Giờ nhận món
+          </span>
+          <input
+            type="time"
+            value={scheduledTime}
+            onChange={(e) => setScheduledTime(e.target.value)}
+            className="h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base font-black text-[#06113C] outline-none focus:border-[#00B14F]"
+          />
+        </label>
+      </div>
+
+      {scheduledDate && scheduledTime && (
+        <div className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm font-black text-[#00B14F]">
+          ✅ Quán sẽ chuẩn bị đơn để nhận khoảng {scheduledTime} ngày{" "}
+          {new Date(`${scheduledDate}T00:00:00`).toLocaleDateString("vi-VN")}
+        </div>
+      )}
 
       <textarea
         value={scheduledNote}
         onChange={(e) => setScheduledNote(e.target.value)}
         placeholder="Ghi chú thời gian, ví dụ: giao đúng 18:30 giúp em"
         rows={2}
-        className="col-span-2 rounded-2xl border border-black/10 bg-white px-4 py-4 text-sm font-bold outline-none focus:border-[#00B14F]"
+        className="mt-3 w-full rounded-2xl border border-black/10 bg-white px-4 py-4 text-sm font-bold outline-none focus:border-[#00B14F]"
       />
     </div>
   )}

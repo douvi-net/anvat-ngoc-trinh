@@ -908,10 +908,10 @@ const amountToNextShippingPromo = nextShippingPromotion
       id: coupon.id,
       icon: isGiftCoupon(coupon) ? "🎁" : "🎟️",
       title: isGiftCoupon(coupon)
-  ? "Tặng bánh que"
-  : getCouponType(coupon).includes("percent")
-  ? `Giảm ${getCouponValue(coupon)}%`
-  : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`,
+      ? "Tặng quà"
+      : getCouponType(coupon).includes("percent")
+      ? `Giảm ${getCouponValue(coupon)}%`
+      : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`,
   desc: isGiftCoupon(coupon)
   ? `Đơn từ ${getCouponMinOrder(coupon).toLocaleString("vi-VN")}đ`
   : `Đơn từ ${getCouponMinOrder(coupon).toLocaleString("vi-VN")}đ`,
@@ -920,7 +920,10 @@ const amountToNextShippingPromo = nextShippingPromotion
     ...shippingPromotions.slice(0, 3).map((promo) => ({
       id: promo.id,
       icon: "🚚",
-      title: promo.name,
+      title:
+  promo.promotion_type === "free_ship"
+    ? "Freeship"
+    : "Giảm ship",
       desc: `Đơn từ ${Number(promo.min_order_value || 0).toLocaleString(
         "vi-VN"
       )}đ`,
@@ -929,10 +932,10 @@ const amountToNextShippingPromo = nextShippingPromotion
     {
       id: "points",
       icon: "⭐",
-      title: "Tích điểm đổi quà",
-      desc: "Mỗi đơn đều có xu",
+      title: "Tích xu",
+      desc: "Đổi quà",
       type: "points",
-    },
+  },
   ];
   const shippingProgress = nextShippingPromotion
   ? Math.min(
@@ -1627,17 +1630,8 @@ setScheduledNote("");
           </div>
         </div>
       </section>
-      <section className="mx-auto mt-5 max-w-6xl px-4">
-  <div className="mb-3">
-    <p className="text-lg font-black text-[#06113C]">
-      ⭐ Quyền lợi khi đặt trên Website
-    </p>
-    <p className="mt-1 text-xs font-bold text-neutral-500">
-      Nhấn vào để xem chi tiết hoặc áp dụng ưu đãi
-    </p>
-  </div>
-
-  <div className="flex gap-3 overflow-x-auto pb-2">
+      <section className="mx-auto mt-4 max-w-6xl px-4">
+  <div className="flex gap-2 overflow-x-auto pb-2">
     {homepagePromotions.map((promo) => (
       <button
         key={`${promo.type}-${promo.id}`}
@@ -1649,37 +1643,18 @@ setScheduledNote("");
             return;
           }
 
-          if (promo.type === "points") {
-            setCheckoutOpen(true);
-            return;
-          }
-
-          showToast("Ưu đãi ship sẽ tự áp dụng khi đơn đủ điều kiện");
+          showToast(
+            promo.type === "points"
+              ? "Đặt đơn hoàn thành sẽ được cộng xu đổi quà"
+              : "Ưu đãi ship sẽ tự áp dụng khi đơn đủ điều kiện"
+          );
         }}
-        className="min-w-[145px] rounded-[22px] bg-white p-3 text-left shadow-lg shadow-neutral-950/5 ring-1 ring-black/5 active:scale-[0.98]"
+        className="flex min-w-fit items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm ring-1 ring-black/5 active:scale-[0.98]"
       >
-        <div className="mb-2">
-          <span className="rounded-full bg-[#00B14F] px-2 py-1 text-[10px] font-black text-white">
-            WEB
-          </span>
-        </div>
-
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F5FFF8] text-2xl">
-            {promo.icon}
-          </span>
-
-          <div className="min-w-0">
-            <p className="line-clamp-2 text-sm font-black leading-5 text-[#06113C]">
-              {promo.title}
-            </p>
-            <p className="mt-1 line-clamp-2 text-xs font-bold leading-4 text-neutral-500">
-              {promo.type === "points"
-                ? "Mỗi đơn đều được cộng xu"
-                : promo.desc}
-            </p>
-          </div>
-        </div>
+        <span className="text-base">{promo.icon}</span>
+        <span className="whitespace-nowrap text-xs font-black text-[#06113C]">
+          {promo.title}
+        </span>
       </button>
     ))}
   </div>

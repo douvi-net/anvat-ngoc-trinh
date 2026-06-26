@@ -908,13 +908,13 @@ const amountToNextShippingPromo = nextShippingPromotion
       id: coupon.id,
       icon: isGiftCoupon(coupon) ? "🎁" : "🎟️",
       title: isGiftCoupon(coupon)
-        ? coupon.gift_product_name || coupon.name || coupon.code
-        : coupon.name || coupon.title || coupon.code,
-      desc: isGiftCoupon(coupon)
-        ? `Đơn từ ${getCouponMinOrder(coupon).toLocaleString("vi-VN")}đ`
-        : getCouponType(coupon).includes("percent")
-        ? `Giảm ${getCouponValue(coupon)}%`
-        : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`,
+  ? "Tặng bánh que"
+  : getCouponType(coupon).includes("percent")
+  ? `Giảm ${getCouponValue(coupon)}%`
+  : `Giảm ${getCouponValue(coupon).toLocaleString("vi-VN")}đ`,
+  desc: isGiftCoupon(coupon)
+  ? `Đơn từ ${getCouponMinOrder(coupon).toLocaleString("vi-VN")}đ`
+  : `Đơn từ ${getCouponMinOrder(coupon).toLocaleString("vi-VN")}đ`,
       type: "coupon",
     })),
     ...shippingPromotions.slice(0, 3).map((promo) => ({
@@ -1628,6 +1628,15 @@ setScheduledNote("");
         </div>
       </section>
       <section className="mx-auto mt-5 max-w-6xl px-4">
+  <div className="mb-3">
+    <p className="text-lg font-black text-[#06113C]">
+      ⭐ Quyền lợi khi đặt trên Website
+    </p>
+    <p className="mt-1 text-xs font-bold text-neutral-500">
+      Nhấn vào để xem chi tiết hoặc áp dụng ưu đãi
+    </p>
+  </div>
+
   <div className="flex gap-3 overflow-x-auto pb-2">
     {homepagePromotions.map((promo) => (
       <button
@@ -1647,19 +1656,27 @@ setScheduledNote("");
 
           showToast("Ưu đãi ship sẽ tự áp dụng khi đơn đủ điều kiện");
         }}
-        className="min-w-[170px] rounded-2xl bg-white px-4 py-3 text-left shadow-lg shadow-neutral-950/5 ring-1 ring-black/5 active:scale-[0.98]"
+        className="min-w-[145px] rounded-[22px] bg-white p-3 text-left shadow-lg shadow-neutral-950/5 ring-1 ring-black/5 active:scale-[0.98]"
       >
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#F5FFF8] text-xl">
+        <div className="mb-2">
+          <span className="rounded-full bg-[#00B14F] px-2 py-1 text-[10px] font-black text-white">
+            WEB
+          </span>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F5FFF8] text-2xl">
             {promo.icon}
           </span>
 
           <div className="min-w-0">
-            <p className="truncate text-sm font-black text-[#06113C]">
+            <p className="line-clamp-2 text-sm font-black leading-5 text-[#06113C]">
               {promo.title}
             </p>
-            <p className="mt-0.5 truncate text-xs font-bold text-neutral-500">
-              {promo.desc}
+            <p className="mt-1 line-clamp-2 text-xs font-bold leading-4 text-neutral-500">
+              {promo.type === "points"
+                ? "Mỗi đơn đều được cộng xu"
+                : promo.desc}
             </p>
           </div>
         </div>

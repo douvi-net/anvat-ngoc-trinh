@@ -46,24 +46,66 @@ function dateTime(value: string) {
   return new Date(value).toLocaleString("vi-VN");
 }
 
+function sourceText(value: string | null) {
+  if (value === "pos") return "POS";
+  if (value === "website") return "Website";
+  return value || "Website";
+}
+
+function paymentText(value: string | null) {
+  if (value === "cash") return "Tiền mặt";
+  if (value === "bank") return "Chuyển khoản";
+  if (value === "momo") return "Chuyển khoản";
+  if (value === "cod") return "Tiền mặt";
+  return value || "-";
+}
+
 function formatToppings(value: any) {
   if (!value) return "";
 
   if (typeof value === "string") {
     const text = value.trim();
+
     if (!text || text === "[]" || text === "{}") return "";
-    return text;
+
+    try {
+      const parsed = JSON.parse(text);
+      return formatToppings(parsed);
+    } catch {
+      return text;
+    }
   }
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return "";
-    return value.join(", ");
+    return value
+      .map((item) => {
+        if (!item) return "";
+
+        if (typeof item === "string") return item;
+
+        if (typeof item === "object") {
+          const name = item.name || item.product_name || "";
+          const price = Number(item.price || 0);
+
+          if (!name) return "";
+
+          return price > 0
+            ? `${name} (+${money(price)})`
+            : name;
+        }
+
+        return String(item);
+      })
+      .filter(Boolean)
+      .join(", ");
   }
 
-  const text = JSON.stringify(value);
-  if (!text || text === "[]" || text === "{}") return "";
+  if (typeof value === "object") {
+    const name = value.name || value.product_name || "";
+    if (name) return name;
+  }
 
-  return text;
+  return "";
 }
 
 export default function FinanceOrdersPage() {
@@ -117,9 +159,7 @@ export default function FinanceOrdersPage() {
   }
 
   async function cancelOrder(order: Order) {
-    if (!confirm(`Hủy đơn #${order.order_code}? Đơn sẽ không tính doanh thu.`)) {
-      return;
-    }
+    if (!confirm(`Hủy đơn #${order.order_code}?`)) return;
 
     const { error } = await supabase
       .from("orders")
@@ -189,15 +229,16 @@ export default function FinanceOrdersPage() {
     (item) => item.status === "cancelled"
   );
 
-  const totalRevenue = completedOrders.reduce(
+  const referenceRevenue = completedOrders.reduce(
     (sum, item) => sum + Number(item.total || 0),
     0
   );
 
-  const avgOrder =
-    completedOrders.length > 0
-      ? Math.round(totalRevenue / completedOrders.length)
-      : 0;
+  const websiteOrders = completedOrders.filter(
+    (item) => (item.source || "website") === "website"
+  );
+
+  const posOrders = completedOrders.filter((item) => item.source === "pos");
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
 
@@ -211,10 +252,12 @@ export default function FinanceOrdersPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-black text-[#00B14F]">TÀI CHÍNH</p>
-            <h1 className="text-3xl font-black text-[#06113C]">Doanh thu đơn</h1>
+            <p className="text-sm font-black text-yellow-600">THAM KHẢO</p>
+            <h1 className="text-3xl font-black text-[#06113C]">
+              Doanh thu đơn tham khảo
+            </h1>
             <p className="mt-1 text-sm font-bold text-neutral-500">
-              Xem đơn website/POS, ngày đặt, tổng tiền và chi tiết món khi cần.
+              Chỉ dùng để xem và đối chiếu đơn website/POS. Không cộng vào báo cáo thu chi.
             </p>
           </div>
 
@@ -238,11 +281,16 @@ export default function FinanceOrdersPage() {
           </div>
         </div>
 
+        <div className="rounded-3xl border border-yellow-200 bg-yellow-50 p-4 text-sm font-bold leading-6 text-yellow-700">
+          ⚠️ Trang này chỉ để tham khảo đơn hàng. POS có thể chưa đồng bộ đủ hoặc sai topping.
+          Báo cáo chốt tiền thật nằm ở mục Tổng quan thu chi và chỉ lấy dữ liệu nhập tay.
+        </div>
+
         <div className="grid gap-4 md:grid-cols-4">
-          <Card title="Doanh thu đơn" value={money(totalRevenue)} />
-          <Card title="Đơn hoàn thành" value={`${completedOrders.length} đơn`} />
+          <Card title="Tổng đơn tham khảo" value={money(referenceRevenue)} />
+          <Card title="Website hoàn thành" value={`${websiteOrders.length} đơn`} />
+          <Card title="POS hoàn thành" value={`${posOrders.length} đơn`} />
           <Card title="Đơn đã hủy" value={`${cancelledOrders.length} đơn`} danger />
-          <Card title="Trung bình / đơn" value={money(avgOrder)} />
         </div>
 
         <section className="rounded-3xl bg-white p-5 shadow-xl shadow-neutral-950/5">
@@ -252,7 +300,7 @@ export default function FinanceOrdersPage() {
                 Danh sách đơn trong tháng
               </h2>
               <p className="mt-1 text-sm font-bold text-neutral-500">
-                Hiển thị 100 đơn mỗi trang.
+                Hiển thị 100 đơn mỗi trang. Dữ liệu dùng để kiểm tra, không chốt tiền.
               </p>
             </div>
 
@@ -272,7 +320,7 @@ export default function FinanceOrdersPage() {
                   <th className="p-3">Mã đơn</th>
                   <th className="p-3">Nguồn</th>
                   <th className="p-3">Thanh toán</th>
-                  <th className="p-3 text-right">Tổng</th>
+                  <th className="p-3 text-right">Tổng tham khảo</th>
                   <th className="p-3"></th>
                 </tr>
               </thead>
@@ -293,17 +341,12 @@ export default function FinanceOrdersPage() {
                       }`}
                     >
                       <td className="p-3 font-bold">{dateOnly(order.created_at)}</td>
-
                       <td className="p-3 font-black">#{order.order_code}</td>
-
-                      <td className="p-3">{order.source || "website"}</td>
-
-                      <td className="p-3">{order.payment_method || "-"}</td>
-
+                      <td className="p-3">{sourceText(order.source)}</td>
+                      <td className="p-3">{paymentText(order.payment_method)}</td>
                       <td className="p-3 text-right font-black">
                         {money(order.total)}
                       </td>
-
                       <td className="p-3 text-right">
                         <button
                           onClick={() => setSelectedOrder(order)}
@@ -358,8 +401,8 @@ export default function FinanceOrdersPage() {
             <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-black text-[#00B14F]">
-                    CHI TIẾT ĐƠN
+                  <p className="text-sm font-black text-yellow-600">
+                    CHI TIẾT ĐƠN THAM KHẢO
                   </p>
 
                   <h2 className="text-2xl font-black text-[#06113C]">
@@ -371,8 +414,8 @@ export default function FinanceOrdersPage() {
                   </p>
 
                   <p className="mt-1 text-sm font-bold text-neutral-500">
-                    Nguồn: {selectedOrder.source || "website"} • Thanh toán:{" "}
-                    {selectedOrder.payment_method || "-"}
+                    Nguồn: {sourceText(selectedOrder.source)} • Thanh toán:{" "}
+                    {paymentText(selectedOrder.payment_method)}
                   </p>
                 </div>
 
@@ -384,37 +427,46 @@ export default function FinanceOrdersPage() {
                 </button>
               </div>
 
+              <div className="mt-5 rounded-2xl bg-yellow-50 p-4 text-sm font-bold text-yellow-700">
+                ⚠️ Chi tiết món chỉ để đối chiếu. Nếu đơn POS hiển thị topping chưa đúng,
+                hãy ưu tiên kiểm tra trên máy POS.
+              </div>
+
               <div className="mt-5 space-y-3">
-                {(selectedOrder.order_items || []).map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-[#F5FFF8] p-4">
-                    <div className="flex justify-between gap-3">
-                      <div>
-                        <p className="font-black text-[#06113C]">
-                          {item.product_name} x{item.quantity}
-                        </p>
+                {(selectedOrder.order_items || []).map((item) => {
+                  const toppingsText = formatToppings(item.toppings);
 
-                        {formatToppings(item.toppings) && (
-                          <p className="mt-1 text-sm font-bold text-neutral-500">
-                            {formatToppings(item.toppings)}
+                  return (
+                    <div key={item.id} className="rounded-2xl bg-[#F5FFF8] p-4">
+                      <div className="flex justify-between gap-3">
+                        <div>
+                          <p className="font-black text-[#06113C]">
+                            {item.product_name} x{item.quantity}
                           </p>
-                        )}
 
-                        {item.note && (
-                          <p className="mt-1 text-sm font-bold text-red-500">
-                            Ghi chú: {item.note}
-                          </p>
-                        )}
+                          {toppingsText && (
+                            <p className="mt-1 text-sm font-bold text-neutral-500">
+                              Topping: {toppingsText}
+                            </p>
+                          )}
+
+                          {item.note && (
+                            <p className="mt-1 text-sm font-bold text-red-500">
+                              Ghi chú: {item.note}
+                            </p>
+                          )}
+                        </div>
+
+                        <p className="font-black">{money(item.total)}</p>
                       </div>
-
-                      <p className="font-black">{money(item.total)}</p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-5 rounded-2xl bg-[#06113C] p-4 text-white">
                 <div className="flex justify-between text-xl font-black">
-                  <span>Tổng đơn</span>
+                  <span>Tổng tham khảo</span>
                   <span>{money(selectedOrder.total)}</span>
                 </div>
               </div>

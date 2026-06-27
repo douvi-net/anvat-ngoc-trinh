@@ -13,6 +13,22 @@ type CashEntry = {
   note: string | null;
 };
 
+const INCOME_SOURCES = [
+  "Website",
+  "GrabFood",
+  "ShopeeFood",
+  "XanhNgon",
+  "BeFood",
+  "Bán ngoài",
+  "Khác",
+];
+
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Tiền mặt" },
+  { value: "bank", label: "Chuyển khoản" },
+  { value: "other", label: "Khác" },
+];
+
 function todayVN() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -23,6 +39,13 @@ function currentMonth() {
 
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
+}
+
+function paymentText(value: string | null) {
+  if (value === "cash") return "Tiền mặt";
+  if (value === "bank") return "Chuyển khoản";
+  if (value === "other") return "Khác";
+  return value || "-";
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
@@ -54,7 +77,7 @@ export default function IncomePage() {
 
   const [form, setForm] = useState({
     entry_date: todayVN(),
-    source: "Bán ngoài",
+    source: "Website",
     amount: 0,
     payment_method: "cash",
     note: "",
@@ -90,11 +113,12 @@ export default function IncomePage() {
   function resetForm(date?: string) {
     setForm({
       entry_date: date || todayVN(),
-      source: "Bán ngoài",
+      source: "Website",
       amount: 0,
       payment_method: "cash",
       note: "",
     });
+
     setEditingId(null);
   }
 
@@ -128,15 +152,15 @@ export default function IncomePage() {
 
     setSelectedMonth(form.entry_date.slice(0, 7));
     resetForm(form.entry_date);
-
     setTimeout(fetchEntries, 100);
   }
 
   function startEdit(item: CashEntry) {
     setEditingId(item.id);
+
     setForm({
       entry_date: item.entry_date,
-      source: item.source,
+      source: item.source || "Website",
       amount: Number(item.amount || 0),
       payment_method: item.payment_method || "cash",
       note: item.note || "",
@@ -156,24 +180,27 @@ export default function IncomePage() {
     }
 
     if (editingId === id) resetForm();
+
     fetchEntries();
   }
 
   function exportExcel() {
     const rows = [
-      ["Ngày", "Nguồn", "Thanh toán", "Ghi chú", "Số tiền"],
+      ["BÁO CÁO TIỀN THU NHẬP TAY", selectedMonth],
+      [],
+      ["Ngày", "Nguồn thu", "Thanh toán", "Ghi chú", "Số tiền"],
       ...entries.map((item) => [
         item.entry_date,
         item.source,
-        item.payment_method || "",
+        paymentText(item.payment_method),
         item.note || "",
         String(item.amount || 0),
       ]),
       [],
-      ["Tổng thu ngoài", "", "", "", String(total)],
+      ["Tổng thu nhập tay", "", "", "", String(total)],
     ];
 
-    downloadCsv(`tien-thu-ngoai-${selectedMonth}.csv`, rows);
+    downloadCsv(`tien-thu-nhap-tay-${selectedMonth}.csv`, rows);
   }
 
   const total = entries.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -183,9 +210,12 @@ export default function IncomePage() {
       <div className="space-y-6">
         <div>
           <p className="text-sm font-black text-[#00B14F]">TÀI CHÍNH</p>
-          <h1 className="text-3xl font-black text-[#06113C]">Tiền thu ngoài</h1>
+          <h1 className="text-3xl font-black text-[#06113C]">
+            Tiền thu ngoài
+          </h1>
           <p className="mt-1 text-sm font-bold text-neutral-500">
-            Dùng để nhập Grab, Be, Shopee, bán ngoài, Momo/CK nếu chưa có đơn chi tiết.
+            Nhập tay doanh thu thật để đối soát: Website, GrabFood, ShopeeFood,
+            XanhNgon, BeFood, bán ngoài.
           </p>
         </div>
 
@@ -213,7 +243,9 @@ export default function IncomePage() {
             <input
               type="date"
               value={form.entry_date}
-              onChange={(e) => setForm({ ...form, entry_date: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, entry_date: e.target.value })
+              }
               className="rounded-xl border px-3 py-3 font-bold md:col-span-2"
             />
 
@@ -222,33 +254,35 @@ export default function IncomePage() {
               onChange={(e) => setForm({ ...form, source: e.target.value })}
               className="rounded-xl border px-3 py-3 font-bold md:col-span-2"
             >
-              <option>Bán ngoài</option>
-              <option>POS tại quầy</option>
-              <option>Grab</option>
-              <option>Be</option>
-              <option>Shopee</option>
-              <option>MOMO/CK</option>
-              <option>Khác</option>
+              {INCOME_SOURCES.map((source) => (
+                <option key={source} value={source}>
+                  {source}
+                </option>
+              ))}
             </select>
 
             <input
               type="number"
               value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+              onChange={(e) =>
+                setForm({ ...form, amount: Number(e.target.value) })
+              }
               placeholder="Số tiền"
               className="rounded-xl border px-3 py-3 font-bold md:col-span-2"
             />
 
             <select
               value={form.payment_method}
-              onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, payment_method: e.target.value })
+              }
               className="rounded-xl border px-3 py-3 font-bold md:col-span-2"
             >
-              <option value="cash">Tiền mặt</option>
-              <option value="bank">Chuyển khoản</option>
-              <option value="momo">Momo</option>
-              <option value="app">App</option>
-              <option value="other">Khác</option>
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method.value} value={method.value}>
+                  {method.label}
+                </option>
+              ))}
             </select>
 
             <input
@@ -275,7 +309,7 @@ export default function IncomePage() {
                 Danh sách tiền thu ngoài theo tháng
               </h2>
               <p className="mt-1 font-black text-[#00B14F]">
-                Tổng thu ngoài: {money(total)}
+                Tổng thu nhập tay: {money(total)}
               </p>
             </div>
 
@@ -301,7 +335,7 @@ export default function IncomePage() {
               <thead>
                 <tr className="bg-[#F5FFF8] text-left">
                   <th className="p-3">Ngày</th>
-                  <th className="p-3">Nguồn</th>
+                  <th className="p-3">Nguồn thu</th>
                   <th className="p-3">Thanh toán</th>
                   <th className="p-3">Ghi chú</th>
                   <th className="p-3 text-right">Số tiền</th>
@@ -319,7 +353,7 @@ export default function IncomePage() {
                   >
                     <td className="p-3 font-bold">{item.entry_date}</td>
                     <td className="p-3 font-black">{item.source}</td>
-                    <td className="p-3">{item.payment_method || "-"}</td>
+                    <td className="p-3">{paymentText(item.payment_method)}</td>
                     <td className="p-3">{item.note || "-"}</td>
                     <td className="p-3 text-right font-black">
                       {money(item.amount)}
@@ -346,7 +380,10 @@ export default function IncomePage() {
 
                 {entries.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center font-bold text-neutral-400">
+                    <td
+                      colSpan={6}
+                      className="p-6 text-center font-bold text-neutral-400"
+                    >
                       Chưa có khoản thu ngoài nào trong tháng này.
                     </td>
                   </tr>

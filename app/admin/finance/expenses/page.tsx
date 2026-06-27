@@ -40,6 +40,15 @@ type FormRow = {
   note: string;
 };
 
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Tiền mặt" },
+  { value: "bank", label: "Chuyển khoản" },
+  { value: "other", label: "Khác" },
+];
+
+const SPENDERS = ["Trung", "Ngọc Trinh", "Nhân viên", "Khác"];
+const BRANCHES = ["Q6", "Q1", "Khác"];
+
 function todayVN() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -51,6 +60,18 @@ function currentMonth() {
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0) + " đ";
 }
+
+function paymentText(value: string | null) {
+  if (value === "cash") return "Tiền mặt";
+  if (value === "bank") return "Chuyển khoản";
+  if (value === "other") return "Khác";
+  return value || "-";
+}
+
+function categoryName(item: Expense) {
+  return item.expense_categories?.name || "Chi khác";
+}
+
 function downloadCsv(filename: string, rows: string[][]) {
   const csv = rows
     .map((row) =>
@@ -69,6 +90,7 @@ function downloadCsv(filename: string, rows: string[][]) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
 const emptyRow = (date?: string): FormRow => ({
   expense_date: date || todayVN(),
   category_id: "",
@@ -174,12 +196,10 @@ export default function ExpensesPage() {
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function saveRows() {
-    const validRows = rows.filter((row) => row.item_name.trim());
-
+  function validateRows(validRows: FormRow[]) {
     if (validRows.length === 0) {
       alert("Nhập ít nhất 1 khoản chi.");
-      return;
+      return false;
     }
 
     const invalidAmount = validRows.some(
@@ -188,8 +208,16 @@ export default function ExpensesPage() {
 
     if (invalidAmount) {
       alert("Số lượng và đơn giá phải lớn hơn 0.");
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  async function saveRows() {
+    const validRows = rows.filter((row) => row.item_name.trim());
+
+    if (!validateRows(validRows)) return;
 
     setSaving(true);
 
@@ -262,15 +290,9 @@ export default function ExpensesPage() {
   async function updateExpense() {
     if (!editingId) return;
 
-    if (!editForm.item_name.trim()) {
-      alert("Nhập tên mặt hàng.");
-      return;
-    }
+    const validRows = [editForm].filter((row) => row.item_name.trim());
 
-    if (Number(editForm.quantity || 0) <= 0 || Number(editForm.unit_price || 0) <= 0) {
-      alert("Số lượng và đơn giá phải lớn hơn 0.");
-      return;
-    }
+    if (!validateRows(validRows)) return;
 
     setSaving(true);
 
@@ -323,6 +345,7 @@ export default function ExpensesPage() {
 
     fetchExpenses();
   }
+
   function exportExpenses() {
     const rows = [
       ["BÁO CÁO TIỀN CHI", selectedMonth],
@@ -346,7 +369,7 @@ export default function ExpensesPage() {
       ],
       ...expenses.map((item) => [
         item.expense_date,
-        item.expense_categories?.name || "",
+        categoryName(item),
         item.item_name,
         String(item.quantity || 0),
         item.unit || "",
@@ -354,14 +377,15 @@ export default function ExpensesPage() {
         item.supplier || "",
         item.spender || "",
         item.branch || "",
-        item.payment_method || "",
+        paymentText(item.payment_method),
         item.note || "",
         String(item.amount || 0),
       ]),
     ];
-  
+
     downloadCsv(`tien-chi-${selectedMonth}.csv`, rows);
   }
+
   const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   return (
@@ -369,9 +393,9 @@ export default function ExpensesPage() {
       <div className="space-y-6">
         <div>
           <p className="text-sm font-black text-[#00B14F]">TÀI CHÍNH</p>
-          <h1 className="text-3xl font-black text-[#06113C]">Nhập tiền chi</h1>
+          <h1 className="text-3xl font-black text-[#06113C]">Tiền chi</h1>
           <p className="mt-1 text-sm font-bold text-neutral-500">
-            Nhập bất cứ lúc nào, chỉ cần chọn đúng ngày chi. Danh sách bên dưới hiển thị theo tháng.
+            Nhập tay các khoản chi để đối soát. Báo cáo thu chi thật sẽ lấy dữ liệu từ đây.
           </p>
         </div>
 
@@ -469,20 +493,20 @@ export default function ExpensesPage() {
             </div>
 
             <div className="flex flex-col gap-3 md:flex-row">
-  <input
-    type="month"
-    value={selectedMonth}
-    onChange={(e) => setSelectedMonth(e.target.value)}
-    className="rounded-2xl border px-4 py-3 font-black"
-  />
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="rounded-2xl border px-4 py-3 font-black"
+              />
 
-  <button
-    onClick={exportExpenses}
-    className="rounded-2xl bg-[#06113C] px-5 py-3 font-black text-white"
-  >
-    Xuất Excel
-  </button>
-</div>
+              <button
+                onClick={exportExpenses}
+                className="rounded-2xl bg-[#06113C] px-5 py-3 font-black text-white"
+              >
+                Xuất Excel
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 overflow-x-auto">
@@ -512,7 +536,7 @@ export default function ExpensesPage() {
                     }`}
                   >
                     <td className="p-3 font-bold">{item.expense_date}</td>
-                    <td className="p-3">{item.expense_categories?.name || "-"}</td>
+                    <td className="p-3">{categoryName(item)}</td>
                     <td className="p-3 font-black">{item.item_name}</td>
                     <td className="p-3">
                       {item.quantity} {item.unit || ""}
@@ -521,7 +545,7 @@ export default function ExpensesPage() {
                     <td className="p-3">{item.supplier || "-"}</td>
                     <td className="p-3">{item.spender || "-"}</td>
                     <td className="p-3">{item.branch || "-"}</td>
-                    <td className="p-3">{item.payment_method || "-"}</td>
+                    <td className="p-3">{paymentText(item.payment_method)}</td>
                     <td className="p-3 text-right font-black">
                       {money(item.amount)}
                     </td>
@@ -637,10 +661,11 @@ function ExpenseFormFields({
         onChange={(e) => update("payment_method", e.target.value)}
         className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
       >
-        <option value="cash">Tiền mặt</option>
-        <option value="bank">Chuyển khoản</option>
-        <option value="momo">Momo</option>
-        <option value="other">Khác</option>
+        {PAYMENT_METHODS.map((method) => (
+          <option key={method.value} value={method.value}>
+            {method.label}
+          </option>
+        ))}
       </select>
 
       <select
@@ -648,9 +673,11 @@ function ExpenseFormFields({
         onChange={(e) => update("spender", e.target.value)}
         className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
       >
-        <option value="Trung">Trung</option>
-        <option value="Ngọc Trinh">Ngọc Trinh</option>
-        <option value="Nhân viên">Nhân viên</option>
+        {SPENDERS.map((spender) => (
+          <option key={spender} value={spender}>
+            {spender}
+          </option>
+        ))}
       </select>
 
       <select
@@ -658,8 +685,11 @@ function ExpenseFormFields({
         onChange={(e) => update("branch", e.target.value)}
         className="rounded-xl border px-3 py-2 font-bold md:col-span-2"
       >
-        <option value="Q6">Q6</option>
-        <option value="Q1">Q1</option>
+        {BRANCHES.map((branch) => (
+          <option key={branch} value={branch}>
+            {branch}
+          </option>
+        ))}
       </select>
 
       <input

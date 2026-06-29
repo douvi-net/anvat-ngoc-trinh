@@ -46,6 +46,7 @@ type Customer = {
   name: string;
   phone: string;
   last_address: string | null;
+  last_address_detail?: string | null;
   last_payment_method: string | null;
   last_lat?: number | null;
   last_lng?: number | null;
@@ -189,6 +190,7 @@ const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thư�
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [customerAddressDetail, setCustomerAddressDetail] = useState("");
   const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressSelected, setAddressSelected] = useState(false);
@@ -354,6 +356,9 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     setCustomerPhone(localStorage.getItem("avnt_customer_phone") || "");
     setCustomerName(localStorage.getItem("avnt_customer_name") || "");
     setCustomerAddress(localStorage.getItem("avnt_customer_address") || "");
+    setCustomerAddressDetail(
+      localStorage.getItem("avnt_customer_address_detail") || ""
+    );
     setPaymentMethod(localStorage.getItem("avnt_payment_method") || "momo");
   }
   function playSound(type: "add" | "open" | "success") {
@@ -375,6 +380,10 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     localStorage.setItem("avnt_customer_phone", customerPhone.trim());
     localStorage.setItem("avnt_customer_name", customerName.trim());
     localStorage.setItem("avnt_customer_address", customerAddress.trim());
+    localStorage.setItem(
+      "avnt_customer_address_detail",
+      customerAddressDetail.trim()
+    );
     localStorage.setItem("avnt_payment_method", paymentMethod);
   }
 
@@ -430,6 +439,7 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
       setCustomerId(customer.id);
       setCustomerName(customer.name || "");
       setCustomerAddress(customer.last_address || "");
+      setCustomerAddressDetail(customer.last_address_detail || "");
       setPaymentMethod(customer.last_payment_method || "momo");
       setCustomerPoints(Number((customer as any).total_points || 0));
 
@@ -1041,6 +1051,7 @@ const amountToNextShippingPromo = nextShippingPromotion
         .update({
           name: customerName.trim(),
           last_address: customerAddress.trim(),
+          last_address_detail: customerAddressDetail.trim(),
           last_payment_method: paymentMethod,
           last_lat: deliveryLat,
           last_lng: deliveryLng,
@@ -1076,6 +1087,7 @@ const amountToNextShippingPromo = nextShippingPromotion
         .update({
           name: customerName.trim(),
           last_address: customerAddress.trim(),
+          last_address_detail: customerAddressDetail.trim(),
           last_payment_method: paymentMethod,
           last_lat: deliveryLat,
           last_lng: deliveryLng,
@@ -1095,6 +1107,7 @@ const amountToNextShippingPromo = nextShippingPromotion
     name: customerName.trim(),
     phone: cleanPhone,
     last_address: customerAddress.trim(),
+    last_address_detail: customerAddressDetail.trim(),
     last_payment_method: paymentMethod,
     last_lat: deliveryLat,
     last_lng: deliveryLng,
@@ -1378,6 +1391,7 @@ total_spent: 0,
           customer_name: customerName.trim(),
           customer_phone: customerPhone.trim(),
           customer_address: customerAddress.trim(),
+          address_detail: customerAddressDetail.trim() || null,
           note: [
             orderType === "scheduled" && scheduledDateTime
               ? `⏰ Đơn đặt trước: ${scheduledDateTime.toLocaleString("vi-VN")}${
@@ -2314,6 +2328,13 @@ setScheduledNote("");
     </p>
   )}
 </div>
+<textarea
+  value={customerAddressDetail}
+  onChange={(e) => setCustomerAddressDetail(e.target.value)}
+  placeholder="Chi tiết địa chỉ: Block, tầng, căn hộ, hẻm, khách sạn, gọi trước khi tới..."
+  rows={2}
+  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 text-sm font-bold outline-none focus:border-[#00B14F]"
+/>
               </div>
             </div>
 

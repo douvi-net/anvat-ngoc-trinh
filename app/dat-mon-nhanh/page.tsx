@@ -197,6 +197,8 @@ const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thư�
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("momo");
+  const [fulfillmentType, setFulfillmentType] =
+    useState<"delivery" | "pickup">("delivery");
   const [orderType, setOrderType] = useState<"now" | "scheduled">("now");
 const [scheduledDate, setScheduledDate] = useState("");
 const [scheduledTime, setScheduledTime] = useState("");
@@ -864,10 +866,13 @@ const bestShippingPromotion =
         (maxDistance <= 0 || deliveryDistanceKm <= maxDistance)
       );
     });
-const shippingDiscount = bestShippingPromotion?.discountAmount || 0;
-const finalShippingFee = Math.max(0, shippingFee - shippingDiscount);
-
-const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
+    const shippingDiscount =
+    fulfillmentType === "pickup" ? 0 : bestShippingPromotion?.discountAmount || 0;
+  
+  const finalShippingFee =
+    fulfillmentType === "pickup" ? 0 : Math.max(0, shippingFee - shippingDiscount);
+  
+  const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
 
 const selectedReward = rewards.find((reward) => reward.id === selectedRewardId) || null;
 const rewardPointsUsed = selectedReward ? Number(selectedReward.points_required || 0) : 0;
@@ -1321,8 +1326,13 @@ total_spent: 0,
       return;
     }
 
-    if (!customerPhone.trim() || !customerName.trim() || !customerAddress.trim()) {
-      alert("Anh nhập đủ số điện thoại, tên và địa chỉ giúp em nha.");
+    if (!customerPhone.trim() || !customerName.trim()) {
+      alert("Anh nhập số điện thoại và tên giúp em nha.");
+      return;
+    }
+    
+    if (fulfillmentType === "delivery" && !customerAddress.trim()) {
+      alert("Anh nhập địa chỉ giao hàng giúp em nha.");
       return;
     }
 
@@ -1332,17 +1342,17 @@ total_spent: 0,
       return;
     }
 
-    if (!deliveryLat || !deliveryLng) {
+    if (fulfillmentType === "delivery" && (!deliveryLat || !deliveryLng)) {
       alert("Anh/chị vui lòng chọn địa chỉ từ danh sách gợi ý Google.");
       return;
     }
     
-    if (routeLoading) {
+    if (fulfillmentType === "delivery" && routeLoading) {
       alert("Hệ thống đang tính phí ship, anh/chị chờ vài giây nha.");
       return;
     }
     
-    if (!routeMessage) {
+    if (fulfillmentType === "delivery" && !routeMessage) {
       alert("Anh/chị bấm tính lại phí ship trước khi đặt hàng nha.");
       return;
     }
@@ -1353,9 +1363,13 @@ total_spent: 0,
     }
     const scheduledDateTime = getScheduledDateTime();
 
-    if (orderType === "scheduled") {
+    if (orderType === "scheduled" || fulfillmentType === "pickup") {
       if (!scheduledDateTime) {
-        alert("Anh/chị chọn ngày và giờ nhận món giúp em nha.");
+        alert(
+          fulfillmentType === "pickup"
+            ? "Anh/chị chọn ngày và giờ đến lấy món giúp em nha."
+            : "Anh/chị chọn ngày và giờ nhận món giúp em nha."
+        );
         return;
       }
     
@@ -1390,8 +1404,10 @@ total_spent: 0,
           customer_id: customer.id,
           customer_name: customerName.trim(),
           customer_phone: customerPhone.trim(),
-          customer_address: customerAddress.trim(),
-          address_detail: customerAddressDetail.trim() || null,
+          customer_address:
+  fulfillmentType === "delivery" ? customerAddress.trim() : "Khách tự đến lấy",
+address_detail:
+  fulfillmentType === "delivery" ? customerAddressDetail.trim() || null : null,
           note: [
             orderType === "scheduled" && scheduledDateTime
               ? `⏰ Đơn đặt trước: ${scheduledDateTime.toLocaleString("vi-VN")}${
@@ -1407,7 +1423,7 @@ total_spent: 0,
             .filter(Boolean)
             .join("\n"),
           subtotal,
-          shipping_fee: finalShippingFee,
+          shipping_fee: fulfillmentType === "pickup" ? 0 : finalShippingFee,
           discount_amount: discountAmount + shippingDiscount + usePointsDiscount,
 
           points_used: totalPointsUsed,
@@ -1430,21 +1446,27 @@ total_spent: 0,
           source: "website",
           payment_method: paymentMethod,
           payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
-          delivery_distance_km: deliveryDistanceKm,
-          delivery_area: selectedShippingZone?.name || "Quán xác nhận",
+          delivery_distance_km: fulfillmentType === "pickup" ? 0 : deliveryDistanceKm,
+delivery_area:
+  fulfillmentType === "pickup"
+    ? "Tự đến lấy"
+    : selectedShippingZone?.name || "Quán xác nhận",
+fulfillment_type: fulfillmentType,
           delivery_status: "pending",
           preparation_minutes: estimatedReceive.prepMinutes,
           delivery_minutes: estimatedReceive.deliveryMinutes,
           estimated_delivery_from: estimatedFrom.toISOString(),
           estimated_delivery_to: estimatedTo.toISOString(),
           confirmed_at: paymentMethod === "cod" ? new Date().toISOString() : null,
-          order_type: orderType,
+          order_type: fulfillmentType === "pickup" ? "scheduled" : orderType,
 scheduled_at:
-  orderType === "scheduled" && scheduledDateTime
+  (orderType === "scheduled" || fulfillmentType === "pickup") && scheduledDateTime
     ? scheduledDateTime.toISOString()
     : null,
     scheduled_note:
-    orderType === "scheduled" ? scheduledNote.trim() || null : null,
+  orderType === "scheduled" || fulfillmentType === "pickup"
+    ? scheduledNote.trim() || null
+    : null,
         })
         .select()
         .single();
@@ -2270,7 +2292,8 @@ setScheduledNote("");
                   placeholder="Tên khách hàng"
                   className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
                 />
-
+{fulfillmentType === "delivery" && (
+  <>
 <div className="relative">
   <input
     value={customerAddress}
@@ -2329,12 +2352,14 @@ setScheduledNote("");
   )}
 </div>
 <textarea
-  value={customerAddressDetail}
-  onChange={(e) => setCustomerAddressDetail(e.target.value)}
-  placeholder="Chi tiết địa chỉ: Block, tầng, căn hộ, hẻm, khách sạn, gọi trước khi tới..."
-  rows={2}
-  className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 text-sm font-bold outline-none focus:border-[#00B14F]"
-/>
+      value={customerAddressDetail}
+      onChange={(e) => setCustomerAddressDetail(e.target.value)}
+      placeholder="Chi tiết địa chỉ: Block, tầng, căn hộ, hẻm, khách sạn, gọi trước khi tới..."
+      rows={2}
+      className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 text-sm font-bold outline-none focus:border-[#00B14F]"
+    />
+</>
+)}
               </div>
             </div>
 
@@ -2342,6 +2367,54 @@ setScheduledNote("");
               <p className="font-black text-[#06113C]">Giao hàng & thanh toán</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="col-span-2 rounded-[24px] bg-white p-4 ring-1 ring-black/10">
+  <p className="font-black text-[#06113C]">Nhận món bằng cách nào?</p>
+
+  <div className="mt-3 grid grid-cols-2 gap-2">
+    <button
+      type="button"
+      onClick={() => {
+        setFulfillmentType("delivery");
+      }}
+      className={`rounded-2xl px-3 py-4 text-sm font-black ${
+        fulfillmentType === "delivery"
+          ? "bg-[#00B14F] text-white"
+          : "bg-[#F5FFF8] text-[#06113C]"
+      }`}
+    >
+      🛵 Giao tận nơi
+    </button>
+
+    <button
+      type="button"
+      onClick={() => {
+        setFulfillmentType("pickup");
+        setOrderType("scheduled");
+        setGoogleShippingFee(0);
+        setDeliveryDistanceKm(0);
+        setRouteMessage("Tự đến lấy tại quán - không tính phí ship");
+
+        if (!scheduledDate) setScheduledDate(todayInputValue());
+        if (!scheduledTime) setScheduledTime(suggestedScheduledTime());
+      }}
+      className={`rounded-2xl px-3 py-4 text-sm font-black ${
+        fulfillmentType === "pickup"
+          ? "bg-[#00B14F] text-white"
+          : "bg-[#F5FFF8] text-[#06113C]"
+      }`}
+    >
+      🏃 Tự đến lấy
+    </button>
+  </div>
+
+  {fulfillmentType === "pickup" && (
+    <div className="mt-3 rounded-2xl bg-[#FFF7E8] px-4 py-3 text-xs font-bold leading-5 text-[#B45309]">
+      🏃 Tự đến lấy tại quán. Quán cần ít nhất 30 phút để chuẩn bị.
+      <br />
+      Địa chỉ: 240/127/22C Nguyễn Văn Luông, Bình Phú, Quận 6.
+    </div>
+  )}
+</div>
               <div className="col-span-2 rounded-[24px] bg-white p-4 ring-1 ring-black/10">
   <div className="flex items-start justify-between gap-3">
     <div>
@@ -2364,7 +2437,10 @@ setScheduledNote("");
     </span>
   </div>
 
-  <div className="mt-4 grid grid-cols-2 gap-3">
+  <div className={`mt-4 grid gap-3 ${
+  fulfillmentType === "pickup" ? "grid-cols-1" : "grid-cols-2"
+}`}>
+    {fulfillmentType === "delivery" && (
     <button
       type="button"
       onClick={() => {
@@ -2386,7 +2462,8 @@ setScheduledNote("");
       >
         Càng sớm càng tốt
       </span>
-    </button>
+      </button>
+    )}
 
     <button
       type="button"
@@ -2495,7 +2572,8 @@ setScheduledNote("");
     </button>
   </div>
 </div>
-
+{fulfillmentType === "delivery" && (
+  <>
 <button
   type="button"
   onClick={() => {
@@ -2511,7 +2589,9 @@ setScheduledNote("");
 >
 {routeLoading ? "Đang tính phí ship..." : "🚚 Tính lại phí ship"}
 </button>
-{routeMessage && (
+</>
+)}
+{fulfillmentType === "delivery" && routeMessage && (
   <div
     className={`col-span-2 rounded-2xl px-4 py-3 text-sm font-bold ${
       googleShippingFee === null
@@ -2672,10 +2752,11 @@ setScheduledNote("");
               </div>
 
               <div className="mt-3 flex justify-between text-sm font-bold text-white/70">
-                <span>
-                  Phí ship{" "}
-                  {selectedShippingZone ? `(${selectedShippingZone.name})` : ""}
-                </span>
+              <span>
+  {fulfillmentType === "pickup"
+    ? "Phí ship"
+    : `Phí ship ${selectedShippingZone ? `(${selectedShippingZone.name})` : ""}`}
+</span>
                 {shippingDiscount > 0 ? (
   <div className="text-right">
     <div className="text-xs text-white/40 line-through">
@@ -2687,9 +2768,11 @@ setScheduledNote("");
   </div>
 ) : (
 <span>
-  {googleShippingFee === null
-    ? "Quán xác nhận"
-    : `${shippingFee.toLocaleString("vi-VN")}đ`}
+{fulfillmentType === "pickup"
+  ? "0đ"
+  : googleShippingFee === null
+  ? "Quán xác nhận"
+  : `${shippingFee.toLocaleString("vi-VN")}đ`}
 </span>
 )}
               </div>
@@ -2916,6 +2999,8 @@ setScheduledNote("");
                 ? "Số điện thoại đang bị hạn chế"
                 : customerFlag?.status === "warning"
                 ? `Gửi đơn chờ xác nhận · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
+                : fulfillmentType === "pickup"
+                ? `Đặt món đến lấy · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
                 : orderType === "scheduled"
                 ? `Đặt trước · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
                 : `Đặt hàng · ${totalAfterPoints.toLocaleString("vi-VN")}đ`}

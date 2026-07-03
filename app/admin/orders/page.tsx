@@ -45,6 +45,7 @@ estimated_delivery_to?: string | null;
   points_used?: number | null;
 points_discount?: number | null;
 points_processed?: boolean | null;
+points_earned?: number | null;
 };
 
 
@@ -602,8 +603,11 @@ if (!currentOrder) {
     ) {
       const phone = currentOrder.customer_phone?.trim();
       const orderTotal = Number(currentOrder.total || 0);
-      const pointsUsed = Number(currentOrder.points_used || 0);
-      const pointsEarned = Math.floor(orderTotal / 10000);
+const pointBaseAmount = Number(currentOrder.subtotal || currentOrder.total || 0);
+const pointsUsed = Number(currentOrder.points_used || 0);
+const pointsEarned = Number(
+  (currentOrder as any).points_earned ?? Math.floor(pointBaseAmount / 10000)
+);
 
       if (phone) {
         const { data: existingHistory } = await supabase

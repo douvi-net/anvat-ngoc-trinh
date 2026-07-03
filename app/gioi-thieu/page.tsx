@@ -75,9 +75,11 @@ export default function GioiThieuPage() {
       <section className="mx-auto max-w-7xl px-4 py-14 md:px-8">
         <div className="grid gap-8 md:grid-cols-2 md:items-center">
           <div className="rounded-[40px] bg-[#E8FFF1] p-8">
-            <div className="flex aspect-square items-center justify-center rounded-[32px] bg-white text-8xl">
-              🥢
-            </div>
+          <img
+  src="/images/an-vat-ngoc-trinh-gioi-thieu-square.png"
+  alt="Ăn Vặt Ngọc Trinh chuẩn bị món ăn"
+  className="aspect-square w-full rounded-[32px] object-cover"
+/>
           </div>
 
           <div>

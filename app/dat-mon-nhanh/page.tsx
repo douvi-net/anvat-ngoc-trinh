@@ -498,6 +498,15 @@ setUsePointsDiscount(0);
       toppingCategory.includes("trà sữa")
     );
   }
+  function isUpsizeOneLiterTopping(topping: Topping) {
+    const name = topping.name.toLowerCase();
+  
+    return (
+      name.includes("upsize") ||
+      name.includes("1 lít") ||
+      name.includes("1 lit")
+    );
+  }
   function openProductOptions(product: Product) {
     if (product.is_sold_out) {
       showToast("Món này đang tạm hết");
@@ -976,7 +985,17 @@ const amountToNextShippingPromo = nextShippingPromotion
         topping.category === "Topping dùng chung"
     );
   }, [toppings, selectedProduct]);
-
+  const upsizeTopping = useMemo(() => {
+    return visibleToppings.find((topping) =>
+      isUpsizeOneLiterTopping(topping)
+    );
+  }, [visibleToppings]);
+  
+  const displayToppings = useMemo(() => {
+    return visibleToppings.filter(
+      (topping) => !isUpsizeOneLiterTopping(topping)
+    );
+  }, [visibleToppings]);
   const selectedProductTotal = useMemo(() => {
     if (!selectedProduct) return 0;
   
@@ -1913,13 +1932,13 @@ setScheduledNote("");
             </p>
           </div>
 
-          {visibleToppings.length === 0 ? (
+          {displayToppings.length === 0 ? (
             <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
               Món này chưa có topping phù hợp.
             </p>
           ) : (
             <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
-              {visibleToppings.map((topping) => {
+              {displayToppings.map((topping) => {
                 const active = selectedToppingIds.includes(topping.id);
 
                 return (
@@ -1961,6 +1980,46 @@ setScheduledNote("");
 
         {selectedProduct && isDrinkProduct(selectedProduct) ? (
   <>
+    {upsizeTopping && (
+      <div className="mt-5">
+        <p className="font-black text-[#06113C]">Dung tích ly</p>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedToppingIds.includes(upsizeTopping.id)) {
+                toggleTopping(upsizeTopping.id);
+              }
+            }}
+            className={`rounded-xl px-3 py-4 text-sm font-black ${
+              selectedToppingIds.includes(upsizeTopping.id)
+                ? "bg-[#F5FFF8] text-[#06113C]"
+                : "bg-[#00B14F] text-white"
+            }`}
+          >
+            700ml
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedToppingIds.includes(upsizeTopping.id)) {
+                toggleTopping(upsizeTopping.id);
+              }
+            }}
+            className={`rounded-xl px-3 py-4 text-sm font-black ${
+              selectedToppingIds.includes(upsizeTopping.id)
+                ? "bg-[#00B14F] text-white"
+                : "bg-[#F5FFF8] text-[#06113C]"
+            }`}
+          >
+            1 lít +{Number(upsizeTopping.price).toLocaleString("vi-VN")}đ
+          </button>
+        </div>
+      </div>
+    )}
+
     <div className="mt-5">
       <p className="font-black text-[#06113C]">Lượng đá</p>
 

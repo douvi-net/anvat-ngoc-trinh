@@ -37,7 +37,7 @@ export const products = [
   {
     name: "Trà đào",
     price: 27000,
-    image: "/images/tra-dao.jpg",
+    image: "/images/tra-dao.png",
     description: "Trà đào uống kèm bánh tráng, hợp đặt combo ăn vặt.",
     badge: "NƯỚC UỐNG",
   },

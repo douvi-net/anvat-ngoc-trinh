@@ -15,7 +15,7 @@
     if (distanceKm <= 0.5) return 0;
     if (distanceKm <= 2) return 16000;
     if (distanceKm <= 5) return 21000;
-    if (distanceKm <= 8) return 31000;
+    if (distanceKm <= 10) return 31000;
 
     return null;
   }
@@ -103,7 +103,7 @@
         is_supported_area: shippingFee !== null,
         message:
           shippingFee === null
-            ? "Khoảng cách ngoài khu vực giao hàng tự động. Quán sẽ xác nhận phí ship."
+            ? "Khoảng cách trên 10km. Quán sẽ xác nhận phí ship."
             : "Đã tính phí ship tự động theo tọa độ Google Maps.",
       });
     } catch (error) {

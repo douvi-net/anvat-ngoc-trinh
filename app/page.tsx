@@ -64,7 +64,7 @@ export default function HomePage() {
       },
     ],
     sameAs: [
-      "https://www.facebook.com/anvatngoctrinh",
+      "https://www.facebook.com/anvatngoctrinhq1",
     ],
     potentialAction: {
       "@type": "OrderAction",

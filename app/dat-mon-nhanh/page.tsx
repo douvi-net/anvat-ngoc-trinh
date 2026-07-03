@@ -2724,27 +2724,51 @@ setScheduledNote("");
     </div>
   </div>
 )}
-<div className="mt-6 rounded-[28px] bg-[#E8FFF1] p-4">
-  <p className="text-lg font-black text-[#06113C]">
-    ⏱️ Thời gian dự kiến
-  </p>
-
-  {googleShippingFee === null ? (
-    <p className="mt-2 text-sm font-bold text-yellow-700">
-      ⚠️ Địa chỉ ngoài khu vực giao tự động. Quán sẽ gọi xác nhận thời gian giao
-      trước khi làm món.
+{fulfillmentType === "pickup" ? (
+  <div className="mt-6 rounded-[28px] bg-[#E8FFF1] p-4">
+    <p className="text-lg font-black text-[#06113C]">
+      🏃 Đến lấy tại quán
     </p>
-  ) : (
+
     <div className="mt-3 space-y-2 text-sm font-bold text-[#06113C]">
-      <p>🍳 Làm món: khoảng {estimatedReceive.prepMinutes} phút</p>
-      <p>🛵 Giao hàng: khoảng {estimatedReceive.deliveryMinutes} phút</p>
+      <p>🍳 Quán cần ít nhất 30 phút để chuẩn bị.</p>
+
       <p className="text-base font-black text-[#00B14F]">
-        📦 Dự kiến nhận món: {estimatedReceive.fromText} -{" "}
-        {estimatedReceive.toText}
+        🕒 Giờ đến lấy: {scheduledTime || "Vui lòng chọn giờ"}
+      </p>
+
+      <p>
+        📍 240/127/22C Nguyễn Văn Luông, Bình Phú, Quận 6
+      </p>
+
+      <p className="text-[#00B14F]">
+        💚 Không tính phí giao hàng
       </p>
     </div>
-  )}
-</div>
+  </div>
+) : (
+  <div className="mt-6 rounded-[28px] bg-[#E8FFF1] p-4">
+    <p className="text-lg font-black text-[#06113C]">
+      ⏱️ Thời gian dự kiến
+    </p>
+
+    {googleShippingFee === null ? (
+      <p className="mt-2 text-sm font-bold text-yellow-700">
+        ⚠️ Địa chỉ ngoài khu vực giao tự động. Quán sẽ gọi xác nhận thời gian giao
+        trước khi làm món.
+      </p>
+    ) : (
+      <div className="mt-3 space-y-2 text-sm font-bold text-[#06113C]">
+        <p>🍳 Làm món: khoảng {estimatedReceive.prepMinutes} phút</p>
+        <p>🛵 Giao hàng: khoảng {estimatedReceive.deliveryMinutes} phút</p>
+        <p className="text-base font-black text-[#00B14F]">
+          📦 Dự kiến nhận món: {estimatedReceive.fromText} -{" "}
+          {estimatedReceive.toText}
+        </p>
+      </div>
+    )}
+  </div>
+)}
             <div className="mt-6 rounded-3xl bg-[#06113C] p-5 text-white">
               <div className="flex justify-between text-sm font-bold text-white/70">
                 <span>Tạm tính</span>

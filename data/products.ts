@@ -51,7 +51,7 @@ export const products = [
   {
     name: "Trà dâu",
     price: 32000,
-    image: "/images/tra-dau.png",
+    image: "/images/tra-dao.png",
     description: "Trà dâu vị chua ngọt, phù hợp gọi kèm đồ ăn vặt.",
     badge: "MÓN MỚI",
   },

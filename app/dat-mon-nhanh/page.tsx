@@ -929,7 +929,6 @@ const amountToNextPoint =
     return (
       promo.is_active &&
       fulfillmentType === "delivery" &&
-      googleShippingFee !== null &&
       Number(promo.min_order_value || 0) > subtotal &&
       (maxDistance <= 0 || deliveryDistanceKm <= maxDistance)
     );

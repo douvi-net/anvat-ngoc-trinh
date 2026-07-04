@@ -769,7 +769,17 @@ setSelectedSugarLevel("Ngọt bình thường");
   googleShippingFee !== null
     ? googleShippingFee
     : selectedShippingZone?.fee || 15000;
+    let actualShippingFee = shippingFee;
 
+    // Nếu dưới 500m nhưng đơn chưa đủ điều kiện freeship
+    if (
+      fulfillmentType === "delivery" &&
+      deliveryDistanceKm <= 0.5 &&
+      subtotal < 50000 &&
+      actualShippingFee === 0
+    ) {
+      actualShippingFee = 15000;
+    }
   function getCouponValue(coupon: Coupon) {
     return Number(coupon.discount_value || coupon.value || 0);
   }
@@ -847,12 +857,12 @@ const bestShippingPromotion =
       let promoDiscount = 0;
 
       if (promo.promotion_type === "free_ship") {
-        promoDiscount = shippingFee;
+        promoDiscount = actualShippingFee;
       }
 
       if (promo.promotion_type === "ship_percent") {
         promoDiscount = Math.floor(
-          shippingFee * (Number(promo.discount_value || 0) / 100)
+          actualShippingFee * (Number(promo.discount_value || 0) / 100)
         );
       }
 
@@ -862,7 +872,7 @@ const bestShippingPromotion =
 
       return {
         ...promo,
-        discountAmount: Math.min(promoDiscount, shippingFee),
+        discountAmount: Math.min(promoDiscount, actualShippingFee),
       };
     })
     .sort((a, b) => b.discountAmount - a.discountAmount)[0] || null;
@@ -879,7 +889,7 @@ const bestShippingPromotion =
     fulfillmentType === "pickup" ? 0 : bestShippingPromotion?.discountAmount || 0;
   
   const finalShippingFee =
-    fulfillmentType === "pickup" ? 0 : Math.max(0, shippingFee - shippingDiscount);
+    fulfillmentType === "pickup" ? 0 : Math.max(0, actualShippingFee - shippingDiscount);
   
   const total = Math.max(0, subtotal + finalShippingFee - discountAmount);
 
@@ -913,11 +923,17 @@ const amountToNextPoint =
   nextPointTarget - totalAfterPoints;
 
   const nextShippingPromotion = shippingPromotions
-  .filter(
-    (promo) =>
+  .filter((promo) => {
+    const maxDistance = Number(promo.max_distance_km || 0);
+
+    return (
       promo.is_active &&
-      Number(promo.min_order_value || 0) > subtotal
-  )
+      fulfillmentType === "delivery" &&
+      googleShippingFee !== null &&
+      Number(promo.min_order_value || 0) > subtotal &&
+      (maxDistance <= 0 || deliveryDistanceKm <= maxDistance)
+    );
+  })
   .sort(
     (a, b) =>
       Number(a.min_order_value || 0) -
@@ -2843,7 +2859,7 @@ setScheduledNote("");
                 {shippingDiscount > 0 ? (
   <div className="text-right">
     <div className="text-xs text-white/40 line-through">
-      {shippingFee.toLocaleString("vi-VN")}đ
+    {actualShippingFee.toLocaleString("vi-VN")}đ
     </div>
     <div className="font-black text-[#00B14F]">
       {finalShippingFee.toLocaleString("vi-VN")}đ
@@ -2855,7 +2871,7 @@ setScheduledNote("");
   ? "0đ"
   : googleShippingFee === null
   ? "Quán xác nhận"
-  : `${shippingFee.toLocaleString("vi-VN")}đ`}
+  : `${actualShippingFee.toLocaleString("vi-VN")}đ`}
 </span>
 )}
               </div>

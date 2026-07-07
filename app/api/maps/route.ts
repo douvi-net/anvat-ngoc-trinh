@@ -13,10 +13,16 @@
 
   function calculateShippingFee(distanceKm: number) {
     if (distanceKm <= 0.5) return 0;
-    if (distanceKm <= 2) return 15000;
-    if (distanceKm <= 5) return 22000;
-    if (distanceKm <= 8) return 31000;
-    if (distanceKm <= 10) return 40000;
+    if (distanceKm <= 2) return 18000;
+    if (distanceKm <= 3) return 22000;
+    if (distanceKm <= 4) return 26000;
+    if (distanceKm <= 5) return 30000;
+    if (distanceKm <= 6) return 34000;
+    if (distanceKm <= 7) return 38000;
+    if (distanceKm <= 8) return 42000;
+    if (distanceKm <= 9) return 46000;
+    if (distanceKm <= 10) return 50000;
+  
     return null;
   }
 

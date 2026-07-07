@@ -123,6 +123,7 @@ type PlaceSuggestion = {
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
 const iceOptions = ["Không đá", "Ít đá", "Đá bình thường"];
 const sugarOptions = ["Ít ngọt", "Ngọt bình thường"];
+const MIN_SHIPPING_FEE = 15000;
 const frequentlyBoughtTogether: Record<string, string[]> = {
   "Cuốn đỏ sốt me": [
     "Trà sữa truyền thống",
@@ -778,7 +779,7 @@ setSelectedSugarLevel("Ngọt bình thường");
       subtotal < 50000 &&
       actualShippingFee === 0
     ) {
-      actualShippingFee = 15000;
+      actualShippingFee = MIN_SHIPPING_FEE;
     }
   function getCouponValue(coupon: Coupon) {
     return Number(coupon.discount_value || coupon.value || 0);

@@ -772,11 +772,11 @@ setSelectedSugarLevel("Ngọt bình thường");
     : selectedShippingZone?.fee || 15000;
     let actualShippingFee = shippingFee;
 
-    // Nếu dưới 500m nhưng đơn chưa đủ điều kiện freeship
+    // Dưới 500m vẫn có phí giao gốc.
+    // Nếu đơn đủ điều kiện, chương trình freeship sẽ tự giảm phí này về 0đ.
     if (
       fulfillmentType === "delivery" &&
       deliveryDistanceKm <= 0.5 &&
-      subtotal < 50000 &&
       actualShippingFee === 0
     ) {
       actualShippingFee = MIN_SHIPPING_FEE;
@@ -1458,8 +1458,19 @@ address_detail:
             .filter(Boolean)
             .join("\n"),
           subtotal,
-          shipping_fee: fulfillmentType === "pickup" ? 0 : finalShippingFee,
-          discount_amount: discountAmount + shippingDiscount + usePointsDiscount,
+          shipping_fee_original:
+          fulfillmentType === "pickup" ? 0 : actualShippingFee,
+        
+        shipping_discount:
+          fulfillmentType === "pickup" ? 0 : shippingDiscount,
+        
+        coupon_discount: discountAmount,
+        
+        shipping_fee:
+          fulfillmentType === "pickup" ? 0 : finalShippingFee,
+        
+        discount_amount:
+          discountAmount + shippingDiscount + usePointsDiscount,
 
           points_used: totalPointsUsed,
           points_earned: rewardPoints,

@@ -93,15 +93,11 @@ export async function POST(request: Request) {
 
     const result = await getMessaging().sendEachForMulticast({
       tokens,
-
-      notification: {
-        title,
-        body: bodyText,
-      },
-
       data: {
+        type: "new_order",
         title,
         body: bodyText,
+        order_id: String(body.orderId || ""),
         order_code: String(orderCode),
         total: String(total),
         payment_method: String(paymentMethod),
@@ -113,14 +109,6 @@ export async function POST(request: Request) {
       android: {
         priority: "high",
         ttl: 60 * 60 * 1000,
-        notification: {
-          channelId: "avnt_new_order_channel_v5",
-          sound: "default",
-          priority: "max",
-          visibility: "public",
-          defaultSound: true,
-          defaultVibrateTimings: true,
-        },
       },
     });
 

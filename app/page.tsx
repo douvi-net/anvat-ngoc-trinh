@@ -77,7 +77,7 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2 md:items-center">
           <div>
             <div className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-[#00B14F] shadow">
-              🔥 Ăn vặt Quận 6 đang nhận đơn
+              🔥 Ăn vặt Ngọc Trinh đang nhận đơn
             </div>
 
             <h1 className="mt-4 text-4xl font-black leading-tight text-white md:text-6xl">
@@ -87,7 +87,7 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-4 max-w-xl text-base font-bold leading-7 text-white/90">
-              Bánh tráng trộn, bánh tráng cuốn, cuốn đỏ chấm sốt me và nước
+              Bánh tráng trộn, bánh tráng cuốn, cuốn trứng top mỡ và nước
               uống được làm mới mỗi ngày. Xem món, chọn topping, biết phí ship
               và đặt trực tiếp trên website.
             </p>
@@ -132,7 +132,7 @@ export default function HomePage() {
                     Món khách hay đặt
                   </p>
                   <p className="text-lg font-black text-[#06113C]">
-                    Cuốn đỏ sốt me
+                    Cuốn trứng lòng đào top mỡ
                   </p>
                 </div>
 
@@ -248,7 +248,7 @@ export default function HomePage() {
           </p>
 
           <h2 className="mt-1 text-2xl font-black text-[#06113C]">
-            Giao gần khu vực Quận 6 và lân cận
+            Giao gần khu vực Quận 6 và Quận 1 lân cận
           </h2>
 
           <div className="mt-4 flex flex-wrap gap-2">

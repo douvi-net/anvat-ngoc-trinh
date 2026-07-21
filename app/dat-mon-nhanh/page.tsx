@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { resolveCustomerBranch } from "@/lib/resolveCustomerBranch";
 import {
   fetchMapsPreviewNearestBranch,
   type PreviewSelectedBranch,
@@ -128,6 +129,29 @@ const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
 const iceOptions = ["Không đá", "Ít đá", "Đá bình thường"];
 const sugarOptions = ["Ít ngọt", "Ngọt bình thường"];
 const MIN_SHIPPING_FEE = 15000;
+
+function normalizePhoneForLookup(phone: string) {
+  let normalized = phone.trim().replace(/\s+/g, "");
+
+  if (normalized.startsWith("+84")) {
+    normalized = `0${normalized.slice(3)}`;
+  } else if (normalized.startsWith("84") && normalized.length >= 11) {
+    normalized = `0${normalized.slice(2)}`;
+  }
+
+  normalized = normalized.replace(/\D/g, "");
+
+  if (normalized.startsWith("84") && normalized.length >= 10) {
+    normalized = `0${normalized.slice(2)}`;
+  }
+
+  return normalized;
+}
+
+function isValidLookupPhone(phone: string) {
+  return /^0(3|5|7|8|9)\d{8}$/.test(phone);
+}
+
 const frequentlyBoughtTogether: Record<string, string[]> = {
   "Cuốn đỏ sốt me": [
     "Trà sữa truyền thống",
@@ -277,15 +301,21 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     }
   }, [products]);
   useEffect(() => {
-    const phone = customerPhone.trim();
+    const normalizedPhone = normalizePhoneForLookup(customerPhone);
 
-    if (phone.length >= 9) {
-      const timer = window.setTimeout(() => {
-        findCustomerByPhone(phone);
-      }, 600);
-
-      return () => window.clearTimeout(timer);
+    if (!isValidLookupPhone(normalizedPhone)) {
+      return;
     }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      findCustomerByPhone(normalizedPhone, controller.signal);
+    }, 600);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [customerPhone]);
 
   async function fetchInitialData() {
@@ -396,18 +426,23 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     localStorage.setItem("avnt_payment_method", paymentMethod);
   }
 
-  async function fetchCustomerFlag(phone: string) {
+  async function fetchCustomerFlag(phone: string, signal?: AbortSignal) {
     const cleanPhone = phone.trim();
     if (cleanPhone.length < 9) {
       setCustomerFlag(null);
       return null;
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("customer_flags")
       .select("phone,status,note")
-      .eq("phone", cleanPhone)
-      .maybeSingle();
+      .eq("phone", cleanPhone);
+
+    if (signal) {
+      query = query.abortSignal(signal);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       console.error("CUSTOMER FLAG ERROR:", error);
@@ -420,20 +455,97 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     return flag;
   }
 
-  async function findCustomerByPhone(phone: string) {
+  async function findCustomerByPhone(phone: string, signal?: AbortSignal) {
     const cleanPhone = phone.trim();
-    if (cleanPhone.length < 9) return;
+    if (!isValidLookupPhone(cleanPhone)) return;
 
     setCheckingCustomer(true);
     setCustomerFoundMessage("");
 
-    const flag = await fetchCustomerFlag(cleanPhone);
+    const flag = await fetchCustomerFlag(cleanPhone, signal);
+
+    if (signal?.aborted) {
+      return;
+    }
+
+    try {
+      const bootstrapResult = await resolveCustomerBranch(cleanPhone, signal);
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      if (!bootstrapResult.ok) {
+        console.warn("resolveCustomerBranch fallback:", bootstrapResult.message);
+      } else if (bootstrapResult.customer) {
+        const customer = bootstrapResult.customer;
+        const savedLat = Number(customer.lastLat || 0);
+        const savedLng = Number(customer.lastLng || 0);
+        const hasSavedLocation =
+          Number.isFinite(savedLat) &&
+          Number.isFinite(savedLng) &&
+          savedLat !== 0 &&
+          savedLng !== 0;
+
+        setCustomerId(customer.id);
+        setCustomerName(customer.name || "");
+        setCustomerAddress(customer.lastAddress || "");
+        setCustomerAddressDetail(customer.lastAddressDetail || "");
+
+        if (
+          customer.lastPaymentMethod === "momo" ||
+          customer.lastPaymentMethod === "cod"
+        ) {
+          setPaymentMethod(customer.lastPaymentMethod);
+        }
+
+        setCustomerPoints(Number(customer.totalPoints || 0));
+
+        if (Number(customer.totalPoints || 0) < 50) {
+          setUsePointsDiscount(0);
+          setSelectedRewardId("");
+        }
+
+        if (hasSavedLocation) {
+          setDeliveryLat(savedLat);
+          setDeliveryLng(savedLng);
+          setAddressSelected(true);
+          setCustomerFoundMessage("");
+          setSelectedBranch(bootstrapResult.selectedBranch ?? null);
+          await calculateRouteByLatLng(savedLat, savedLng, {
+            skipBranchPreview: !!bootstrapResult.selectedBranch,
+          });
+        } else {
+          setDeliveryLat(null);
+          setDeliveryLng(null);
+          setSelectedBranch(null);
+          setGoogleShippingFee(null);
+          setRouteMessage("");
+          setAddressSelected(false);
+          setCustomerFoundMessage(
+            "Địa chỉ cũ chưa có tọa độ. Anh/chị chọn lại địa chỉ từ gợi ý Google một lần để lần sau tự tính phí ship."
+          );
+        }
+
+        setCheckingCustomer(false);
+        return;
+      }
+    } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+      console.warn("resolveCustomerBranch unexpected fallback:", error);
+    }
 
     const { data, error } = await supabase
       .from("customers")
       .select("*")
       .eq("phone", cleanPhone)
       .maybeSingle();
+
+    if (signal?.aborted) {
+      return;
+    }
 
     if (!error && data) {
       const customer = data as Customer;
@@ -1253,12 +1365,18 @@ total_spent: 0,
       setAddressLoading(false);
     }
   }
-  async function calculateRouteByLatLng(lat: number, lng: number) {
+  async function calculateRouteByLatLng(
+    lat: number,
+    lng: number,
+    options?: { skipBranchPreview?: boolean }
+  ) {
     setRouteLoading(true);
     setRouteMessage("");
   
     try {
-      const previewBranchResultPromise = fetchMapsPreviewNearestBranch(lat, lng);
+      const previewBranchResultPromise = options?.skipBranchPreview
+        ? null
+        : fetchMapsPreviewNearestBranch(lat, lng);
 
       const res = await fetch("/api/maps", {
         method: "POST",
@@ -1277,8 +1395,10 @@ total_spent: 0,
         return;
       }
 
-        const previewBranchResult = await previewBranchResultPromise;
-        setSelectedBranch(previewBranchResult.selectedBranch);
+        if (previewBranchResultPromise) {
+          const previewBranchResult = await previewBranchResultPromise;
+          setSelectedBranch(previewBranchResult.selectedBranch);
+        }
   
       setDeliveryDistanceKm(Number(data.distance_km || 0));
       setGoogleShippingFee(

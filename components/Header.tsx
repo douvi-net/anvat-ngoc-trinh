@@ -19,7 +19,7 @@ export default function Header() {
 </p>
 
 <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-500 md:text-[11px]">
-  Bánh Tráng • Ăn Vặt • Quận 6
+  Bánh Tráng • Ăn Vặt • Trà Sữa
 </p>
         </Link>
 

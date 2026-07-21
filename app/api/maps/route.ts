@@ -21,16 +21,26 @@ type BranchRow = {
   longitude: number | null;
 };
 
-type NearestBranchPreview = {
-  id: string;
+type SelectedBranchPreview = {
+  id: string | null;
   code: string;
   short_name: string;
   address: string;
+  latitude: number;
+  longitude: number;
   distance_km: number;
   distance_text: string;
   duration_text: string;
   shipping_fee: number | null;
   is_supported_area: boolean;
+};
+
+type DistanceResult = {
+  distanceKm: number;
+  distanceMeters: number;
+  distanceText: string;
+  durationText: string;
+  shippingFee: number | null;
 };
 
 function calculateShippingFee(distanceKm: number) {
@@ -94,7 +104,7 @@ function isValidCoordinate(value: number | null) {
 async function getNearestBranchPreview(
   customerLat: number,
   customerLng: number
-): Promise<NearestBranchPreview | null> {
+): Promise<SelectedBranchPreview | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -112,26 +122,25 @@ async function getNearestBranchPreview(
   const { data, error } = await supabaseAdmin
     .from("branches")
     .select("id,code,short_name,address,latitude,longitude")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .eq("is_open", true);
 
   if (error || !Array.isArray(data)) {
     return null;
   }
 
   const branches = data as BranchRow[];
-  
-
- 
 
   const candidates = branches.filter(
-    (branch) => isValidCoordinate(branch.latitude) && isValidCoordinate(branch.longitude)
+    (branch) =>
+      isValidCoordinate(branch.latitude) && isValidCoordinate(branch.longitude)
   );
 
   if (candidates.length === 0) {
     return null;
   }
 
-  let nearest: NearestBranchPreview | null = null;
+  let nearest: SelectedBranchPreview | null = null;
 
   for (const branch of candidates) {
     const distanceKm = calculateDistanceKm(
@@ -142,11 +151,13 @@ async function getNearestBranchPreview(
     );
     const shippingFee = calculateShippingFee(distanceKm);
 
-    const preview: NearestBranchPreview = {
+    const preview: SelectedBranchPreview = {
       id: branch.id,
       code: branch.code,
       short_name: branch.short_name,
       address: branch.address,
+      latitude: branch.latitude as number,
+      longitude: branch.longitude as number,
       distance_km: distanceKm,
       distance_text: `${distanceKm} km`,
       duration_text: estimateDurationText(distanceKm),
@@ -162,8 +173,53 @@ async function getNearestBranchPreview(
   return nearest;
 }
 
+function calculateDistanceResult(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): DistanceResult {
+  const distanceKm = calculateDistanceKm(fromLat, fromLng, toLat, toLng);
+
+  return {
+    distanceKm,
+    distanceMeters: Math.round(distanceKm * 1000),
+    distanceText: `${distanceKm} km`,
+    durationText: estimateDurationText(distanceKm),
+    shippingFee: calculateShippingFee(distanceKm),
+  };
+}
+
+function buildFallbackSelectedBranch(
+  customerLat: number,
+  customerLng: number
+): SelectedBranchPreview {
+  const fallbackDistance = calculateDistanceResult(
+    SHOP_LOCATION.lat,
+    SHOP_LOCATION.lng,
+    customerLat,
+    customerLng
+  );
+
+  return {
+    id: null,
+    code: "q6",
+    short_name: "Quận 6",
+    address: SHOP_LOCATION.address,
+    latitude: SHOP_LOCATION.lat,
+    longitude: SHOP_LOCATION.lng,
+    distance_km: fallbackDistance.distanceKm,
+    distance_text: fallbackDistance.distanceText,
+    duration_text: fallbackDistance.durationText,
+    shipping_fee: fallbackDistance.shippingFee,
+    is_supported_area: fallbackDistance.shippingFee !== null,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const previewNearestBranch =
+      request.nextUrl.searchParams.get("previewNearestBranch") === "true";
     const body = (await request.json()) as RouteRequestBody;
 
     const lat = Number(body.lat);
@@ -183,44 +239,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const distanceKm = calculateDistanceKm(
+    const q6Result = calculateDistanceResult(
       SHOP_LOCATION.lat,
       SHOP_LOCATION.lng,
       lat,
       lng
     );
 
-    const distanceMeters = Math.round(distanceKm * 1000);
-    const distanceText = `${distanceKm} km`;
-    const durationText = estimateDurationText(distanceKm);
-    const shippingFee = calculateShippingFee(distanceKm);
-    const nearestBranchPreview = await getNearestBranchPreview(lat, lng);
+    if (!previewNearestBranch) {
+      return NextResponse.json({
+        ok: true,
+        shop: SHOP_LOCATION,
+        distance_meters: q6Result.distanceMeters,
+        distance_km: q6Result.distanceKm,
+        distance_text: q6Result.distanceText,
+        duration_text: q6Result.durationText,
+        shipping_fee: q6Result.shippingFee,
+        is_supported_area: q6Result.shippingFee !== null,
+        message:
+          q6Result.shippingFee === null
+            ? "Khoảng cách trên 10km. Quán sẽ xác nhận phí ship."
+            : "Đã tính phí ship tự động theo tọa độ Google Maps.",
+      });
+    }
+
+    const nearestBranch =
+      (await getNearestBranchPreview(lat, lng)) ||
+      buildFallbackSelectedBranch(lat, lng);
 
     return NextResponse.json({
       ok: true,
-      shop: SHOP_LOCATION,
-      distance_meters: distanceMeters,
-      distance_km: distanceKm,
-      distance_text: distanceText,
-      duration_text: durationText,
-      shipping_fee: shippingFee,
-      is_supported_area: shippingFee !== null,
+      shop: {
+        lat: nearestBranch.latitude,
+        lng: nearestBranch.longitude,
+        address: nearestBranch.address,
+      },
+      distance_meters: Math.round(nearestBranch.distance_km * 1000),
+      distance_km: nearestBranch.distance_km,
+      distance_text: nearestBranch.distance_text,
+      duration_text: nearestBranch.duration_text,
+      shipping_fee: nearestBranch.shipping_fee,
+      is_supported_area: nearestBranch.is_supported_area,
       message:
-        shippingFee === null
+        nearestBranch.shipping_fee === null
           ? "Khoảng cách trên 10km. Quán sẽ xác nhận phí ship."
           : "Đã tính phí ship tự động theo tọa độ Google Maps.",
-      nearest_branch_preview: nearestBranchPreview,
-      branch_selection_mode: "preview_only",
+      selected_branch: nearestBranch,
+      branch_selection_mode: "preview_nearest_branch",
     });
-  }  catch (error) {
-  console.error("maps route error:", error);
+  } catch (error) {
+    console.error("maps route error:", error);
 
-  return NextResponse.json(
-    {
-      ok: false,
-      message: "Lỗi server khi tính phí ship.",
-    },
-    { status: 500 }
-  );
-}
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Lỗi server khi tính phí ship.",
+      },
+      { status: 500 }
+    );
+  }
 }

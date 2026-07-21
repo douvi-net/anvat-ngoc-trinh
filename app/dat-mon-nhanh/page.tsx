@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import {
+  fetchMapsPreviewNearestBranch,
+  type PreviewSelectedBranch,
+} from "@/lib/mapsPreviewNearestBranch";
 
 type Product = {
   id: string;
@@ -204,6 +208,8 @@ const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thư�
 const [scheduledDate, setScheduledDate] = useState("");
 const [scheduledTime, setScheduledTime] = useState("");
 const [scheduledNote, setScheduledNote] = useState("");
+  const [selectedBranch, setSelectedBranch] =
+    useState<PreviewSelectedBranch | null>(null);
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [routeLoading, setRouteLoading] = useState(false);
 const [routeMessage, setRouteMessage] = useState("");
@@ -460,6 +466,7 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
       } else {
         setDeliveryLat(null);
         setDeliveryLng(null);
+        setSelectedBranch(null);
         setGoogleShippingFee(null);
         setRouteMessage("");
         setAddressSelected(false);
@@ -1251,6 +1258,8 @@ total_spent: 0,
     setRouteMessage("");
   
     try {
+      const previewBranchResultPromise = fetchMapsPreviewNearestBranch(lat, lng);
+
       const res = await fetch("/api/maps", {
         method: "POST",
         headers: {
@@ -1264,8 +1273,12 @@ total_spent: 0,
       if (!data.ok) {
         setRouteMessage(data.message || "Không tính được phí ship.");
         setGoogleShippingFee(null);
+          setSelectedBranch(null);
         return;
       }
+
+        const previewBranchResult = await previewBranchResultPromise;
+        setSelectedBranch(previewBranchResult.selectedBranch);
   
       setDeliveryDistanceKm(Number(data.distance_km || 0));
       setGoogleShippingFee(
@@ -1283,6 +1296,7 @@ total_spent: 0,
       console.error("MAP ROUTE ERROR:", error);
       setRouteMessage("Lỗi khi tính phí ship.");
       setGoogleShippingFee(null);
+      setSelectedBranch(null);
     } finally {
       setRouteLoading(false);
     }
@@ -1512,6 +1526,10 @@ scheduled_at:
     scheduled_note:
   orderType === "scheduled" || fulfillmentType === "pickup"
     ? scheduledNote.trim() || null
+    : null,
+    branch_id:
+  fulfillmentType === "delivery" && selectedBranch?.id
+    ? selectedBranch.id
     : null,
         })
         .select()
@@ -2390,6 +2408,7 @@ setScheduledNote("");
       setCustomerAddress(value);
       setDeliveryLat(null);
       setDeliveryLng(null);
+      setSelectedBranch(null);
       setGoogleShippingFee(null);
       setRouteMessage("");
       setAddressSelected(false);
@@ -2477,6 +2496,7 @@ setScheduledNote("");
       onClick={() => {
         setFulfillmentType("pickup");
         setOrderType("scheduled");
+        setSelectedBranch(null);
         setGoogleShippingFee(0);
         setDeliveryDistanceKm(0);
         setRouteMessage("Tự đến lấy tại quán - không tính phí ship");
@@ -2700,6 +2720,13 @@ setScheduledNote("");
     ) : (
       routeMessage
     )}
+  </div>
+)}
+{fulfillmentType === "delivery" && selectedBranch && (
+  <div className="col-span-2 rounded-2xl border border-[#00B14F]/20 bg-[#E8FFF1] px-4 py-3 text-[#06113C]">
+    <p className="text-sm font-black">📍 Chi nhánh phục vụ</p>
+    <p className="mt-1 text-sm font-black">Ăn Vặt Ngọc Trinh - {selectedBranch.short_name}</p>
+    <p className="mt-1 text-xs font-bold text-[#00B14F]">Đã tự chọn chi nhánh gần bạn nhất</p>
   </div>
 )}
               </div>

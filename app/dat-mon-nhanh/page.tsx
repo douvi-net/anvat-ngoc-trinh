@@ -890,6 +890,10 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
             skipBranchPreview:
               isBranchMenuPreviewEnabled &&
               Boolean(bootstrap.selectedBranch),
+            branchId:
+              isBranchMenuPreviewEnabled
+                ? bootstrap.selectedBranch?.id || null
+                : null,
           });
           if (signal?.aborted) {
             return;
@@ -2107,57 +2111,114 @@ if (process.env.NODE_ENV === "development") {
     setRouteLoading(true);
     setRouteMessage("");
 
-    const shouldResolveBranch =
-      isBranchMenuPreviewEnabled &&
-      !options?.skipBranchPreview;
-    const previewBranchResultPromise = shouldResolveBranch
-      ? fetchMapsPreviewNearestBranch(lat, lng).catch((error) => {
-          console.error("BRANCH PREVIEW ERROR:", error);
-          return null;
-        })
-      : Promise.resolve(null);
-
     try {
+      const shouldResolveBranch =
+        isBranchMenuPreviewEnabled &&
+        !options?.skipBranchPreview;
+
+      /*
+       * Quan trọng:
+       * Phải xác định chi nhánh trước rồi mới gọi /api/maps.
+       * Nếu gọi song song, React state selectedBranch vẫn có thể là chi nhánh cũ
+       * và quãng đường sẽ bị tính từ sai điểm xuất phát.
+       */
+      let resolvedBranch: PreviewSelectedBranch | null = null;
+
+      if (shouldResolveBranch) {
+        const previewResult = await fetchMapsPreviewNearestBranch(lat, lng);
+
+        if (requestId !== routeRequestRef.current) {
+          return;
+        }
+
+        if (!previewResult.ok || !previewResult.selectedBranch?.id) {
+          setSelectedBranch(null);
+          setGoogleShippingFee(null);
+          setRouteMessage(
+            previewResult.message ||
+              "Không xác định được chi nhánh phục vụ."
+          );
+          return;
+        }
+
+        resolvedBranch = previewResult.selectedBranch;
+        setSelectedBranch(resolvedBranch);
+        setManualBranchId(null);
+      }
+
+      const resolvedBranchId =
+        options?.branchId ||
+        resolvedBranch?.id ||
+        manualBranchId ||
+        selectedBranch?.id ||
+        null;
+
+      if (isBranchMenuPreviewEnabled && !resolvedBranchId) {
+        setGoogleShippingFee(null);
+        setRouteMessage(
+          "Không xác định được chi nhánh dùng để tính quãng đường."
+        );
+        return;
+      }
+
       const res = await fetch("/api/maps", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        cache: "no-store",
         body: JSON.stringify({
           lat,
           lng,
-          branchId:
-            options?.branchId ||
-            manualBranchId ||
-            selectedBranch?.id ||
-            null,
+          branchId: resolvedBranchId,
         }),
       });
 
-      const data = await res.json();
-      const previewBranchResult = await previewBranchResultPromise;
+      const data = await res.json().catch(() => null);
 
       if (requestId !== routeRequestRef.current) {
         return;
       }
 
-      if (shouldResolveBranch) {
-        setSelectedBranch(previewBranchResult?.selectedBranch || null);
-      }
-
-      if (!data.ok) {
-        setRouteMessage(data.message || "Không tính được phí ship.");
+      if (!res.ok || !data?.ok) {
+        setRouteMessage(
+          data?.message || "Không tính được phí ship."
+        );
         setGoogleShippingFee(null);
         return;
       }
 
+      const routeBranch =
+        data.selected_branch &&
+        typeof data.selected_branch === "object"
+          ? (data.selected_branch as PreviewSelectedBranch)
+          : null;
+
+      /*
+       * Server là nguồn xác nhận cuối cùng về chi nhánh đã dùng để tính.
+       * Điều này giữ giao diện, phí ship và branch_id đồng bộ tuyệt đối.
+       */
+      if (routeBranch?.id) {
+        setSelectedBranch(routeBranch);
+      }
+
       setDeliveryDistanceKm(Number(data.distance_km || 0));
       setGoogleShippingFee(
-        data.shipping_fee === null ? null : Number(data.shipping_fee)
+        data.shipping_fee === null
+          ? null
+          : Number(data.shipping_fee)
       );
 
+      const branchLabel =
+        routeBranch?.short_name ||
+        resolvedBranch?.short_name ||
+        selectedBranch?.short_name ||
+        "chi nhánh đã chọn";
+
       setRouteMessage(
-        `${data.distance_text} - ${data.duration_text}. Phí ship: ${
+        `${branchLabel}: ${data.distance_text} - ${
+          data.duration_text
+        }. Phí ship: ${
           data.shipping_fee === null
             ? "quán xác nhận"
             : Number(data.shipping_fee).toLocaleString("vi-VN") + "đ"
@@ -2171,16 +2232,6 @@ if (process.env.NODE_ENV === "development") {
       console.error("MAP ROUTE ERROR:", error);
       setRouteMessage("Lỗi khi tính phí ship.");
       setGoogleShippingFee(null);
-
-      if (shouldResolveBranch) {
-        const previewBranchResult = await previewBranchResultPromise;
-
-        if (requestId !== routeRequestRef.current) {
-          return;
-        }
-
-        setSelectedBranch(previewBranchResult?.selectedBranch || null);
-      }
     } finally {
       if (requestId === routeRequestRef.current) {
         setRouteLoading(false);

@@ -257,6 +257,8 @@ function buildResponse(
         : "Đã tính phí ship theo chi nhánh phục vụ.",
     selected_branch: branch,
     branch_selection_mode: mode,
+    calculated_from_branch_id: branch.id,
+    calculated_from_branch_code: branch.code,
   });
 }
 
@@ -324,12 +326,23 @@ export async function POST(request: NextRequest) {
       return buildResponse(nearestBranch, "nearest_branch");
     }
 
-    const fallbackBranch = buildFallbackSelectedBranch(lat, lng);
-
+    /*
+     * Không âm thầm dùng Quận 6 trong luồng chọn chi nhánh.
+     * Nếu database không trả được chi nhánh, frontend cần biết để chặn đơn,
+     * tránh hiển thị Quận 1 nhưng lại tính ship từ Quận 6.
+     */
     if (previewNearestBranch) {
-      return buildResponse(fallbackBranch, "fallback_shop");
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Không tải được chi nhánh đang mở để tính quãng đường.",
+        },
+        { status: 503 }
+      );
     }
 
+    const fallbackBranch = buildFallbackSelectedBranch(lat, lng);
     return buildResponse(fallbackBranch, "fallback_shop");
   } catch (error) {
     console.error("MAPS ROUTE ERROR:", error);

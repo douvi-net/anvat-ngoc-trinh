@@ -100,7 +100,8 @@ function parseSelectedBranch(value: unknown): PreviewSelectedBranch | null {
 export async function fetchMapsPreviewNearestBranch(
   lat: number,
   lng: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  branchId?: string | null
 ): Promise<PreviewMapsResult> {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return {
@@ -117,7 +118,11 @@ export async function fetchMapsPreviewNearestBranch(
         "Content-Type": "application/json",
       },
       cache: "no-store",
-      body: JSON.stringify({ lat, lng }),
+      body: JSON.stringify({
+        lat,
+        lng,
+        branchId: branchId?.trim() || null,
+      }),
       signal,
     });
 

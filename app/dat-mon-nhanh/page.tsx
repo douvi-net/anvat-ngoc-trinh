@@ -473,29 +473,17 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   const addressSearchAbortRef = useRef<AbortController | null>(null);
   const routeRequestRef = useRef(0);
 
-  const branchMenuPreviewConfigured =
-    process.env.NEXT_PUBLIC_ENABLE_BRANCH_MENU_PREVIEW === "true";
-
-  const branchFirstGateConfigured =
-    process.env.NEXT_PUBLIC_ENABLE_BRANCH_FIRST_GATE === "true";
-
-  const branchCartValidationConfigured =
-    process.env.NEXT_PUBLIC_ENABLE_BRANCH_CART_VALIDATION === "true";
-
+  // Private beta is controlled directly by the URL:
+  // /dat-mon-nhanh?beta=branch
+  // This avoids stale NEXT_PUBLIC_* values being embedded at build time.
   const isBranchMenuPreviewEnabled =
-    betaResolved &&
-    isBranchBeta &&
-    branchMenuPreviewConfigured;
+    betaResolved && isBranchBeta;
 
   const isBranchFirstGateEnabled =
-    betaResolved &&
-    isBranchBeta &&
-    branchFirstGateConfigured;
+    betaResolved && isBranchBeta;
 
   const isBranchCartValidationEnabled =
-    betaResolved &&
-    isBranchBeta &&
-    branchCartValidationConfigured;
+    betaResolved && isBranchBeta;
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -1401,18 +1389,31 @@ setSelectedSugarLevel("Ngọt bình thường");
     products,
   ]);
 
-  // Re-open the gate whenever a confirmed delivery loses a required
-  // dependency (phone lookup, Google coordinates or selected branch).
+  // Wait until the URL beta state is resolved before deciding whether
+  // the Branch First Gate should be open or closed.
   useEffect(() => {
-    if (!isBranchFirstGateEnabled) {
-      setBranchGateConfirmed(true);
+    if (!betaResolved) {
       return;
     }
 
-    if (branchGateLocked && !branchGateDiagnostics.readyForMenu) {
+    if (!isBranchFirstGateEnabled) {
+      setBranchGateConfirmed(true);
+      setBranchGateLocked(false);
+      return;
+    }
+
+    // Every fresh beta visit starts at the gate.
+    if (!branchGateLocked) {
+      setBranchGateConfirmed(false);
+      return;
+    }
+
+    // If confirmed data becomes invalid, reopen the gate.
+    if (!branchGateDiagnostics.readyForMenu) {
       setBranchGateConfirmed(false);
     }
   }, [
+    betaResolved,
     isBranchFirstGateEnabled,
     branchGateLocked,
     branchGateDiagnostics.readyForMenu,
@@ -2813,7 +2814,7 @@ setScheduledNote("");
                 BETA · Menu theo chi nhánh
               </p>
               <p className="mt-1 text-[11px] font-bold text-amber-600">
-                Đang thử nghiệm trên website thật
+                Đang thử nghiệm trên website thật · Gate v2
               </p>
             </div>
 

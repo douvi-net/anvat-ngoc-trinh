@@ -1,13 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { resolveCustomerBranch } from "@/lib/resolveCustomerBranch";
 import {
+  fetchBranchMenuPreview,
+  type BranchMenuPreviewItem,
+} from "@/lib/fetchBranchMenuPreview";
+import {
   fetchMapsPreviewNearestBranch,
   type PreviewSelectedBranch,
 } from "@/lib/mapsPreviewNearestBranch";
+import {
+  buildBranchMenuDiagnostics,
+  validateBranchFirstGateState,
+  validateBranchMenuData,
+  hasCriticalErrors,
+} from "@/lib/branchMenuDiagnostics";
+import {
+  BranchFirstGate,
+  BranchSelectorModal,
+} from "@/components/order/BranchFirstGate";
+import {
+  validateCartForBranch,
+  type BranchCartValidationResult,
+} from "@/lib/validateBranchCart";
+import { BranchCartValidationModal } from "@/components/order/BranchCartValidationModal";
 
 type Product = {
   id: string;
@@ -125,13 +144,24 @@ type PlaceSuggestion = {
   mainText: string;
   secondaryText: string;
 };
+type AvailableBranch = PreviewSelectedBranch & {
+  name?: string | null;
+  address?: string | null;
+  is_active?: boolean | null;
+};
 const spicyOptions = ["Không cay", "Cay ít", "Cay vừa", "Cay nhiều"];
 const iceOptions = ["Không đá", "Ít đá", "Đá bình thường"];
 const sugarOptions = ["Ít ngọt", "Ngọt bình thường"];
 const MIN_SHIPPING_FEE = 15000;
 
 function normalizePhoneForLookup(phone: string) {
-  let normalized = phone.trim().replace(/\s+/g, "");
+  const trimmed = phone.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  let normalized = trimmed.replace(/\s+/g, "");
 
   if (normalized.startsWith("+84")) {
     normalized = `0${normalized.slice(3)}`;
@@ -150,6 +180,175 @@ function normalizePhoneForLookup(phone: string) {
 
 function isValidLookupPhone(phone: string) {
   return /^0(3|5|7|8|9)\d{8}$/.test(phone);
+}
+
+function normalizePlaceSuggestions(payload: unknown): PlaceSuggestion[] {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const record = payload as Record<string, unknown>;
+  const nestedData =
+    record.data && typeof record.data === "object"
+      ? (record.data as Record<string, unknown>)
+      : null;
+  const nestedResult =
+    record.result && typeof record.result === "object"
+      ? (record.result as Record<string, unknown>)
+      : null;
+
+  const rawItems = Array.isArray(record.suggestions)
+    ? record.suggestions
+    : Array.isArray(record.predictions)
+    ? record.predictions
+    : Array.isArray(record.items)
+    ? record.items
+    : Array.isArray(nestedData?.suggestions)
+    ? nestedData.suggestions
+    : Array.isArray(nestedData?.predictions)
+    ? nestedData.predictions
+    : Array.isArray(nestedResult?.suggestions)
+    ? nestedResult.suggestions
+    : Array.isArray(nestedResult?.predictions)
+    ? nestedResult.predictions
+    : [];
+
+  return rawItems
+    .map((rawItem): PlaceSuggestion | null => {
+      if (!rawItem || typeof rawItem !== "object") {
+        return null;
+      }
+
+      const item = rawItem as Record<string, unknown>;
+
+      /*
+       * Google Places API mới:
+       *
+       * {
+       *   suggestions: [
+       *     {
+       *       placePrediction: {
+       *         placeId: "...",
+       *         text: { text: "..." },
+       *         structuredFormat: {
+       *           mainText: { text: "..." },
+       *           secondaryText: { text: "..." }
+       *         }
+       *       }
+       *     }
+       *   ]
+       * }
+       */
+      const placePrediction =
+        item.placePrediction &&
+        typeof item.placePrediction === "object"
+          ? (item.placePrediction as Record<string, unknown>)
+          : null;
+
+      const legacyStructuredFormatting =
+        item.structured_formatting &&
+        typeof item.structured_formatting === "object"
+          ? (item.structured_formatting as Record<string, unknown>)
+          : null;
+
+      const newStructuredFormat =
+        placePrediction?.structuredFormat &&
+        typeof placePrediction.structuredFormat === "object"
+          ? (placePrediction.structuredFormat as Record<string, unknown>)
+          : null;
+
+      const predictionText =
+        placePrediction?.text &&
+        typeof placePrediction.text === "object"
+          ? String(
+              (placePrediction.text as Record<string, unknown>).text || ""
+            ).trim()
+          : "";
+
+      const predictionMainText =
+        newStructuredFormat?.mainText &&
+        typeof newStructuredFormat.mainText === "object"
+          ? String(
+              (newStructuredFormat.mainText as Record<string, unknown>).text ||
+                ""
+            ).trim()
+          : "";
+
+      const predictionSecondaryText =
+        newStructuredFormat?.secondaryText &&
+        typeof newStructuredFormat.secondaryText === "object"
+          ? String(
+              (
+                newStructuredFormat.secondaryText as Record<string, unknown>
+              ).text || ""
+            ).trim()
+          : "";
+
+      const placeId = String(
+        placePrediction?.placeId ||
+          item.placeId ||
+          item.place_id ||
+          item.id ||
+          ""
+      ).trim();
+
+      const text = String(
+        predictionText ||
+          item.text ||
+          item.description ||
+          item.formatted_address ||
+          ""
+      ).trim();
+
+      const mainText = String(
+        predictionMainText ||
+          item.mainText ||
+          item.main_text ||
+          legacyStructuredFormatting?.main_text ||
+          text
+      ).trim();
+
+      const secondaryText = String(
+        predictionSecondaryText ||
+          item.secondaryText ||
+          item.secondary_text ||
+          legacyStructuredFormatting?.secondary_text ||
+          ""
+      ).trim();
+
+      if (!placeId || !text) {
+        return null;
+      }
+
+      return {
+        placeId,
+        text,
+        mainText,
+        secondaryText,
+      };
+    })
+    .filter(
+      (item): item is PlaceSuggestion =>
+        item !== null
+    );
+}
+
+function buildAddressSearchCandidates(input: string) {
+  const candidates = [input];
+  const normalized = input.toLocaleLowerCase("vi-VN");
+  const alreadyHasLocality =
+    normalized.includes("hồ chí minh") ||
+    normalized.includes("ho chi minh") ||
+    normalized.includes("tp hcm") ||
+    normalized.includes("tphcm") ||
+    normalized.includes("sài gòn") ||
+    normalized.includes("sai gon");
+
+  if (!alreadyHasLocality) {
+    candidates.push(`${input}, Hồ Chí Minh`);
+  }
+
+  return Array.from(new Set(candidates));
 }
 
 const frequentlyBoughtTogether: Record<string, string[]> = {
@@ -193,7 +392,8 @@ const comboSuggestions: Record<
 };
 export default function DatMonNhanhPage() {
   const router = useRouter();
-
+  const [betaResolved, setBetaResolved] = useState(false);
+  const [isBranchBeta, setIsBranchBeta] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [toppings, setToppings] = useState<Topping[]>([]);
   const [shippingZones, setShippingZones] = useState<ShippingZone[]>([]);
@@ -222,6 +422,7 @@ const [selectedSugarLevel, setSelectedSugarLevel] = useState("Ngọt bình thư�
   const [customerAddressDetail, setCustomerAddressDetail] = useState("");
   const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([]);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [addressSelected, setAddressSelected] = useState(false);
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
@@ -234,6 +435,17 @@ const [scheduledTime, setScheduledTime] = useState("");
 const [scheduledNote, setScheduledNote] = useState("");
   const [selectedBranch, setSelectedBranch] =
     useState<PreviewSelectedBranch | null>(null);
+  const [availableBranches, setAvailableBranches] =
+    useState<AvailableBranch[]>([]);
+  const [branchSelectorOpen, setBranchSelectorOpen] = useState(false);
+  const [manualBranchId, setManualBranchId] = useState<string | null>(null);
+  const [branchMenuPreview, setBranchMenuPreview] =
+    useState<BranchMenuPreviewItem[]>([]);
+  const [branchMenuPreviewBranchId, setBranchMenuPreviewBranchId] =
+    useState<string | null>(null);
+  const [branchMenuPreviewLoading, setBranchMenuPreviewLoading] =
+    useState(false);
+  const [branchMenuPreviewError, setBranchMenuPreviewError] = useState("");
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(2);
   const [routeLoading, setRouteLoading] = useState(false);
 const [routeMessage, setRouteMessage] = useState("");
@@ -245,17 +457,72 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   const [usePointsDiscount, setUsePointsDiscount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [checkingCustomer, setCheckingCustomer] = useState(false);
+  const [checkedCustomerPhone, setCheckedCustomerPhone] = useState("");
   const [customerFoundMessage, setCustomerFoundMessage] = useState("");
   const [customerFlag, setCustomerFlag] = useState<CustomerFlag | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
   const [cartAnimate, setCartAnimate] = useState(false);
+  const [branchGateConfirmed, setBranchGateConfirmed] = useState(false);
+  const [branchGateLocked, setBranchGateLocked] = useState(false);
+  const [branchCartValidation, setBranchCartValidation] =
+    useState<BranchCartValidationResult | null>(null);
+  const [branchCartModalOpen, setBranchCartModalOpen] = useState(false);
+  const addressSearchTimerRef = useRef<number | null>(null);
+  const addressSearchRequestRef = useRef(0);
+  const addressSearchAbortRef = useRef<AbortController | null>(null);
+  const routeRequestRef = useRef(0);
+
+  const branchMenuPreviewConfigured =
+    process.env.NEXT_PUBLIC_ENABLE_BRANCH_MENU_PREVIEW === "true";
+
+  const branchFirstGateConfigured =
+    process.env.NEXT_PUBLIC_ENABLE_BRANCH_FIRST_GATE === "true";
+
+  const branchCartValidationConfigured =
+    process.env.NEXT_PUBLIC_ENABLE_BRANCH_CART_VALIDATION === "true";
+
+  const isBranchMenuPreviewEnabled =
+    betaResolved &&
+    isBranchBeta &&
+    branchMenuPreviewConfigured;
+
+  const isBranchFirstGateEnabled =
+    betaResolved &&
+    isBranchBeta &&
+    branchFirstGateConfigured;
+
+  const isBranchCartValidationEnabled =
+    betaResolved &&
+    isBranchBeta &&
+    branchCartValidationConfigured;
 
   useEffect(() => {
-    localStorage.getItem("avnt_reorder_items");
-    fetchInitialData();
-    loadSavedCustomer();
+    const searchParams = new URLSearchParams(window.location.search);
+    const betaEnabled = searchParams.get("beta") === "branch";
+
+    setIsBranchBeta(betaEnabled);
+    setBetaResolved(true);
   }, []);
+
+  useEffect(() => {
+    if (!betaResolved) {
+      return;
+    }
+
+    void fetchInitialData();
+    loadSavedCustomer();
+  }, [betaResolved]);
+
+  useEffect(() => {
+    return () => {
+      if (addressSearchTimerRef.current !== null) {
+        window.clearTimeout(addressSearchTimerRef.current);
+      }
+      addressSearchAbortRef.current?.abort();
+    };
+  }, []);
+
   useEffect(() => {
     if (!products.length) return;
   
@@ -303,13 +570,29 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   useEffect(() => {
     const normalizedPhone = normalizePhoneForLookup(customerPhone);
 
+    addressSearchRequestRef.current += 1;
+    routeRequestRef.current += 1;
+    addressSearchAbortRef.current?.abort();
+    addressSearchAbortRef.current = null;
+
+    if (addressSearchTimerRef.current !== null) {
+      window.clearTimeout(addressSearchTimerRef.current);
+      addressSearchTimerRef.current = null;
+    }
+
+    setAddressLoading(false);
+    setRouteLoading(false);
+
     if (!isValidLookupPhone(normalizedPhone)) {
+      setCheckedCustomerPhone("");
       return;
     }
 
+    setCheckedCustomerPhone("");
+
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      findCustomerByPhone(normalizedPhone, controller.signal);
+      void findCustomerByPhone(normalizedPhone, controller.signal);
     }, 600);
 
     return () => {
@@ -318,17 +601,111 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     };
   }, [customerPhone]);
 
+  useEffect(() => {
+    if (!isBranchMenuPreviewEnabled) {
+      setBranchMenuPreview([]);
+      setBranchMenuPreviewBranchId(null);
+      setBranchMenuPreviewError("");
+      setBranchMenuPreviewLoading(false);
+      return;
+    }
+
+    const branchId = selectedBranch?.id || null;
+    const branchCode = selectedBranch?.code || null;
+
+    if (!branchId && !branchCode) {
+      setBranchMenuPreview([]);
+      setBranchMenuPreviewBranchId(null);
+      setBranchMenuPreviewError("");
+      setBranchMenuPreviewLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    setBranchMenuPreview([]);
+    setBranchMenuPreviewBranchId(null);
+    setBranchMenuPreviewLoading(true);
+    setBranchMenuPreviewError("");
+
+    void (async () => {
+      const result = await fetchBranchMenuPreview(
+        {
+          branchId,
+          branchCode,
+        },
+        controller.signal
+      );
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (result.ok) {
+        setBranchMenuPreview(result.items);
+        setBranchMenuPreviewBranchId(branchId);
+        setBranchMenuPreviewError("");
+      } else {
+        setBranchMenuPreview([]);
+        setBranchMenuPreviewBranchId(branchId);
+        setBranchMenuPreviewError(
+          result.message || "Không tải được menu chi nhánh."
+        );
+      }
+
+      setBranchMenuPreviewLoading(false);
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedBranch, isBranchMenuPreviewEnabled]);
+
+  // Branch cart validation — runs after selectedBranch changes and menu loads
+  const prevBranchIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isBranchCartValidationEnabled) return;
+    if (cart.length === 0) return;
+    if (!selectedBranch) {
+      prevBranchIdRef.current = null;
+      setBranchCartValidation(null);
+      return;
+    }
+    if (branchMenuPreviewLoading || branchMenuPreviewError) return;
+    if (branchMenuPreview.length === 0) return;
+    if (branchMenuPreviewBranchId !== selectedBranch.id) return;
+    // Only trigger once per branch change
+    if (prevBranchIdRef.current === selectedBranch.id) return;
+    prevBranchIdRef.current = selectedBranch.id;
+
+    const result = validateCartForBranch(cart, branchMenuPreview);
+    if (result.changed) {
+      setBranchCartValidation(result);
+      setBranchCartModalOpen(true);
+    }
+  }, [
+    selectedBranch,
+    branchMenuPreview,
+    branchMenuPreviewBranchId,
+    branchMenuPreviewLoading,
+    branchMenuPreviewError,
+    isBranchCartValidationEnabled,
+    cart,
+  ]);
+
   async function fetchInitialData() {
-    const [
-      productResult,
-      toppingResult,
-      zoneResult,
-      settingResult,
-      bannerResult,
-      couponResult,
-      rewardResult,
-      promotionResult,
-    ] = await Promise.all([
+  const [
+  productResult,
+  toppingResult,
+  zoneResult,
+  settingResult,
+  bannerResult,
+  couponResult,
+  rewardResult,
+  promotionResult,
+  branchResult,
+] = await Promise.all([
       supabase
         .from("products")
         .select(
@@ -370,6 +747,11 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   .select("*")
   .eq("is_active", true)
   .order("sort_order", { ascending: true }),
+      supabase
+        .from("branches")
+        .select("*")
+        .eq("is_active", true)
+        .order("code", { ascending: true }),
     ]);
 
     setProducts((productResult.data || []) as Product[]);
@@ -386,6 +768,14 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     setShippingPromotions(
       (promotionResult.data || []) as ShippingPromotion[]
     );
+    if (branchResult.error) {
+  console.error("LOAD BRANCHES ERROR:", branchResult.error);
+  setAvailableBranches([]);
+} else {
+  setAvailableBranches(
+    (branchResult.data || []) as AvailableBranch[]
+  );
+}
     setLoading(false);
   }
 
@@ -416,7 +806,10 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   function saveCustomerLocal() {
     if (typeof window === "undefined") return;
 
-    localStorage.setItem("avnt_customer_phone", customerPhone.trim());
+    localStorage.setItem(
+      "avnt_customer_phone",
+      normalizePhoneForLookup(customerPhone)
+    );
     localStorage.setItem("avnt_customer_name", customerName.trim());
     localStorage.setItem("avnt_customer_address", customerAddress.trim());
     localStorage.setItem(
@@ -456,29 +849,26 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   }
 
   async function findCustomerByPhone(phone: string, signal?: AbortSignal) {
-    const cleanPhone = phone.trim();
+    const cleanPhone = normalizePhoneForLookup(phone);
     if (!isValidLookupPhone(cleanPhone)) return;
 
     setCheckingCustomer(true);
+    setCheckedCustomerPhone("");
     setCustomerFoundMessage("");
 
-    const flag = await fetchCustomerFlag(cleanPhone, signal);
-
-    if (signal?.aborted) {
-      return;
-    }
-
     try {
-      const bootstrapResult = await resolveCustomerBranch(cleanPhone, signal);
-
+      await fetchCustomerFlag(cleanPhone, signal);
       if (signal?.aborted) {
         return;
       }
 
-      if (!bootstrapResult.ok) {
-        console.warn("resolveCustomerBranch fallback:", bootstrapResult.message);
-      } else if (bootstrapResult.customer) {
-        const customer = bootstrapResult.customer;
+      const bootstrap = await resolveCustomerBranch(cleanPhone, signal);
+      if (signal?.aborted) {
+        return;
+      }
+
+      if (bootstrap.ok && bootstrap.customer) {
+        const customer = bootstrap.customer;
         const savedLat = Number(customer.lastLat || 0);
         const savedLng = Number(customer.lastLng || 0);
         const hasSavedLocation =
@@ -491,17 +881,82 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
         setCustomerName(customer.name || "");
         setCustomerAddress(customer.lastAddress || "");
         setCustomerAddressDetail(customer.lastAddressDetail || "");
-
-        if (
-          customer.lastPaymentMethod === "momo" ||
-          customer.lastPaymentMethod === "cod"
-        ) {
-          setPaymentMethod(customer.lastPaymentMethod);
-        }
-
+        setPaymentMethod(customer.lastPaymentMethod || "momo");
         setCustomerPoints(Number(customer.totalPoints || 0));
 
         if (Number(customer.totalPoints || 0) < 50) {
+          setUsePointsDiscount(0);
+          setSelectedRewardId("");
+        }
+
+        if (isBranchMenuPreviewEnabled && bootstrap.selectedBranch) {
+          setSelectedBranch(bootstrap.selectedBranch);
+        }
+
+        if (hasSavedLocation) {
+          setDeliveryLat(savedLat);
+          setDeliveryLng(savedLng);
+          setAddressSelected(true);
+          setCustomerFoundMessage("");
+          await calculateRouteByLatLng(savedLat, savedLng, {
+            skipBranchPreview:
+              isBranchMenuPreviewEnabled &&
+              Boolean(bootstrap.selectedBranch),
+          });
+          if (signal?.aborted) {
+            return;
+          }
+        } else {
+          setDeliveryLat(null);
+          setDeliveryLng(null);
+
+          if (bootstrap.shouldChooseAddress) {
+            setSelectedBranch(null);
+          }
+
+          setGoogleShippingFee(null);
+          setRouteMessage("");
+          setAddressSelected(false);
+          setCustomerFoundMessage(
+            "Địa chỉ cũ chưa có tọa độ. Anh/chị chọn lại địa chỉ từ gợi ý Google một lần để lần sau tự tính phí ship."
+          );
+        }
+
+        return;
+      }
+
+      let query = supabase
+        .from("customers")
+        .select("*")
+        .eq("phone", cleanPhone);
+
+      if (signal) {
+        query = query.abortSignal(signal);
+      }
+
+      const { data, error } = await query.maybeSingle();
+      if (signal?.aborted) {
+        return;
+      }
+
+      if (!error && data) {
+        const customer = data as Customer;
+        const savedLat = Number(customer.last_lat || 0);
+        const savedLng = Number(customer.last_lng || 0);
+        const hasSavedLocation =
+          Number.isFinite(savedLat) &&
+          Number.isFinite(savedLng) &&
+          savedLat !== 0 &&
+          savedLng !== 0;
+
+        setCustomerId(customer.id);
+        setCustomerName(customer.name || "");
+        setCustomerAddress(customer.last_address || "");
+        setCustomerAddressDetail(customer.last_address_detail || "");
+        setPaymentMethod(customer.last_payment_method || "momo");
+        setCustomerPoints(Number((customer as any).total_points || 0));
+
+        if (Number((customer as any).total_points || 0) < 50) {
           setUsePointsDiscount(0);
           setSelectedRewardId("");
         }
@@ -511,10 +966,10 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
           setDeliveryLng(savedLng);
           setAddressSelected(true);
           setCustomerFoundMessage("");
-          setSelectedBranch(bootstrapResult.selectedBranch ?? null);
-          await calculateRouteByLatLng(savedLat, savedLng, {
-            skipBranchPreview: !!bootstrapResult.selectedBranch,
-          });
+          await calculateRouteByLatLng(savedLat, savedLng);
+          if (signal?.aborted) {
+            return;
+          }
         } else {
           setDeliveryLat(null);
           setDeliveryLng(null);
@@ -526,75 +981,55 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
             "Địa chỉ cũ chưa có tọa độ. Anh/chị chọn lại địa chỉ từ gợi ý Google một lần để lần sau tự tính phí ship."
           );
         }
+      } else {
+        setCustomerPoints(0);
+        setUsePointsDiscount(0);
+        setSelectedRewardId("");
+        setCustomerId("");
+        setCustomerName("");
+        setCustomerAddress("");
+        setCustomerAddressDetail("");
+        setDeliveryLat(null);
+        setDeliveryLng(null);
+        setAddressSelected(false);
+        setAddressSuggestions([]);
+        setGoogleShippingFee(null);
+        setRouteMessage("");
+        setCustomerFoundMessage(
+          "Đây là lần đầu bạn đặt món. Hãy chọn địa chỉ để quán xác định chi nhánh phục vụ."
+        );
 
-        setCheckingCustomer(false);
-        return;
+        setSelectedBranch(null);
       }
     } catch (error) {
       if (signal?.aborted) {
         return;
       }
-      console.warn("resolveCustomerBranch unexpected fallback:", error);
-    }
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("phone", cleanPhone)
-      .maybeSingle();
-
-    if (signal?.aborted) {
-      return;
-    }
-
-    if (!error && data) {
-      const customer = data as Customer;
-      const savedLat = Number(customer.last_lat || 0);
-      const savedLng = Number(customer.last_lng || 0);
-      const hasSavedLocation =
-        Number.isFinite(savedLat) &&
-        Number.isFinite(savedLng) &&
-        savedLat !== 0 &&
-        savedLng !== 0;
-
-      setCustomerId(customer.id);
-      setCustomerName(customer.name || "");
-      setCustomerAddress(customer.last_address || "");
-      setCustomerAddressDetail(customer.last_address_detail || "");
-      setPaymentMethod(customer.last_payment_method || "momo");
-      setCustomerPoints(Number((customer as any).total_points || 0));
-
-      if (Number((customer as any).total_points || 0) < 50) {
-        setUsePointsDiscount(0);
-        setSelectedRewardId("");
-      }
-
-      if (hasSavedLocation) {
-        setDeliveryLat(savedLat);
-        setDeliveryLng(savedLng);
-        setAddressSelected(true);
-        setCustomerFoundMessage("");
-        await calculateRouteByLatLng(savedLat, savedLng);
-      } else {
-        setDeliveryLat(null);
-        setDeliveryLng(null);
-        setSelectedBranch(null);
-        setGoogleShippingFee(null);
-        setRouteMessage("");
-        setAddressSelected(false);
-        setCustomerFoundMessage(
-          "Địa chỉ cũ chưa có tọa độ. Anh/chị chọn lại địa chỉ từ gợi ý Google một lần để lần sau tự tính phí ship."
-        );
-      }
-    } else {
-      setCustomerPoints(0);
-setUsePointsDiscount(0);
-      setSelectedRewardId("");
+      console.error("CUSTOMER LOOKUP ERROR:", error);
       setCustomerId("");
-      setCustomerFoundMessage("Khách mới, thông tin sẽ được lưu sau khi đặt.");
+      setCustomerName("");
+      setCustomerAddress("");
+      setCustomerAddressDetail("");
+      setCustomerPoints(0);
+      setUsePointsDiscount(0);
+      setSelectedRewardId("");
+      setDeliveryLat(null);
+      setDeliveryLng(null);
+      setAddressSelected(false);
+      setAddressSuggestions([]);
+      setSelectedBranch(null);
+      setGoogleShippingFee(null);
+      setRouteMessage("");
+      setCustomerFoundMessage(
+        "Không thể tải địa chỉ cũ. Anh/chị vui lòng chọn lại địa chỉ giao hàng."
+      );
+    } finally {
+      if (!signal?.aborted) {
+        setCheckedCustomerPhone(cleanPhone);
+        setCheckingCustomer(false);
+      }
     }
-
-    setCheckingCustomer(false);
   }
 
   function showToast(message: string) {
@@ -817,18 +1252,184 @@ setSelectedSugarLevel("Ngọt bình thường");
     triggerCartAnimation();
   }
 
+
+
+
+
+
+
+
+  const branchMenuValidationIssues = useMemo(() => {
+    if (!isBranchMenuPreviewEnabled || branchMenuPreview.length === 0) {
+      return { duplicateIds: [], invalidPriceIds: [], negativePriceIds: [], missingFieldIds: [], emptyPreview: true, branchInactive: false, branchClosed: false };
+    }
+    return validateBranchMenuData(branchMenuPreview);
+  }, [isBranchMenuPreviewEnabled, branchMenuPreview]);
+
+  const effectiveProducts = useMemo(() => {
+    if (
+      !isBranchMenuPreviewEnabled ||
+      !selectedBranch ||
+      branchMenuPreviewBranchId !== selectedBranch.id ||
+      branchMenuPreview.length === 0 ||
+      branchMenuPreviewLoading ||
+      branchMenuPreviewError
+    ) {
+      return products;
+    }
+
+    // Guard: Fallback if critical validation errors detected
+    if (hasCriticalErrors(branchMenuValidationIssues)) {
+      return products;
+    }
+
+    return branchMenuPreview.map((item) => ({
+      id: item.id,
+      name: item.name,
+      slug: item.slug,
+      price: item.effective_price,
+      badge: item.badge,
+      image_url: item.image_url,
+      description: item.description,
+      is_sold_out: item.is_sold_out_for_branch,
+      category: item.category,
+      topping_category: item.topping_category,
+    }));
+  }, [
+    isBranchMenuPreviewEnabled,
+    selectedBranch,
+    branchMenuPreview,
+    branchMenuPreviewBranchId,
+    branchMenuPreviewLoading,
+    branchMenuPreviewError,
+    branchMenuValidationIssues,
+    products,
+  ]);
+  const branchGateDiagnostics = useMemo(
+    () =>
+      validateBranchFirstGateState({
+        enabled:
+          isBranchFirstGateEnabled || isBranchMenuPreviewEnabled,
+        fulfillmentType,
+        phone: normalizePhoneForLookup(customerPhone),
+        checkedPhone: checkedCustomerPhone,
+        address: customerAddress,
+        latitude: deliveryLat,
+        longitude: deliveryLng,
+        selectedBranchId: selectedBranch?.id || null,
+      }),
+    [
+      isBranchFirstGateEnabled,
+      isBranchMenuPreviewEnabled,
+      fulfillmentType,
+      customerPhone,
+      checkedCustomerPhone,
+      customerAddress,
+      deliveryLat,
+      deliveryLng,
+      selectedBranch,
+    ]
+  );
+
+  const branchMenuGateLoading =
+    isBranchMenuPreviewEnabled &&
+    !!selectedBranch &&
+    (branchMenuPreviewLoading ||
+      branchMenuPreviewBranchId !== selectedBranch.id);
+
   const categories = useMemo(() => {
-    const list = products.map((item) => item.category || "Món ngon");
+    const list = effectiveProducts.map((item) => item.category || "Món ngon");
     return ["Tất cả", ...Array.from(new Set(list))];
-  }, [products]);
+  }, [effectiveProducts]);
 
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === "Tất cả") return products;
+    if (selectedCategory === "Tất cả") return effectiveProducts;
 
-    return products.filter(
+    return effectiveProducts.filter(
       (item) => (item.category || "Món ngon") === selectedCategory
     );
-  }, [products, selectedCategory]);
+  }, [effectiveProducts, selectedCategory]);
+  const branchMenuPreviewDiff = useMemo(() => {
+    const legacyIds = new Set(products.map((item) => item.id));
+    const previewIds = new Set(branchMenuPreview.map((item) => item.id));
+
+    return {
+      legacyCount: products.length,
+      previewCount: branchMenuPreview.length,
+      legacyMissingInPreview: products
+        .filter((item) => !previewIds.has(item.id))
+        .map((item) => item.id),
+      previewOnlyIds: branchMenuPreview
+        .filter((item) => !legacyIds.has(item.id))
+        .map((item) => item.id),
+    };
+  }, [products, branchMenuPreview]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") {
+      return;
+    }
+
+    if (
+      !selectedBranch ||
+      !isBranchMenuPreviewEnabled ||
+      (branchMenuPreviewBranchId &&
+        branchMenuPreviewBranchId !== selectedBranch.id)
+    ) {
+      return;
+    }
+
+    const diagnostics = buildBranchMenuDiagnostics(
+      isBranchMenuPreviewEnabled,
+      selectedBranch,
+      branchMenuPreview,
+      branchMenuPreviewLoading,
+      branchMenuPreviewError,
+      products,
+      branchMenuPreviewDiff
+    );
+
+    console.debug("branch-menu preview validation", diagnostics);
+  }, [
+    selectedBranch,
+    isBranchMenuPreviewEnabled,
+    branchMenuPreview,
+    branchMenuPreviewBranchId,
+    branchMenuPreviewLoading,
+    branchMenuPreviewError,
+    branchMenuPreviewDiff,
+    products,
+  ]);
+
+  // Re-open the gate whenever a confirmed delivery loses a required
+  // dependency (phone lookup, Google coordinates or selected branch).
+  useEffect(() => {
+    if (!isBranchFirstGateEnabled) {
+      setBranchGateConfirmed(true);
+      return;
+    }
+
+    if (branchGateLocked && !branchGateDiagnostics.readyForMenu) {
+      setBranchGateConfirmed(false);
+    }
+  }, [
+    isBranchFirstGateEnabled,
+    branchGateLocked,
+    branchGateDiagnostics.readyForMenu,
+  ]);
+
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "development" ||
+      !isBranchFirstGateEnabled
+    ) {
+      return;
+    }
+
+    console.debug("branch-first gate validation", branchGateDiagnostics);
+  }, [isBranchFirstGateEnabled, branchGateDiagnostics]);
+
+ 
 
   const subtotal = useMemo(() => {
     return cart.reduce(
@@ -850,10 +1451,10 @@ setSelectedSugarLevel("Ngọt bình thường");
     const suggestedNames =
       frequentlyBoughtTogether[firstProduct] || [];
   
-    return products.filter((product) =>
+    return effectiveProducts.filter((product) =>
       suggestedNames.includes(product.name)
     );
-  }, [cart, products]);
+  }, [cart, effectiveProducts]);
   const comboProduct = useMemo(() => {
     if (!cart.length) return null;
   
@@ -864,7 +1465,7 @@ setSelectedSugarLevel("Ngọt bình thường");
   
     if (!combo) return null;
   
-    const product = products.find(
+    const product = effectiveProducts.find(
       (item) => item.name === combo.product
     );
   
@@ -874,7 +1475,7 @@ setSelectedSugarLevel("Ngọt bình thường");
       ...product,
       discount: combo.discount,
     };
-  }, [cart, products]);
+  }, [cart, effectiveProducts]);
   const selectedShippingZone = useMemo(() => {
     return (
       shippingZones.find(
@@ -1202,7 +1803,7 @@ const amountToNextShippingPromo = nextShippingPromotion
     }
 
   async function upsertCustomer() {
-    const cleanPhone = customerPhone.trim();
+    const cleanPhone = normalizePhoneForLookup(customerPhone);
 
     if (customerId) {
       const { data, error } = await supabase
@@ -1280,50 +1881,162 @@ total_spent: 0,
     if (error) throw error;
     return data as Customer;
   }
-  async function searchAddressSuggestions(value: string) {
-    const input = value.trim();
-  
-    if (input.length < 2) {
+  function handleDeliveryAddressInputChange(value: string) {
+    const requestId = addressSearchRequestRef.current + 1;
+    addressSearchRequestRef.current = requestId;
+    routeRequestRef.current += 1;
+    addressSearchAbortRef.current?.abort();
+    addressSearchAbortRef.current = null;
+
+    setCustomerAddress(value);
+    setDeliveryLat(null);
+    setDeliveryLng(null);
+    setSelectedBranch(null);
+    setManualBranchId(null);
+    setGoogleShippingFee(null);
+    setRouteMessage("");
+    setAddressSelected(false);
+    setAddressSearchMessage("");
+
+    if (addressSearchTimerRef.current !== null) {
+      window.clearTimeout(addressSearchTimerRef.current);
+      addressSearchTimerRef.current = null;
+    }
+
+    if (value.trim().length < 3) {
       setAddressSuggestions([]);
+      setAddressLoading(false);
       return;
     }
-  
-    setAddressLoading(true);
-  
-    try {
-      const res = await fetch("/api/places", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "autocomplete",
-          input,
-        }),
-      });
-  
-      const data = await res.json();
-  
-      if (!data.ok) {
-        console.error("PLACES AUTOCOMPLETE ERROR:", data);
+
+    addressSearchTimerRef.current = window.setTimeout(() => {
+      void searchAddressSuggestions(value, requestId);
+      addressSearchTimerRef.current = null;
+    }, 350);
+  }
+
+  async function searchAddressSuggestions(
+    value: string,
+    requestId: number
+  ) {
+    const input = value.trim();
+
+    if (input.length < 3) {
+      if (requestId === addressSearchRequestRef.current) {
         setAddressSuggestions([]);
+        setAddressSearchMessage("");
+      }
+      return;
+    }
+
+    const controller = new AbortController();
+    addressSearchAbortRef.current?.abort();
+    addressSearchAbortRef.current = controller;
+    setAddressLoading(true);
+    setAddressSearchMessage("");
+
+    try {
+      let suggestions: PlaceSuggestion[] = [];
+      let lastErrorMessage = "";
+
+      for (const candidate of buildAddressSearchCandidates(input)) {
+        const res = await fetch("/api/places", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          signal: controller.signal,
+          body: JSON.stringify({
+            action: "autocomplete",
+            input: candidate,
+          }),
+        });
+
+        const data = await res.json().catch(() => null);
+if (process.env.NODE_ENV === "development") {
+  console.debug("GOOGLE PLACES AUTOCOMPLETE RESPONSE:", {
+    status: res.status,
+    input: candidate,
+    data,
+  });
+}
+        if (requestId !== addressSearchRequestRef.current) {
+          return;
+        }
+
+        if (!res.ok || !data?.ok) {
+          lastErrorMessage = String(
+            data?.message ||
+              `Google Maps trả về lỗi ${res.status || "không xác định"}.`
+          );
+          console.warn("PLACES AUTOCOMPLETE ERROR:", {
+            status: res.status,
+            data,
+          });
+          continue;
+        }
+
+        suggestions = normalizePlaceSuggestions(data);
+if (process.env.NODE_ENV === "development") {
+  console.debug("NORMALIZED PLACE SUGGESTIONS:", suggestions);
+}
+        if (suggestions.length > 0) {
+          break;
+        }
+      }
+
+      if (requestId !== addressSearchRequestRef.current) {
         return;
       }
-  
-      setAddressSuggestions(data.suggestions || []);
+
+      setAddressSuggestions(suggestions);
+
+      if (suggestions.length === 0) {
+        setAddressSearchMessage(
+          lastErrorMessage ||
+            "Chưa tìm thấy địa chỉ. Hãy nhập thêm tên đường, phường hoặc quận, ví dụ: 178 Cô Giang, Quận 1."
+        );
+      }
     } catch (error) {
+      if (
+        controller.signal.aborted ||
+        requestId !== addressSearchRequestRef.current
+      ) {
+        return;
+      }
+
       console.error("SEARCH ADDRESS ERROR:", error);
       setAddressSuggestions([]);
+      setAddressSearchMessage(
+        "Không tải được gợi ý Google Maps. Hãy kiểm tra API Places hoặc thử tải lại trang."
+      );
     } finally {
-      setAddressLoading(false);
+      if (requestId === addressSearchRequestRef.current) {
+        setAddressLoading(false);
+        if (addressSearchAbortRef.current === controller) {
+          addressSearchAbortRef.current = null;
+        }
+      }
     }
   }
-  
+
   async function selectAddressSuggestion(suggestion: PlaceSuggestion) {
+    const requestId = addressSearchRequestRef.current + 1;
+    addressSearchRequestRef.current = requestId;
+    addressSearchAbortRef.current?.abort();
+    addressSearchAbortRef.current = null;
+
+    if (addressSearchTimerRef.current !== null) {
+      window.clearTimeout(addressSearchTimerRef.current);
+      addressSearchTimerRef.current = null;
+    }
+
     setAddressLoading(true);
     setRouteMessage("");
     setAddressSuggestions([]);
-  
+    setAddressSearchMessage("");
+
     try {
       const res = await fetch("/api/places", {
         method: "POST",
@@ -1335,76 +2048,113 @@ total_spent: 0,
           placeId: suggestion.placeId,
         }),
       });
-  
+
       const data = await res.json();
-  
+
+      if (requestId !== addressSearchRequestRef.current) {
+        return;
+      }
+
       if (!data.ok) {
         alert(data.message || "Không lấy được tọa độ địa chỉ.");
         return;
       }
-  
+
       const lat = Number(data.place?.lat);
       const lng = Number(data.place?.lng);
       const address = String(data.place?.address || suggestion.text);
-  
+
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        alert("Địa chỉ này chưa có tọa độ rõ ràng. Anh chọn địa chỉ khác giúp em.");
+        alert(
+          "Địa chỉ này chưa có tọa độ rõ ràng. Anh/chị chọn địa chỉ khác giúp em."
+        );
         return;
       }
-  
+
       setCustomerAddress(address);
       setDeliveryLat(lat);
       setDeliveryLng(lng);
       setAddressSelected(true);
-  
+      setManualBranchId(null);
+
       await calculateRouteByLatLng(lat, lng);
     } catch (error) {
+      if (requestId !== addressSearchRequestRef.current) {
+        return;
+      }
+
       console.error("SELECT ADDRESS ERROR:", error);
       alert("Lỗi khi chọn địa chỉ.");
     } finally {
-      setAddressLoading(false);
+      if (requestId === addressSearchRequestRef.current) {
+        setAddressLoading(false);
+      }
     }
   }
+
   async function calculateRouteByLatLng(
     lat: number,
     lng: number,
-    options?: { skipBranchPreview?: boolean }
+    options?: {
+      skipBranchPreview?: boolean;
+      branchId?: string | null;
+    }
   ) {
+    const requestId = routeRequestRef.current + 1;
+    routeRequestRef.current = requestId;
+
     setRouteLoading(true);
     setRouteMessage("");
-  
-    try {
-      const previewBranchResultPromise = options?.skipBranchPreview
-        ? null
-        : fetchMapsPreviewNearestBranch(lat, lng);
 
+    const shouldResolveBranch =
+      isBranchMenuPreviewEnabled &&
+      !options?.skipBranchPreview;
+    const previewBranchResultPromise = shouldResolveBranch
+      ? fetchMapsPreviewNearestBranch(lat, lng).catch((error) => {
+          console.error("BRANCH PREVIEW ERROR:", error);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    try {
       const res = await fetch("/api/maps", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ lat, lng }),
+        body: JSON.stringify({
+          lat,
+          lng,
+          branchId:
+            options?.branchId ||
+            manualBranchId ||
+            selectedBranch?.id ||
+            null,
+        }),
       });
-  
+
       const data = await res.json();
-  
-      if (!data.ok) {
-        setRouteMessage(data.message || "Không tính được phí ship.");
-        setGoogleShippingFee(null);
-          setSelectedBranch(null);
+      const previewBranchResult = await previewBranchResultPromise;
+
+      if (requestId !== routeRequestRef.current) {
         return;
       }
 
-        if (previewBranchResultPromise) {
-          const previewBranchResult = await previewBranchResultPromise;
-          setSelectedBranch(previewBranchResult.selectedBranch);
-        }
-  
+      if (shouldResolveBranch) {
+        setSelectedBranch(previewBranchResult?.selectedBranch || null);
+      }
+
+      if (!data.ok) {
+        setRouteMessage(data.message || "Không tính được phí ship.");
+        setGoogleShippingFee(null);
+        return;
+      }
+
       setDeliveryDistanceKm(Number(data.distance_km || 0));
       setGoogleShippingFee(
         data.shipping_fee === null ? null : Number(data.shipping_fee)
       );
-  
+
       setRouteMessage(
         `${data.distance_text} - ${data.duration_text}. Phí ship: ${
           data.shipping_fee === null
@@ -1413,14 +2163,30 @@ total_spent: 0,
         }`
       );
     } catch (error) {
+      if (requestId !== routeRequestRef.current) {
+        return;
+      }
+
       console.error("MAP ROUTE ERROR:", error);
       setRouteMessage("Lỗi khi tính phí ship.");
       setGoogleShippingFee(null);
-      setSelectedBranch(null);
+
+      if (shouldResolveBranch) {
+        const previewBranchResult = await previewBranchResultPromise;
+
+        if (requestId !== routeRequestRef.current) {
+          return;
+        }
+
+        setSelectedBranch(previewBranchResult?.selectedBranch || null);
+      }
     } finally {
-      setRouteLoading(false);
+      if (requestId === routeRequestRef.current) {
+        setRouteLoading(false);
+      }
     }
   }
+
   function estimatePreparationMinutes(itemCount: number) {
     if (itemCount <= 2) return 10;
     if (itemCount <= 5) return 15;
@@ -1495,17 +2261,34 @@ total_spent: 0,
       return;
     }
 
-    if (!customerPhone.trim() || !customerName.trim()) {
-      alert("Anh nhập số điện thoại và tên giúp em nha.");
-      return;
-    }
-    
-    if (fulfillmentType === "delivery" && !customerAddress.trim()) {
-      alert("Anh nhập địa chỉ giao hàng giúp em nha.");
+    const normalizedSubmitPhone = normalizePhoneForLookup(customerPhone);
+
+    if (!isValidLookupPhone(normalizedSubmitPhone) || !customerName.trim()) {
+      alert("Anh/chị nhập số điện thoại hợp lệ và tên giúp em nha.");
       return;
     }
 
-    const latestFlag = await fetchCustomerFlag(customerPhone.trim());
+    if (fulfillmentType === "delivery" && !customerAddress.trim()) {
+      alert("Anh/chị nhập địa chỉ giao hàng giúp em nha.");
+      return;
+    }
+
+    if (
+      fulfillmentType === "delivery" &&
+      (isBranchFirstGateEnabled || isBranchMenuPreviewEnabled) &&
+      !branchGateDiagnostics.readyForMenu
+    ) {
+      alert(
+        branchGateDiagnostics.blockingReasons[0] ||
+          "Anh/chị vui lòng chọn lại địa chỉ để xác định chi nhánh phục vụ."
+      );
+      setBranchGateConfirmed(false);
+      setBranchGateLocked(true);
+      setCheckoutOpen(false);
+      return;
+    }
+
+    const latestFlag = await fetchCustomerFlag(normalizedSubmitPhone);
     if (latestFlag?.status === "blocked") {
       alert("Rất tiếc, quán hiện chưa thể tiếp nhận đơn hàng từ số điện thoại này. Anh/chị vui lòng liên hệ hotline 0392 496 220.");
       return;
@@ -1572,7 +2355,7 @@ total_spent: 0,
           order_code: orderCode,
           customer_id: customer.id,
           customer_name: customerName.trim(),
-          customer_phone: customerPhone.trim(),
+          customer_phone: normalizedSubmitPhone,
           customer_address:
   fulfillmentType === "delivery" ? customerAddress.trim() : "Khách tự đến lấy",
 address_detail:
@@ -1648,7 +2431,9 @@ scheduled_at:
     ? scheduledNote.trim() || null
     : null,
     branch_id:
-  fulfillmentType === "delivery" && selectedBranch?.id
+  fulfillmentType === "delivery" &&
+  isBranchBeta &&
+  selectedBranch?.id
     ? selectedBranch.id
     : null,
         })
@@ -1717,7 +2502,7 @@ scheduled_at:
 
       if (selectedReward) {
         await supabase.from("reward_redemptions").insert({
-          customer_phone: customerPhone.trim(),
+          customer_phone: normalizedSubmitPhone,
           reward_id: selectedReward.id,
           reward_name: selectedReward.name,
           points_used: rewardPointsUsed,
@@ -1779,6 +2564,182 @@ setScheduledNote("");
     }
   }
 
+  // Branch cart validation handlers
+  const handleApplyBranchCartValidation = () => {
+    if (!branchCartValidation) return;
+    const toRemoveKeys = new Set([
+      ...branchCartValidation.removedItems.map((i) => i.cartKey),
+      ...branchCartValidation.unavailableItems.map((i) => i.cartKey),
+    ]);
+    const priceMap = new Map(
+      branchCartValidation.updatedPrices.map((i) => [i.cartKey, i.newPrice])
+    );
+    setCart((prev) =>
+      prev
+        .filter((item) => !toRemoveKeys.has(item.cartKey))
+        .map((item) =>
+          priceMap.has(item.cartKey)
+            ? { ...item, price: priceMap.get(item.cartKey)! }
+            : item
+        )
+    );
+    setBranchCartModalOpen(false);
+    setBranchCartValidation(null);
+  };
+
+  const handleCancelBranchCartValidation = () => {
+    setBranchCartModalOpen(false);
+    setBranchCartValidation(null);
+  };
+
+  // Branch First Gate handlers
+  const handlePhoneChangeGate = (newPhone: string) => {
+    const normalizedPhone = normalizePhoneForLookup(newPhone);
+
+    setBranchGateConfirmed(false);
+    setBranchGateLocked(false);
+    setCheckedCustomerPhone("");
+    setCustomerPhone(normalizedPhone);
+  };
+
+  const handleConfirmSavedAddress = () => {
+    if (!branchGateDiagnostics.readyForMenu) {
+      setCustomerFoundMessage(
+        branchGateDiagnostics.blockingReasons[0] ||
+          "Hãy chọn địa chỉ từ gợi ý Google để xác định chi nhánh."
+      );
+      return;
+    }
+
+    setBranchGateConfirmed(true);
+    setBranchGateLocked(true);
+  };
+
+  const handleChooseAddressGate = () => {
+    addressSearchRequestRef.current += 1;
+    routeRequestRef.current += 1;
+    addressSearchAbortRef.current?.abort();
+    addressSearchAbortRef.current = null;
+
+    if (addressSearchTimerRef.current !== null) {
+      window.clearTimeout(addressSearchTimerRef.current);
+      addressSearchTimerRef.current = null;
+    }
+
+    setAddressLoading(false);
+    setRouteLoading(false);
+    setCustomerAddress("");
+    setCustomerAddressDetail("");
+    setDeliveryLat(null);
+    setDeliveryLng(null);
+    setSelectedBranch(null);
+    setManualBranchId(null);
+    setBranchSelectorOpen(false);
+    setAddressSelected(false);
+    setAddressSuggestions([]);
+    setAddressSearchMessage("");
+    setGoogleShippingFee(null);
+    setRouteMessage("");
+    setCustomerFoundMessage(
+      "Nhập địa chỉ mới và chọn đúng kết quả Google để quán đổi chi nhánh an toàn."
+    );
+    setBranchGateConfirmed(false);
+    setBranchGateLocked(false);
+  };
+
+  const handleChangePhoneGate = () => {
+    addressSearchRequestRef.current += 1;
+    routeRequestRef.current += 1;
+    addressSearchAbortRef.current?.abort();
+    addressSearchAbortRef.current = null;
+
+    if (addressSearchTimerRef.current !== null) {
+      window.clearTimeout(addressSearchTimerRef.current);
+      addressSearchTimerRef.current = null;
+    }
+
+    setAddressLoading(false);
+    setRouteLoading(false);
+    setBranchGateConfirmed(false);
+    setBranchGateLocked(false);
+    setCheckedCustomerPhone("");
+    setCheckingCustomer(false);
+    setCustomerPhone("");
+    setCustomerId("");
+    setCustomerName("");
+    setCustomerAddress("");
+    setCustomerAddressDetail("");
+    setCustomerPoints(0);
+    setUsePointsDiscount(0);
+    setSelectedRewardId("");
+    setCustomerFlag(null);
+    setDeliveryLat(null);
+    setDeliveryLng(null);
+    setSelectedBranch(null);
+    setManualBranchId(null);
+    setBranchSelectorOpen(false);
+    setAddressSelected(false);
+    setAddressSuggestions([]);
+    setAddressSearchMessage("");
+    setGoogleShippingFee(null);
+    setRouteMessage("");
+    setCustomerFoundMessage("");
+
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("avnt_customer_phone");
+      localStorage.removeItem("avnt_customer_name");
+      localStorage.removeItem("avnt_customer_address");
+      localStorage.removeItem("avnt_customer_address_detail");
+    }
+  };
+
+  const handleOpenBranchSelector = () => {
+    if (availableBranches.length === 0) {
+      showToast("Chưa tải được danh sách chi nhánh.");
+      return;
+    }
+
+    setBranchSelectorOpen(true);
+  };
+
+  const handleCloseBranchSelector = () => {
+    setBranchSelectorOpen(false);
+  };
+
+  const handleSelectManualBranch = async (
+    branch: PreviewSelectedBranch
+  ) => {
+    if (branch.id === selectedBranch?.id) {
+      setBranchSelectorOpen(false);
+      return;
+    }
+
+    setBranchGateLocked(false);
+    setManualBranchId(branch.id || null);
+    setSelectedCategory("Tất cả");
+
+    setBranchMenuPreview([]);
+    setBranchMenuPreviewBranchId(null);
+    setBranchMenuPreviewError("");
+
+    setSelectedBranch(branch);
+    setBranchSelectorOpen(false);
+
+    if (deliveryLat !== null && deliveryLng !== null) {
+      await calculateRouteByLatLng(deliveryLat, deliveryLng, {
+        skipBranchPreview: true,
+        branchId: branch.id || null,
+      });
+    }
+
+    setBranchGateLocked(true);
+    showToast(
+      `Đã chuyển sang menu ${
+        branch.short_name || branch.code || "chi nhánh"
+      }`
+    );
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#F5FFF8] px-4 py-20 text-center">
@@ -1787,12 +2748,107 @@ setScheduledNote("");
     );
   }
 
+  // Show BranchFirstGate only for the private beta URL.
+  if (isBranchFirstGateEnabled && !branchGateConfirmed) {
+    return (
+      <>
+        <div className="fixed left-1/2 top-3 z-[4000] flex w-[94%] max-w-md -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-lg">
+          <div className="min-w-0">
+            <p className="text-xs font-black text-amber-700">
+              BETA · Chọn chi nhánh thông minh
+            </p>
+            <p className="mt-1 text-[11px] font-bold text-amber-600">
+              Phiên bản thử nghiệm nội bộ
+            </p>
+          </div>
+
+          <a
+            href="/dat-mon-nhanh"
+            className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#06113C] ring-1 ring-black/10"
+          >
+            Bản ổn định
+          </a>
+        </div>
+
+        <BranchFirstGate
+          phone={customerPhone}
+          phoneChecked={branchGateDiagnostics.customerLookupComplete}
+          customerName={customerName}
+          customerAddress={customerAddress}
+          customerAddressDetail={customerAddressDetail}
+          selectedBranch={selectedBranch}
+          availableBranches={availableBranches}
+          branchSelectorOpen={branchSelectorOpen}
+          checkingCustomer={checkingCustomer}
+          addressLoading={addressLoading}
+          routeLoading={routeLoading}
+          branchMenuLoading={branchMenuGateLoading}
+          addressSelected={addressSelected}
+          addressSuggestions={addressSuggestions}
+          addressSearchMessage={addressSearchMessage}
+          statusMessage={customerFoundMessage}
+          routeMessage={routeMessage}
+          onPhoneChange={handlePhoneChangeGate}
+          onConfirmSavedAddress={handleConfirmSavedAddress}
+          onChooseAddress={handleChooseAddressGate}
+          onChangePhone={handleChangePhoneGate}
+          onAddressChange={handleDeliveryAddressInputChange}
+          onAddressDetailChange={setCustomerAddressDetail}
+          onSelectAddressSuggestion={selectAddressSuggestion}
+          onOpenBranchSelector={handleOpenBranchSelector}
+          onCloseBranchSelector={handleCloseBranchSelector}
+          onSelectBranch={handleSelectManualBranch}
+        />
+      </>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#F5FFF8] pb-36">
+      {isBranchBeta && (
+        <div className="sticky top-0 z-[950] border-b border-amber-200 bg-amber-50 px-4 py-3 shadow-sm">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black text-amber-700">
+                BETA · Menu theo chi nhánh
+              </p>
+              <p className="mt-1 text-[11px] font-bold text-amber-600">
+                Đang thử nghiệm trên website thật
+              </p>
+            </div>
+
+            <a
+              href="/dat-mon-nhanh"
+              className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#06113C] ring-1 ring-black/10"
+            >
+              Quay lại bản ổn định
+            </a>
+          </div>
+        </div>
+      )}
+      {isBranchBeta && (
+        <BranchSelectorModal
+          open={branchSelectorOpen}
+          branches={availableBranches}
+          selectedBranch={selectedBranch}
+          onClose={handleCloseBranchSelector}
+          onSelect={handleSelectManualBranch}
+        />
+      )}
       {toast && (
         <div className="fixed left-1/2 top-4 z-[1000] w-[92%] max-w-sm -translate-x-1/2 rounded-2xl bg-[#06113C] px-5 py-4 text-center text-sm font-black text-white shadow-2xl">
           ✅ {toast}
         </div>
+      )}
+
+      {branchCartModalOpen && branchCartValidation && (
+        <BranchCartValidationModal
+          open={branchCartModalOpen}
+          result={branchCartValidation}
+          branchName={selectedBranch?.code || "chi nhánh mới"}
+          onApply={handleApplyBranchCartValidation}
+          onCancel={handleCancelBranchCartValidation}
+        />
       )}
 
 <section className="relative h-56 overflow-hidden">
@@ -1851,6 +2907,33 @@ setScheduledNote("");
           </div>
         </div>
       </section>
+
+      {isBranchMenuPreviewEnabled && selectedBranch && (
+        <section className="mx-auto mt-4 max-w-6xl px-4">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#00B14F]/20 bg-[#E8FFF1] px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-[#00B14F]">
+                Menu đang xem
+              </p>
+              <p className="mt-1 truncate text-sm font-black text-[#06113C]">
+                Ăn Vặt Ngọc Trinh -{" "}
+                {selectedBranch.short_name ||
+                  selectedBranch.code ||
+                  "Chi nhánh"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenBranchSelector}
+              className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#00B14F] ring-1 ring-[#00B14F]/20"
+            >
+              Đổi menu
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="mx-auto mt-4 max-w-6xl px-4">
   <div className="flex gap-2 overflow-x-auto pb-2">
     {homepagePromotions.map((promo) => (
@@ -2522,22 +3605,7 @@ setScheduledNote("");
 <div className="relative">
   <input
     value={customerAddress}
-    onChange={(e) => {
-      const value = e.target.value;
-
-      setCustomerAddress(value);
-      setDeliveryLat(null);
-      setDeliveryLng(null);
-      setSelectedBranch(null);
-      setGoogleShippingFee(null);
-      setRouteMessage("");
-      setAddressSelected(false);
-
-      window.clearTimeout((window as any).avntAddressTimer);
-      (window as any).avntAddressTimer = window.setTimeout(() => {
-        searchAddressSuggestions(value);
-      }, 450);
-    }}
+    onChange={(e) => handleDeliveryAddressInputChange(e.target.value)}
     placeholder="Nhập địa chỉ giao hàng"
     className="w-full rounded-2xl border border-black/10 bg-white px-4 py-4 font-bold outline-none focus:border-[#00B14F]"
   />
@@ -2842,11 +3910,22 @@ setScheduledNote("");
     )}
   </div>
 )}
-{fulfillmentType === "delivery" && selectedBranch && (
+{fulfillmentType === "delivery" &&
+  isBranchMenuPreviewEnabled &&
+  selectedBranch && (
   <div className="col-span-2 rounded-2xl border border-[#00B14F]/20 bg-[#E8FFF1] px-4 py-3 text-[#06113C]">
     <p className="text-sm font-black">📍 Chi nhánh phục vụ</p>
     <p className="mt-1 text-sm font-black">Ăn Vặt Ngọc Trinh - {selectedBranch.short_name}</p>
-    <p className="mt-1 text-xs font-bold text-[#00B14F]">Đã tự chọn chi nhánh gần bạn nhất</p>
+    <p className="mt-1 text-xs font-bold text-[#00B14F]">
+      Menu và đơn hàng đang dùng chi nhánh này
+    </p>
+    <button
+      type="button"
+      onClick={handleOpenBranchSelector}
+      className="mt-3 w-full rounded-xl border border-[#00B14F]/30 bg-white px-4 py-3 text-sm font-black text-[#00B14F]"
+    >
+      Đổi menu chi nhánh
+    </button>
   </div>
 )}
               </div>

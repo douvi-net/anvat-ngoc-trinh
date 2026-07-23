@@ -29,7 +29,16 @@ function toStringOrNull(value: unknown): string | null {
 }
 
 function toNumberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 function toBooleanOrNull(value: unknown): boolean | null {
@@ -42,7 +51,8 @@ function parseSelectedBranch(value: unknown): PreviewSelectedBranch | null {
   }
 
   const idRaw = value.id;
-  const id = typeof idRaw === "string" || idRaw === null ? idRaw : null;
+  const id: string | null =
+    typeof idRaw === "string" ? idRaw : null;
 
   const code = toStringOrNull(value.code);
   const shortName = toStringOrNull(value.short_name);
@@ -92,6 +102,14 @@ export async function fetchMapsPreviewNearestBranch(
   lng: number,
   signal?: AbortSignal
 ): Promise<PreviewMapsResult> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return {
+      ok: false,
+      message: "Tọa độ giao hàng không hợp lệ.",
+      selectedBranch: null,
+    };
+  }
+
   try {
     const response = await fetch("/api/maps?previewNearestBranch=true", {
       method: "POST",
@@ -103,12 +121,12 @@ export async function fetchMapsPreviewNearestBranch(
       signal,
     });
 
-    const payloadUnknown: unknown = await response.json();
+    const payloadUnknown: unknown = await response.json().catch(() => null);
 
     if (!isRecord(payloadUnknown)) {
       return {
         ok: false,
-        message: "Khong doc duoc du lieu chi nhanh preview.",
+        message: "Không đọc được dữ liệu chi nhánh từ máy chủ.",
         selectedBranch: null,
       };
     }
@@ -117,18 +135,48 @@ export async function fetchMapsPreviewNearestBranch(
     const message =
       toStringOrNull(payloadUnknown.message) ||
       (ok
-        ? "Da tai du lieu chi nhanh preview."
-        : "Khong tai duoc du lieu chi nhanh preview.");
+        ? "Đã xác định chi nhánh gần nhất."
+        : `Không tải được chi nhánh. Mã lỗi ${response.status}.`);
+
+    const selectedBranch = parseSelectedBranch(
+      payloadUnknown.selected_branch
+    );
+
+    if (!response.ok || !ok) {
+      return {
+        ok: false,
+        message,
+        selectedBranch: null,
+      };
+    }
+
+    if (!selectedBranch) {
+      return {
+        ok: false,
+        message: "Máy chủ chưa trả về chi nhánh hợp lệ.",
+        selectedBranch: null,
+      };
+    }
 
     return {
-      ok,
+      ok: true,
       message,
-      selectedBranch: parseSelectedBranch(payloadUnknown.selected_branch),
+      selectedBranch,
     };
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) {
+      return {
+        ok: false,
+        message: "Yêu cầu xác định chi nhánh đã bị hủy.",
+        selectedBranch: null,
+      };
+    }
+
+    console.error("FETCH MAPS PREVIEW ERROR:", error);
+
     return {
       ok: false,
-      message: "Khong tai duoc du lieu chi nhanh preview.",
+      message: "Không tải được dữ liệu chi nhánh từ máy chủ.",
       selectedBranch: null,
     };
   }

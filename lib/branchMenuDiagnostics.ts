@@ -176,3 +176,102 @@ export function buildBranchMenuDiagnostics(
     shouldFallback,
   };
 }
+
+export interface BranchFirstGateState {
+  enabled: boolean;
+  fulfillmentType: "delivery" | "pickup";
+  phone: string;
+  checkedPhone: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  selectedBranchId: string | null;
+}
+
+export interface BranchFirstGateDiagnostics {
+  enabled: boolean;
+  bypassedForPickup: boolean;
+  validPhone: boolean;
+  customerLookupComplete: boolean;
+  hasAddress: boolean;
+  hasCoordinates: boolean;
+  hasSelectedBranch: boolean;
+  readyForMenu: boolean;
+  blockingReasons: string[];
+}
+
+function normalizeGatePhone(phone: string) {
+  return phone.replace(/\D/g, "");
+}
+
+/**
+ * Validate every dependency required before a delivery customer can see a
+ * branch-specific menu.
+ *
+ * Pickup orders intentionally bypass the address/branch requirement.
+ */
+export function validateBranchFirstGateState(
+  state: BranchFirstGateState
+): BranchFirstGateDiagnostics {
+  const normalizedPhone = normalizeGatePhone(state.phone);
+  const normalizedCheckedPhone = normalizeGatePhone(state.checkedPhone);
+
+  const validPhone = /^0(3|5|7|8|9)\d{8}$/.test(normalizedPhone);
+  const customerLookupComplete =
+    validPhone && normalizedCheckedPhone === normalizedPhone;
+  const hasAddress = state.address.trim().length > 0;
+  const hasCoordinates =
+    typeof state.latitude === "number" &&
+    typeof state.longitude === "number" &&
+    Number.isFinite(state.latitude) &&
+    Number.isFinite(state.longitude) &&
+    state.latitude !== 0 &&
+    state.longitude !== 0;
+  const hasSelectedBranch = Boolean(state.selectedBranchId);
+  const bypassedForPickup = state.fulfillmentType === "pickup";
+
+  const blockingReasons: string[] = [];
+
+  if (!bypassedForPickup) {
+    if (!validPhone) {
+      blockingReasons.push("Số điện thoại chưa hợp lệ.");
+    }
+
+    if (validPhone && !customerLookupComplete) {
+      blockingReasons.push("Chưa hoàn tất kiểm tra khách hàng.");
+    }
+
+    if (!hasAddress) {
+      blockingReasons.push("Chưa có địa chỉ giao hàng.");
+    }
+
+    if (!hasCoordinates) {
+      blockingReasons.push("Địa chỉ chưa có tọa độ Google hợp lệ.");
+    }
+
+    if (!hasSelectedBranch) {
+      blockingReasons.push("Chưa xác định chi nhánh phục vụ.");
+    }
+  }
+
+  const readyForMenu =
+    !state.enabled ||
+    bypassedForPickup ||
+    (validPhone &&
+      customerLookupComplete &&
+      hasAddress &&
+      hasCoordinates &&
+      hasSelectedBranch);
+
+  return {
+    enabled: state.enabled,
+    bypassedForPickup,
+    validPhone,
+    customerLookupComplete,
+    hasAddress,
+    hasCoordinates,
+    hasSelectedBranch,
+    readyForMenu,
+    blockingReasons,
+  };
+}

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const SHOP_LOCATION = {
   lat: 10.7456603,
   lng: 106.6345814,
@@ -10,6 +13,7 @@ const SHOP_LOCATION = {
 type RouteRequestBody = {
   lat?: number;
   lng?: number;
+  branchId?: string | null;
 };
 
 type BranchRow = {
@@ -19,6 +23,8 @@ type BranchRow = {
   address: string;
   latitude: number | null;
   longitude: number | null;
+  is_active?: boolean | null;
+  is_open?: boolean | null;
 };
 
 type SelectedBranchPreview = {
@@ -69,7 +75,6 @@ function calculateDistanceKm(
   toLng: number
 ) {
   const earthRadiusKm = 6371;
-
   const dLat = toRadians(toLat - fromLat);
   const dLng = toRadians(toLng - fromLng);
 
@@ -81,10 +86,7 @@ function calculateDistanceKm(
       Math.sin(dLng / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
   const straightDistanceKm = earthRadiusKm * c;
-
-  // Hệ số quy đổi từ đường chim bay sang đường xe chạy thực tế trong nội thành.
   const estimatedRoadDistanceKm = straightDistanceKm * 1.25;
 
   return Number(estimatedRoadDistanceKm.toFixed(2));
@@ -101,10 +103,7 @@ function isValidCoordinate(value: number | null) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-async function getNearestBranchPreview(
-  customerLat: number,
-  customerLng: number
-): Promise<SelectedBranchPreview | null> {
+function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -112,65 +111,39 @@ async function getNearestBranchPreview(
     return null;
   }
 
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   });
+}
+
+async function loadAvailableBranches(): Promise<BranchRow[]> {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  if (!supabaseAdmin) {
+    return [];
+  }
 
   const { data, error } = await supabaseAdmin
     .from("branches")
-    .select("id,code,short_name,address,latitude,longitude")
-    .eq("is_active", true)
-    .eq("is_open", true);
+    .select(
+      "id,code,short_name,address,latitude,longitude,is_active,is_open"
+    )
+    .eq("is_active", true);
 
-  if (error || !Array.isArray(data)) {
-    return null;
+  if (error) {
+    console.error("LOAD BRANCHES ERROR:", error);
+    return [];
   }
 
-  const branches = data as BranchRow[];
-
-  const candidates = branches.filter(
+  return ((data || []) as BranchRow[]).filter(
     (branch) =>
-      isValidCoordinate(branch.latitude) && isValidCoordinate(branch.longitude)
+      branch.is_open !== false &&
+      isValidCoordinate(branch.latitude) &&
+      isValidCoordinate(branch.longitude)
   );
-
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  let nearest: SelectedBranchPreview | null = null;
-
-  for (const branch of candidates) {
-    const distanceKm = calculateDistanceKm(
-      branch.latitude as number,
-      branch.longitude as number,
-      customerLat,
-      customerLng
-    );
-    const shippingFee = calculateShippingFee(distanceKm);
-
-    const preview: SelectedBranchPreview = {
-      id: branch.id,
-      code: branch.code,
-      short_name: branch.short_name,
-      address: branch.address,
-      latitude: branch.latitude as number,
-      longitude: branch.longitude as number,
-      distance_km: distanceKm,
-      distance_text: `${distanceKm} km`,
-      duration_text: estimateDurationText(distanceKm),
-      shipping_fee: shippingFee,
-      is_supported_area: shippingFee !== null,
-    };
-
-    if (!nearest || preview.distance_km < nearest.distance_km) {
-      nearest = preview;
-    }
-  }
-
-  return nearest;
 }
 
 function calculateDistanceResult(
@@ -187,6 +160,33 @@ function calculateDistanceResult(
     distanceText: `${distanceKm} km`,
     durationText: estimateDurationText(distanceKm),
     shippingFee: calculateShippingFee(distanceKm),
+  };
+}
+
+function buildBranchPreview(
+  branch: BranchRow,
+  customerLat: number,
+  customerLng: number
+): SelectedBranchPreview {
+  const result = calculateDistanceResult(
+    branch.latitude as number,
+    branch.longitude as number,
+    customerLat,
+    customerLng
+  );
+
+  return {
+    id: branch.id,
+    code: branch.code,
+    short_name: branch.short_name,
+    address: branch.address,
+    latitude: branch.latitude as number,
+    longitude: branch.longitude as number,
+    distance_km: result.distanceKm,
+    distance_text: result.distanceText,
+    duration_text: result.durationText,
+    shipping_fee: result.shippingFee,
+    is_supported_area: result.shippingFee !== null,
   };
 }
 
@@ -216,14 +216,69 @@ function buildFallbackSelectedBranch(
   };
 }
 
+function findNearestBranch(
+  branches: BranchRow[],
+  customerLat: number,
+  customerLng: number
+) {
+  let nearest: SelectedBranchPreview | null = null;
+
+  for (const branch of branches) {
+    const preview = buildBranchPreview(branch, customerLat, customerLng);
+
+    if (!nearest || preview.distance_km < nearest.distance_km) {
+      nearest = preview;
+    }
+  }
+
+  return nearest;
+}
+
+function buildResponse(
+  branch: SelectedBranchPreview,
+  mode: "manual_branch" | "nearest_branch" | "fallback_shop"
+) {
+  return NextResponse.json({
+    ok: true,
+    shop: {
+      lat: branch.latitude,
+      lng: branch.longitude,
+      address: branch.address,
+    },
+    distance_meters: Math.round(branch.distance_km * 1000),
+    distance_km: branch.distance_km,
+    distance_text: branch.distance_text,
+    duration_text: branch.duration_text,
+    shipping_fee: branch.shipping_fee,
+    is_supported_area: branch.is_supported_area,
+    message:
+      branch.shipping_fee === null
+        ? "Khoảng cách trên 10km. Quán sẽ xác nhận phí ship."
+        : "Đã tính phí ship theo chi nhánh phục vụ.",
+    selected_branch: branch,
+    branch_selection_mode: mode,
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const previewNearestBranch =
       request.nextUrl.searchParams.get("previewNearestBranch") === "true";
-    const body = (await request.json()) as RouteRequestBody;
+
+    let body: RouteRequestBody;
+
+    try {
+      body = (await request.json()) as RouteRequestBody;
+    } catch {
+      return NextResponse.json(
+        { ok: false, message: "Dữ liệu gửi lên không hợp lệ." },
+        { status: 400 }
+      );
+    }
 
     const lat = Number(body.lat);
     const lng = Number(body.lng);
+    const requestedBranchId = String(body.branchId || "").trim();
 
     if (
       !Number.isFinite(lat) ||
@@ -239,56 +294,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const q6Result = calculateDistanceResult(
-      SHOP_LOCATION.lat,
-      SHOP_LOCATION.lng,
-      lat,
-      lng
-    );
+    const branches = await loadAvailableBranches();
 
-    if (!previewNearestBranch) {
-      return NextResponse.json({
-        ok: true,
-        shop: SHOP_LOCATION,
-        distance_meters: q6Result.distanceMeters,
-        distance_km: q6Result.distanceKm,
-        distance_text: q6Result.distanceText,
-        duration_text: q6Result.durationText,
-        shipping_fee: q6Result.shippingFee,
-        is_supported_area: q6Result.shippingFee !== null,
-        message:
-          q6Result.shippingFee === null
-            ? "Khoảng cách trên 10km. Quán sẽ xác nhận phí ship."
-            : "Đã tính phí ship tự động theo tọa độ Google Maps.",
-      });
+    if (requestedBranchId) {
+      const selectedBranch = branches.find(
+        (branch) => branch.id === requestedBranchId
+      );
+
+      if (!selectedBranch) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Chi nhánh đã chọn không tồn tại, đang đóng hoặc chưa có tọa độ.",
+          },
+          { status: 409 }
+        );
+      }
+
+      return buildResponse(
+        buildBranchPreview(selectedBranch, lat, lng),
+        "manual_branch"
+      );
     }
 
-    const nearestBranch =
-      (await getNearestBranchPreview(lat, lng)) ||
-      buildFallbackSelectedBranch(lat, lng);
+    const nearestBranch = findNearestBranch(branches, lat, lng);
 
-    return NextResponse.json({
-      ok: true,
-      shop: {
-        lat: nearestBranch.latitude,
-        lng: nearestBranch.longitude,
-        address: nearestBranch.address,
-      },
-      distance_meters: Math.round(nearestBranch.distance_km * 1000),
-      distance_km: nearestBranch.distance_km,
-      distance_text: nearestBranch.distance_text,
-      duration_text: nearestBranch.duration_text,
-      shipping_fee: nearestBranch.shipping_fee,
-      is_supported_area: nearestBranch.is_supported_area,
-      message:
-        nearestBranch.shipping_fee === null
-          ? "Khoảng cách trên 10km. Quán sẽ xác nhận phí ship."
-          : "Đã tính phí ship tự động theo tọa độ Google Maps.",
-      selected_branch: nearestBranch,
-      branch_selection_mode: "preview_nearest_branch",
-    });
+    if (nearestBranch) {
+      return buildResponse(nearestBranch, "nearest_branch");
+    }
+
+    const fallbackBranch = buildFallbackSelectedBranch(lat, lng);
+
+    if (previewNearestBranch) {
+      return buildResponse(fallbackBranch, "fallback_shop");
+    }
+
+    return buildResponse(fallbackBranch, "fallback_shop");
   } catch (error) {
-    console.error("maps route error:", error);
+    console.error("MAPS ROUTE ERROR:", error);
 
     return NextResponse.json(
       {

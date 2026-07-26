@@ -193,9 +193,111 @@
       .form-copy h2{font-size:36px}
       .footer-inner{flex-direction:column}
     }
+
+
+    /* Popup đăng ký Google Form */
+    body.modal-open{overflow:hidden}
+    .registration-modal{
+      position:fixed;inset:0;z-index:9999;display:none;
+      align-items:center;justify-content:center;padding:20px;
+    }
+    .registration-modal.is-open{display:flex}
+    .registration-modal__backdrop{
+      position:absolute;inset:0;background:rgba(3,18,31,.78);
+      backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+    }
+    .registration-modal__dialog{
+      position:relative;z-index:1;width:min(760px,100%);height:min(90vh,940px);
+      display:flex;flex-direction:column;overflow:hidden;
+      background:#fff;border-radius:26px;border:1px solid rgba(255,255,255,.7);
+      box-shadow:0 30px 100px rgba(0,0,0,.42);
+      animation:registrationModalIn .24s ease-out;
+    }
+    @keyframes registrationModalIn{
+      from{opacity:0;transform:translateY(18px) scale(.98)}
+      to{opacity:1;transform:translateY(0) scale(1)}
+    }
+    .registration-modal__header{
+      flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;
+      padding:16px 18px;background:linear-gradient(135deg,var(--orange),var(--orange-2));color:#fff;
+    }
+    .registration-modal__title{display:flex;align-items:center;gap:12px;min-width:0}
+    .registration-modal__logo{
+      width:42px;height:42px;flex:0 0 auto;border-radius:13px;display:grid;place-items:center;
+      background:#fff;color:var(--orange);font-weight:950;font-size:14px;
+    }
+    .registration-modal__title strong{display:block;font-size:17px;line-height:1.2}
+    .registration-modal__title span{display:block;font-size:12px;opacity:.9;margin-top:2px}
+    .registration-modal__close{
+      width:42px;height:42px;flex:0 0 auto;border:0;border-radius:13px;cursor:pointer;
+      display:grid;place-items:center;background:rgba(255,255,255,.18);color:#fff;
+      font-size:26px;line-height:1;transition:.2s ease;
+    }
+    .registration-modal__close:hover{background:rgba(255,255,255,.3);transform:rotate(4deg)}
+    .registration-modal__content{flex:1;min-height:0;background:#f3f1fb}
+    .registration-modal__content iframe{display:block;width:100%;height:100%;border:0;background:#f3f1fb}
+    .registration-modal__footer{
+      flex:0 0 auto;padding:10px 16px;text-align:center;background:#fff;border-top:1px solid var(--line);
+      color:var(--muted);font-size:12px;
+    }
+    .registration-modal__footer a{color:var(--orange);font-weight:850}
+    .form-card--cta{text-align:center;padding:34px 30px}
+    .form-card--cta .form-cta-icon{
+      width:68px;height:68px;margin:0 auto 18px;border-radius:22px;display:grid;place-items:center;
+      background:var(--cream);color:var(--orange);font-size:30px;
+    }
+    .form-card--cta .form-cta-copy{color:var(--muted);margin:0 auto 20px;max-width:520px}
+    .form-card--cta .btn{width:100%;min-height:56px}
+    .form-card--cta .external-link{display:inline-block;margin-top:14px;color:var(--orange);font-weight:800;font-size:13px}
+    .floating-register{
+      position:fixed;right:22px;bottom:22px;z-index:1000;border:0;border-radius:999px;
+      min-height:54px;padding:0 22px;cursor:pointer;color:#fff;font-weight:900;
+      background:linear-gradient(135deg,var(--orange),var(--orange-2));
+      box-shadow:0 16px 40px rgba(244,91,36,.38);transition:.2s ease;
+    }
+    .floating-register:hover{transform:translateY(-2px)}
+    @media (max-width:620px){
+      .registration-modal{padding:0}
+      .registration-modal__dialog{width:100%;height:100%;max-height:none;border-radius:0}
+      .registration-modal__header{padding:12px 14px}
+      .registration-modal__title strong{font-size:15px}
+      .registration-modal__title span{font-size:11px}
+      .floating-register{right:14px;bottom:14px;min-height:50px;padding:0 18px}
+    }
+
   </style>
 </head>
 <body>
+
+  <div id="registrationModal" class="registration-modal" aria-hidden="true">
+    <div class="registration-modal__backdrop" data-close-registration></div>
+    <section class="registration-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="registrationModalTitle">
+      <header class="registration-modal__header">
+        <div class="registration-modal__title">
+          <div class="registration-modal__logo">GHN</div>
+          <div>
+            <strong id="registrationModalTitle">Đăng ký quan tâm hợp tác đại lý GHN</strong>
+            <span>Hoàn thành biểu mẫu trong khoảng 1–2 phút</span>
+          </div>
+        </div>
+        <button class="registration-modal__close" type="button" aria-label="Đóng biểu mẫu" data-close-registration>×</button>
+      </header>
+      <div class="registration-modal__content">
+        <iframe
+          src="https://docs.google.com/forms/d/e/1FAIpQLSd2e8fFRQzLS4MBeIjpVZK6T5uc02yrzUZinGaO_ciYg5xVrQ/viewform?embedded=true"
+          title="Biểu mẫu đăng ký quan tâm hợp tác đại lý GHN"
+          loading="eager"
+          referrerpolicy="strict-origin-when-cross-origin">
+          Đang tải biểu mẫu…
+        </iframe>
+      </div>
+      <footer class="registration-modal__footer">
+        Biểu mẫu không hiển thị? <a href="https://docs.google.com/forms/d/e/1FAIpQLSd2e8fFRQzLS4MBeIjpVZK6T5uc02yrzUZinGaO_ciYg5xVrQ/viewform?usp=sharing&ouid=101291536595431373331" target="_blank" rel="noopener noreferrer">Mở trực tiếp trên Google Forms</a>
+      </footer>
+    </section>
+  </div>
+  <button class="floating-register" type="button" data-open-registration>Đăng ký ngay</button>
+
   <header class="nav">
     <div class="container nav-inner">
       <a class="brand" href="#top" aria-label="Trang chủ">
@@ -205,7 +307,7 @@
       <nav class="nav-actions">
         <a class="nav-link" href="#loi-ich">Lợi ích</a>
         <a class="nav-link" href="#quy-trinh">Quy trình</a>
-        <a class="btn btn-primary" href="#dang-ky">Đăng ký tư vấn</a>
+        <a class="btn btn-primary" href="#dang-ky" data-open-registration>Đăng ký tư vấn</a>
       </nav>
     </div>
   </header>
@@ -221,7 +323,7 @@
             yêu cầu mặt bằng và năng lực vận hành phù hợp.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="#dang-ky">Nhận tư vấn miễn phí</a>
+            <a class="btn btn-primary" href="#dang-ky" data-open-registration>Nhận tư vấn miễn phí</a>
             <a class="btn btn-light" href="#quy-trinh">Xem quy trình</a>
           </div>
           <div class="trust-row">
@@ -321,78 +423,15 @@
           </div>
         </div>
 
-        <div class="form-card">
-          <h3>Đăng ký quan tâm</h3>
-          <p class="sub">Các trường có dấu * là bắt buộc.</p>
-
-          <form id="leadForm">
-            <div class="field-grid">
-              <div class="field full">
-                <label for="name">Họ và tên *</label>
-                <input id="name" name="name" autocomplete="name" required placeholder="Nguyễn Văn A" />
-              </div>
-              <div class="field">
-                <label for="phone">Số điện thoại *</label>
-                <input id="phone" name="phone" inputmode="tel" required placeholder="09xx xxx xxx" />
-              </div>
-              <div class="field">
-                <label for="email">Email</label>
-                <input id="email" name="email" type="email" autocomplete="email" placeholder="email@example.com" />
-              </div>
-              <div class="field">
-                <label for="province">Tỉnh/Thành phố *</label>
-                <input id="province" name="province" required placeholder="TP. Hồ Chí Minh" />
-              </div>
-              <div class="field">
-                <label for="district">Quận/Huyện *</label>
-                <input id="district" name="district" required placeholder="Quận 6" />
-              </div>
-              <div class="field">
-                <label for="premises">Tình trạng mặt bằng *</label>
-                <select id="premises" name="premises" required>
-                  <option value="">Chọn tình trạng</option>
-                  <option>Đã có mặt bằng</option>
-                  <option>Đang thương lượng mặt bằng</option>
-                  <option>Đang tìm mặt bằng</option>
-                  <option>Chưa có mặt bằng</option>
-                  <option>Cần tư vấn khu vực</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="capital">Mức vốn có thể triển khai *</label>
-                <select id="capital" name="capital" required>
-                  <option value="">Chọn mức vốn</option>
-                  <option>Dưới 100 triệu đồng</option>
-                  <option>Từ 100–300 triệu đồng</option>
-                  <option>Từ 300–500 triệu đồng</option>
-                  <option>Trên 500 triệu đồng</option>
-                  <option>Chưa xác định, cần tư vấn</option>
-                </select>
-              </div>
-              <div class="field full">
-                <label for="timeline">Thời gian dự kiến bắt đầu *</label>
-                <select id="timeline" name="timeline" required>
-                  <option value="">Chọn thời gian</option>
-                  <option>Có thể triển khai ngay</option>
-                  <option>Trong vòng 30 ngày</option>
-                  <option>Trong vòng 1–3 tháng</option>
-                  <option>Trong vòng 3–6 tháng</option>
-                  <option>Hiện tại chỉ đang tìm hiểu</option>
-                </select>
-              </div>
-              <div class="field full">
-                <label for="note">Nội dung cần tư vấn</label>
-                <textarea id="note" name="note" placeholder="Mô tả khu vực, mặt bằng hoặc nội dung Anh/Chị muốn được trao đổi..."></textarea>
-              </div>
-            </div>
-            <label class="consent">
-              <input type="checkbox" required />
-              <span>Tôi xác nhận thông tin cung cấp là chính xác và đồng ý để bộ phận phụ trách liên hệ qua điện thoại, Zalo hoặc email.</span>
-            </label>
-            <button class="btn btn-primary" type="submit">GỬI ĐĂNG KÝ TƯ VẤN</button>
-            <div id="success" class="success">Đã ghi nhận thông tin trên bản xem thử. Hãy cấu hình đường dẫn Google Form trong tệp trước khi xuất bản chính thức.</div>
-            <p class="form-note">Không yêu cầu cung cấp mật khẩu, mã OTP hoặc thông tin tài chính nhạy cảm.</p>
-          </form>
+        <div class="form-card form-card--cta">
+          <div class="form-cta-icon">✍</div>
+          <h3>Biểu mẫu đăng ký trực tuyến</h3>
+          <p class="form-cta-copy">
+            Nhấn nút bên dưới để mở biểu mẫu Google Forms. Thông tin gửi đi sẽ được lưu trực tiếp vào dữ liệu đăng ký của bạn.
+          </p>
+          <button class="btn btn-primary" type="button" data-open-registration>MỞ BIỂU MẪU ĐĂNG KÝ</button>
+          <a class="external-link" href="https://docs.google.com/forms/d/e/1FAIpQLSd2e8fFRQzLS4MBeIjpVZK6T5uc02yrzUZinGaO_ciYg5xVrQ/viewform?usp=sharing&ouid=101291536595431373331" target="_blank" rel="noopener noreferrer">Hoặc mở biểu mẫu trong tab mới ↗</a>
+          <p class="form-note">Không yêu cầu cung cấp mật khẩu, mã OTP hoặc thông tin tài chính nhạy cảm.</p>
         </div>
       </div>
     </section>
@@ -436,62 +475,45 @@
   </footer>
 
   <script>
-    /*
-      CÁCH KẾT NỐI GOOGLE FORM:
-      1) Tạo Google Form và lấy URL formResponse.
-      2) Thay các tên field bên dưới bằng entry.xxxxx của Google Form.
-      3) Đặt GOOGLE_FORM_ACTION thành URL formResponse.
-    */
-    const GOOGLE_FORM_ACTION = "";
-    const FIELD_MAP = {
-      name: "entry.NAME_ID",
-      phone: "entry.PHONE_ID",
-      email: "entry.EMAIL_ID",
-      province: "entry.PROVINCE_ID",
-      district: "entry.DISTRICT_ID",
-      premises: "entry.PREMISES_ID",
-      capital: "entry.CAPITAL_ID",
-      timeline: "entry.TIMELINE_ID",
-      note: "entry.NOTE_ID"
-    };
+    const registrationModal = document.getElementById("registrationModal");
+    const openRegistrationButtons = document.querySelectorAll("[data-open-registration]");
+    const closeRegistrationButtons = document.querySelectorAll("[data-close-registration]");
+    let lastFocusedElement = null;
 
-    const form = document.getElementById("leadForm");
-    const success = document.getElementById("success");
+    function openRegistrationModal(event) {
+      if (event) event.preventDefault();
+      lastFocusedElement = document.activeElement;
+      registrationModal.classList.add("is-open");
+      registrationModal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+      const closeButton = registrationModal.querySelector(".registration-modal__close");
+      window.setTimeout(() => closeButton?.focus(), 80);
+    }
 
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
+    function closeRegistrationModal() {
+      registrationModal.classList.remove("is-open");
+      registrationModal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
+      lastFocusedElement?.focus?.();
+    }
 
-      const phone = document.getElementById("phone").value.trim();
-      if (!/^(0|\+84)[0-9]{9,10}$/.test(phone.replace(/\s/g, ""))) {
-        alert("Vui lòng nhập đúng số điện thoại Việt Nam.");
-        return;
+    openRegistrationButtons.forEach((button) => {
+      button.addEventListener("click", openRegistrationModal);
+    });
+
+    closeRegistrationButtons.forEach((button) => {
+      button.addEventListener("click", closeRegistrationModal);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && registrationModal.classList.contains("is-open")) {
+        closeRegistrationModal();
       }
+    });
 
-      if (!GOOGLE_FORM_ACTION) {
-        success.style.display = "block";
-        success.scrollIntoView({behavior:"smooth", block:"nearest"});
-        return;
-      }
-
-      const payload = new URLSearchParams();
-      const data = new FormData(form);
-      Object.entries(FIELD_MAP).forEach(([localName, googleName]) => {
-        payload.append(googleName, String(data.get(localName) || ""));
-      });
-
-      try {
-        await fetch(GOOGLE_FORM_ACTION, {
-          method: "POST",
-          mode: "no-cors",
-          headers: {"Content-Type":"application/x-www-form-urlencoded"},
-          body: payload.toString()
-        });
-        form.reset();
-        success.textContent = "Đăng ký đã được tiếp nhận. Bộ phận phụ trách sẽ liên hệ khi hồ sơ phù hợp.";
-        success.style.display = "block";
-      } catch (error) {
-        alert("Chưa gửi được thông tin. Vui lòng thử lại hoặc liên hệ trực tiếp.");
-      }
+    // Hiển thị popup ngay khi khách truy cập trang.
+    window.addEventListener("DOMContentLoaded", () => {
+      window.setTimeout(() => openRegistrationModal(), 250);
     });
   </script>
 </body>

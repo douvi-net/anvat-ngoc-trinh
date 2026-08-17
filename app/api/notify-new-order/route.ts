@@ -13,6 +13,13 @@ const supabaseAdmin = createClient(
   }
 );
 
+const MAX_FCM_TOKENS_PER_BATCH = 500;
+
+const INVALID_TOKEN_CODES = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+]);
+
 function initFirebaseAdmin() {
   if (getApps().length > 0) return;
 
@@ -43,11 +50,82 @@ function formatScheduledTime(value: string | null) {
   }
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+
+  return result;
+}
+
+async function resolveOrderBranchId(
+  orderId: string,
+  requestedBranchId: string
+): Promise<string> {
+  const { data: order, error } = await supabaseAdmin
+    .from("orders")
+    .select("id, branch_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const orderBranchId = String(order?.branch_id || "").trim();
+
+  // orders.branch_id là nguồn dữ liệu chính xác nhất vì được lưu cùng đơn.
+  // requestedBranchId chỉ là fallback tương thích trong giai đoạn rollout.
+  return orderBranchId || requestedBranchId;
+}
+
+async function deactivateInvalidTokens(tokens: string[]) {
+  if (tokens.length === 0) return;
+
+  const uniqueTokens = [...new Set(tokens)];
+
+  const { error } = await supabaseAdmin
+    .from("merchant_devices")
+    .update({ is_active: false })
+    .in("fcm_token", uniqueTokens);
+
+  if (error) {
+    console.error("notify-new-order deactivate invalid tokens error:", error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     initFirebaseAdmin();
 
     const body = await request.json();
+
+    const orderId = String(body.orderId || "").trim();
+    const requestedBranchId = String(body.branchId || "").trim();
+
+    if (!orderId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Thiếu orderId để xác định chi nhánh nhận thông báo.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const branchId = await resolveOrderBranchId(
+      orderId,
+      requestedBranchId
+    );
+
+    if (!branchId) {
+      // Không bao giờ fallback gửi toàn hệ thống vì có thể làm Q1/Q6 reo nhầm.
+      return NextResponse.json({
+        success: false,
+        message: "Đơn hàng chưa có branch_id nên không gửi FCM.",
+        orderId,
+      });
+    }
 
     const orderCode = body.orderCode || "Đơn mới";
     const total = Number(body.total || 0);
@@ -60,17 +138,26 @@ export async function POST(request: Request) {
       .from("merchant_devices")
       .select("fcm_token")
       .eq("shop_id", "avnt")
+      .eq("branch_id", branchId)
       .eq("is_active", true);
 
     if (error) throw error;
 
-    const tokens =
-      devices?.map((item) => item.fcm_token).filter(Boolean) || [];
+    const tokens = [
+      ...new Set(
+        (devices || [])
+          .map((item) => String(item.fcm_token || "").trim())
+          .filter(Boolean)
+      ),
+    ];
 
     if (tokens.length === 0) {
       return NextResponse.json({
-        success: false,
-        message: "Không có thiết bị nhận thông báo",
+        success: true,
+        successCount: 0,
+        failureCount: 0,
+        branchId,
+        message: "Chi nhánh hiện chưa có thiết bị Merchant đang hoạt động.",
       });
     }
 
@@ -91,35 +178,52 @@ export async function POST(request: Request) {
         ? `#${orderCode} - ${total.toLocaleString("vi-VN")}đ - Giao lúc ${scheduledText}`
         : `#${orderCode} - ${total.toLocaleString("vi-VN")}đ`;
 
-    const result = await getMessaging().sendEachForMulticast({
-      tokens,
-      data: {
-        type: "new_order",
-        title,
-        body: bodyText,
-        order_id: String(body.orderId || ""),
-        order_code: String(orderCode),
-        total: String(total),
-        payment_method: String(paymentMethod),
-        status: String(status),
-        order_type: String(orderType),
-        scheduled_at: scheduledAt ? String(scheduledAt) : "",
-      },
+    let successCount = 0;
+    let failureCount = 0;
+    const invalidTokens: string[] = [];
 
-      android: {
-        priority: "high",
-        ttl: 60 * 60 * 1000,
-      },
-    });
+    for (const tokenBatch of chunk(tokens, MAX_FCM_TOKENS_PER_BATCH)) {
+      const result = await getMessaging().sendEachForMulticast({
+        tokens: tokenBatch,
+        data: {
+          type: "new_order",
+          title,
+          body: bodyText,
+          order_id: orderId,
+          order_code: String(orderCode),
+          branch_id: branchId,
+          total: String(total),
+          payment_method: String(paymentMethod),
+          status: String(status),
+          order_type: String(orderType),
+          scheduled_at: scheduledAt ? String(scheduledAt) : "",
+        },
+        android: {
+          priority: "high",
+          ttl: 60 * 60 * 1000,
+        },
+      });
+
+      successCount += result.successCount;
+      failureCount += result.failureCount;
+
+      result.responses.forEach((response, index) => {
+        const errorCode = response.error?.code || "";
+
+        if (!response.success && INVALID_TOKEN_CODES.has(errorCode)) {
+          invalidTokens.push(tokenBatch[index]);
+        }
+      });
+    }
+
+    await deactivateInvalidTokens(invalidTokens);
 
     return NextResponse.json({
       success: true,
-      successCount: result.successCount,
-      failureCount: result.failureCount,
-      responses: result.responses.map((item) => ({
-        success: item.success,
-        error: item.error?.message || null,
-      })),
+      successCount,
+      failureCount,
+      branchId,
+      invalidTokenCount: [...new Set(invalidTokens)].length,
     });
   } catch (error) {
     console.error("notify-new-order error:", error);

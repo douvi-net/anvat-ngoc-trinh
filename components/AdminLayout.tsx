@@ -45,7 +45,10 @@ const menuGroups = [
   },
   {
     title: "HỆ THỐNG",
-    items: [{ label: "Cài đặt", href: "/admin/settings", icon: "⚙️" }],
+    items: [
+      { label: "Tài khoản Merchant", href: "/admin/merchants", icon: "👤" },
+      { label: "Cài đặt", href: "/admin/settings", icon: "⚙️" },
+    ],
   },
 ];
 

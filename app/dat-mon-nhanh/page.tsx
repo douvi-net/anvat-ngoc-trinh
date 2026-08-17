@@ -2635,6 +2635,9 @@ scheduled_at:
         },
         body: JSON.stringify({
           orderId: order.id,
+          // Gửi kèm để rollout tương thích; API sẽ ưu tiên đọc
+          // orders.branch_id trực tiếp từ database làm nguồn chính xác.
+          branchId: order.branch_id || null,
           orderCode,
           total: totalAfterPoints,
           paymentMethod,

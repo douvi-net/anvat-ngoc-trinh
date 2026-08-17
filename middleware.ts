@@ -1,26 +1,42 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  ADMIN_COOKIE_NAME,
+  isAdminSessionTokenValid,
+} from "@/lib/adminSession";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isAdminRoute = pathname.startsWith("/admin");
-  const isLoginPage = pathname === "/admin/login";
+  const isAdminPage = pathname.startsWith("/admin");
+  const isAdminApi = pathname.startsWith("/api/admin");
+  const isPublicAdminRoute =
+    pathname === "/admin/login" ||
+    pathname === "/api/admin/login" ||
+    pathname === "/api/admin/logout";
 
-  if (!isAdminRoute || isLoginPage) {
+  if ((!isAdminPage && !isAdminApi) || isPublicAdminRoute) {
     return NextResponse.next();
   }
 
-  const authCookie = request.cookies.get("avnt_admin_auth")?.value;
+  const authCookie = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
+  const isValid = await isAdminSessionTokenValid(authCookie);
 
-  if (authCookie !== "1") {
-    const loginUrl = new URL("/admin/login", request.url);
-    return NextResponse.redirect(loginUrl);
+  if (isValid) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  if (isAdminApi) {
+    return NextResponse.json(
+      { ok: false, message: "Phiên quản trị đã hết hạn." },
+      { status: 401 }
+    );
+  }
+
+  const loginUrl = new URL("/admin/login", request.url);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*"],
 };

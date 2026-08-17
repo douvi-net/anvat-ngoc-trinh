@@ -9,6 +9,10 @@ import {
   type BranchMenuPreviewItem,
 } from "@/lib/fetchBranchMenuPreview";
 import {
+  fetchBranchSettingsPreview,
+  type BranchSettingsPreview,
+} from "@/lib/fetchBranchSettingsPreview";
+import {
   fetchMapsPreviewNearestBranch,
   type PreviewSelectedBranch,
 } from "@/lib/mapsPreviewNearestBranch";
@@ -95,6 +99,7 @@ type ShopSettings = {
   close_time?: string | null;
   order_status?: string | null;
   is_open?: boolean | null;
+  preparation_minutes?: number | null;
 };
 
 type Banner = {
@@ -402,6 +407,8 @@ export default function DatMonNhanhPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [selectedRewardId, setSelectedRewardId] = useState("");
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
+  const [branchSettingsPreview, setBranchSettingsPreview] =
+    useState<BranchSettingsPreview | null>(null);
   const [shippingPromotions, setShippingPromotions] = useState<ShippingPromotion[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
@@ -647,6 +654,36 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     return () => {
       controller.abort();
     };
+  }, [selectedBranch, isBranchMenuPreviewEnabled]);
+
+  useEffect(() => {
+    if (!isBranchMenuPreviewEnabled || !selectedBranch) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const requestedBranchId = selectedBranch.id;
+
+    void (async () => {
+      const result = await fetchBranchSettingsPreview(
+        {
+          branchId: selectedBranch.id,
+          branchCode: selectedBranch.code,
+        },
+        controller.signal
+      );
+
+      if (controller.signal.aborted) return;
+
+      if (result.ok && result.settings.branch_id === requestedBranchId) {
+        setBranchSettingsPreview(result.settings);
+      } else if (!result.ok && result.message !== "aborted") {
+        console.warn("BRANCH SETTINGS PREVIEW:", result.message);
+        setBranchSettingsPreview(null);
+      }
+    })();
+
+    return () => controller.abort();
   }, [selectedBranch, isBranchMenuPreviewEnabled]);
 
   // Branch cart validation — runs after selectedBranch changes and menu loads
@@ -1747,6 +1784,21 @@ const amountToNextShippingPromo = nextShippingPromotion
 
     return Number(selectedProduct.price) + toppingTotal;
   }, [selectedProduct, selectedToppings]);
+  const effectiveShopSettings: ShopSettings | null =
+    isBranchMenuPreviewEnabled &&
+    selectedBranch &&
+    branchSettingsPreview?.branch_id === selectedBranch.id
+      ? {
+          id: branchSettingsPreview.id,
+          shop_name: shopSettings?.shop_name || "Ăn Vặt Ngọc Trinh",
+          is_open: branchSettingsPreview.is_open,
+          order_status: branchSettingsPreview.order_status,
+          open_time: branchSettingsPreview.open_time,
+          close_time: branchSettingsPreview.close_time,
+          preparation_minutes: branchSettingsPreview.preparation_minutes,
+        }
+      : shopSettings;
+
   function isNowWithinShopHours(openTime?: string | null, closeTime?: string | null) {
     if (!openTime || !closeTime) return true;
   
@@ -1771,14 +1823,14 @@ const amountToNextShippingPromo = nextShippingPromotion
   }
   
   const isWithinShopHours = isNowWithinShopHours(
-    shopSettings?.open_time,
-    shopSettings?.close_time
+    effectiveShopSettings?.open_time,
+    effectiveShopSettings?.close_time
   );
   const isShopOpen =
-  shopSettings?.order_status === "closed" ||
-  shopSettings?.order_status === "paused"
+  effectiveShopSettings?.order_status === "closed" ||
+  effectiveShopSettings?.order_status === "paused"
     ? false
-    : shopSettings?.is_open === false
+    : effectiveShopSettings?.is_open === false
     ? false
     : !isWithinShopHours
     ? false
@@ -2240,10 +2292,15 @@ if (process.env.NODE_ENV === "development") {
   }
 
   function estimatePreparationMinutes(itemCount: number) {
-    if (itemCount <= 2) return 10;
-    if (itemCount <= 5) return 15;
-    if (itemCount <= 10) return 20;
-    return 30;
+    const configuredMinutes = Math.max(
+      5,
+      Number(effectiveShopSettings?.preparation_minutes || 15)
+    );
+
+    const cartBasedMinutes =
+      itemCount <= 2 ? 10 : itemCount <= 5 ? 15 : itemCount <= 10 ? 20 : 30;
+
+    return Math.max(configuredMinutes, cartBasedMinutes);
   }
   
   function estimateDeliveryMinutes(distanceKm: number) {
@@ -2951,8 +3008,8 @@ setScheduledNote("");
                 </span>
 
                 <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-black text-neutral-600">
-                  {shopSettings?.open_time || "10:00"} -{" "}
-                  {shopSettings?.close_time || "22:00"}
+                  {effectiveShopSettings?.open_time || "10:00"} -{" "}
+                  {effectiveShopSettings?.close_time || "22:00"}
                 </span>
               </div>
             </div>
@@ -3055,13 +3112,13 @@ setScheduledNote("");
   <section className="mx-auto mt-6 max-w-6xl px-4">
     <div
       className={`rounded-[28px] p-5 ${
-        shopSettings?.order_status === "closed"
+        effectiveShopSettings?.order_status === "closed"
           ? "bg-red-50 text-red-700"
           : "bg-yellow-50 text-yellow-700"
       }`}
     >
       <p className="text-xl font-black">
-        {shopSettings?.order_status === "closed"
+        {effectiveShopSettings?.order_status === "closed"
           ? "Quán hiện đang đóng cửa"
           : "Quán đang tạm ngưng nhận đơn"}
       </p>

@@ -1673,6 +1673,24 @@ const totalAfterPoints = Math.max(
   0,
   total - usePointsDiscount
 );
+
+  // Must be initialized before getEstimatedReceiveTime() runs during render.
+  // estimatePreparationMinutes() reads this value.
+  const effectiveShopSettings: ShopSettings | null =
+    isBranchMenuPreviewEnabled &&
+    selectedBranch &&
+    branchSettingsPreview?.branch_id === selectedBranch.id
+      ? {
+          id: branchSettingsPreview.id,
+          shop_name: shopSettings?.shop_name || "Ăn Vặt Ngọc Trinh",
+          is_open: branchSettingsPreview.is_open,
+          order_status: branchSettingsPreview.order_status,
+          open_time: branchSettingsPreview.open_time,
+          close_time: branchSettingsPreview.close_time,
+          preparation_minutes: branchSettingsPreview.preparation_minutes,
+        }
+      : shopSettings;
+
 const estimatedReceive = getEstimatedReceiveTime();
 const rewardPoints = Math.floor(totalAfterPoints / 10000);
 const pointsDiscountUsed =
@@ -1784,21 +1802,6 @@ const amountToNextShippingPromo = nextShippingPromotion
 
     return Number(selectedProduct.price) + toppingTotal;
   }, [selectedProduct, selectedToppings]);
-  const effectiveShopSettings: ShopSettings | null =
-    isBranchMenuPreviewEnabled &&
-    selectedBranch &&
-    branchSettingsPreview?.branch_id === selectedBranch.id
-      ? {
-          id: branchSettingsPreview.id,
-          shop_name: shopSettings?.shop_name || "Ăn Vặt Ngọc Trinh",
-          is_open: branchSettingsPreview.is_open,
-          order_status: branchSettingsPreview.order_status,
-          open_time: branchSettingsPreview.open_time,
-          close_time: branchSettingsPreview.close_time,
-          preparation_minutes: branchSettingsPreview.preparation_minutes,
-        }
-      : shopSettings;
-
   function isNowWithinShopHours(openTime?: string | null, closeTime?: string | null) {
     if (!openTime || !closeTime) return true;
   

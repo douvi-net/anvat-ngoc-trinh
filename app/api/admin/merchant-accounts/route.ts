@@ -8,6 +8,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// merchant_branch_members.branch_role is a legacy column.
+// Keep a legacy-compatible value so production CHECK constraints remain valid.
+// Authorization in the new app uses merchant_profiles.global_role instead.
+const LEGACY_BRANCH_ROLE = "manager";
+
 type BranchRow = {
   id: string;
   code: string;
@@ -325,7 +330,7 @@ export async function POST(request: Request) {
       .insert({
         user_id: createdUserId,
         branch_id: branchId,
-        branch_role: "branch_owner",
+        branch_role: LEGACY_BRANCH_ROLE,
         is_active: true,
       });
 
@@ -544,7 +549,6 @@ export async function PATCH(request: Request) {
       const { error } = await supabaseAdmin
         .from("merchant_branch_members")
         .update({
-          branch_role: "branch_owner",
           is_active: true,
           updated_at: new Date().toISOString(),
         })
@@ -557,7 +561,7 @@ export async function PATCH(request: Request) {
         .insert({
           user_id: userId,
           branch_id: branchId,
-          branch_role: "branch_owner",
+          branch_role: LEGACY_BRANCH_ROLE,
           is_active: true,
         });
 

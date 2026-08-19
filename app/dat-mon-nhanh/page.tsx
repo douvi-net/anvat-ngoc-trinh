@@ -397,8 +397,7 @@ const comboSuggestions: Record<
 };
 export default function DatMonNhanhPage() {
   const router = useRouter();
-  const [betaResolved, setBetaResolved] = useState(false);
-  const [isBranchBeta, setIsBranchBeta] = useState(false);
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [toppings, setToppings] = useState<Topping[]>([]);
   const [shippingZones, setShippingZones] = useState<ShippingZone[]>([]);
@@ -480,34 +479,16 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   const addressSearchAbortRef = useRef<AbortController | null>(null);
   const routeRequestRef = useRef(0);
 
-  // Private beta is controlled directly by the URL:
-  // /dat-mon-nhanh?beta=branch
-  // This avoids stale NEXT_PUBLIC_* values being embedded at build time.
-  const isBranchMenuPreviewEnabled =
-    betaResolved && isBranchBeta;
-
-  const isBranchFirstGateEnabled =
-    betaResolved && isBranchBeta;
-
-  const isBranchCartValidationEnabled =
-    betaResolved && isBranchBeta;
+  // Multi-branch production mode.
+  // /dat-mon-nhanh always uses branch-aware menu, settings and cart validation.
+  const isBranchMenuPreviewEnabled = true;
+  const isBranchFirstGateEnabled = true;
+  const isBranchCartValidationEnabled = true;
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const betaEnabled = searchParams.get("beta") === "branch";
-
-    setIsBranchBeta(betaEnabled);
-    setBetaResolved(true);
-  }, []);
-
-  useEffect(() => {
-    if (!betaResolved) {
-      return;
-    }
-
     void fetchInitialData();
     loadSavedCustomer();
-  }, [betaResolved]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1430,31 +1411,25 @@ setSelectedSugarLevel("Ngọt bình thường");
     products,
   ]);
 
-  // Wait until the URL beta state is resolved before deciding whether
-  // the Branch First Gate should be open or closed.
+  // Production branch gate:
+  // every fresh visit starts at the gate, and invalid branch/address data
+  // reopens the gate automatically.
   useEffect(() => {
-    if (!betaResolved) {
-      return;
-    }
-
     if (!isBranchFirstGateEnabled) {
       setBranchGateConfirmed(true);
       setBranchGateLocked(false);
       return;
     }
 
-    // Every fresh beta visit starts at the gate.
     if (!branchGateLocked) {
       setBranchGateConfirmed(false);
       return;
     }
 
-    // If confirmed data becomes invalid, reopen the gate.
     if (!branchGateDiagnostics.readyForMenu) {
       setBranchGateConfirmed(false);
     }
   }, [
-    betaResolved,
     isBranchFirstGateEnabled,
     branchGateLocked,
     branchGateDiagnostics.readyForMenu,
@@ -2373,6 +2348,17 @@ if (process.env.NODE_ENV === "development") {
       return;
     }
 
+    const orderBranchId = selectedBranch?.id;
+    if (!orderBranchId) {
+      alert(
+        "Chưa xác định được chi nhánh phục vụ. Anh/chị vui lòng chọn lại địa chỉ hoặc chi nhánh."
+      );
+      setCheckoutOpen(false);
+      setBranchGateConfirmed(false);
+      setBranchGateLocked(false);
+      return;
+    }
+
     const normalizedSubmitPhone = normalizePhoneForLookup(customerPhone);
 
     if (!isValidLookupPhone(normalizedSubmitPhone) || !customerName.trim()) {
@@ -2542,12 +2528,7 @@ scheduled_at:
   orderType === "scheduled" || fulfillmentType === "pickup"
     ? scheduledNote.trim() || null
     : null,
-    branch_id:
-  fulfillmentType === "delivery" &&
-  isBranchBeta &&
-  selectedBranch?.id
-    ? selectedBranch.id
-    : null,
+          branch_id: orderBranchId,
         })
         .select()
         .single();
@@ -2863,28 +2844,10 @@ setScheduledNote("");
     );
   }
 
-  // Show BranchFirstGate only for the private beta URL.
+  // Production Branch First Gate.
   if (isBranchFirstGateEnabled && !branchGateConfirmed) {
     return (
       <>
-        <div className="fixed left-1/2 top-3 z-[4000] flex w-[94%] max-w-md -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-lg">
-          <div className="min-w-0">
-            <p className="text-xs font-black text-amber-700">
-              BETA · Chọn chi nhánh thông minh
-            </p>
-            <p className="mt-1 text-[11px] font-bold text-amber-600">
-              Phiên bản thử nghiệm nội bộ
-            </p>
-          </div>
-
-          <a
-            href="/dat-mon-nhanh"
-            className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#06113C] ring-1 ring-black/10"
-          >
-            Bản ổn định
-          </a>
-        </div>
-
         <BranchFirstGate
           phone={customerPhone}
           phoneChecked={branchGateDiagnostics.customerLookupComplete}
@@ -2920,36 +2883,13 @@ setScheduledNote("");
 
   return (
     <main className="min-h-screen bg-[#F5FFF8] pb-36">
-      {isBranchBeta && (
-        <div className="sticky top-0 z-[950] border-b border-amber-200 bg-amber-50 px-4 py-3 shadow-sm">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-black text-amber-700">
-                BETA · Menu theo chi nhánh
-              </p>
-              <p className="mt-1 text-[11px] font-bold text-amber-600">
-                Đang thử nghiệm trên website thật · Gate v2
-              </p>
-            </div>
-
-            <a
-              href="/dat-mon-nhanh"
-              className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#06113C] ring-1 ring-black/10"
-            >
-              Quay lại bản ổn định
-            </a>
-          </div>
-        </div>
-      )}
-      {isBranchBeta && (
-        <BranchSelectorModal
-          open={branchSelectorOpen}
-          branches={availableBranches}
-          selectedBranch={selectedBranch}
-          onClose={handleCloseBranchSelector}
-          onSelect={handleSelectManualBranch}
-        />
-      )}
+      <BranchSelectorModal
+        open={branchSelectorOpen}
+        branches={availableBranches}
+        selectedBranch={selectedBranch}
+        onClose={handleCloseBranchSelector}
+        onSelect={handleSelectManualBranch}
+      />
       {toast && (
         <div className="fixed left-1/2 top-4 z-[1000] w-[92%] max-w-sm -translate-x-1/2 rounded-2xl bg-[#06113C] px-5 py-4 text-center text-sm font-black text-white shadow-2xl">
           ✅ {toast}
@@ -3001,7 +2941,13 @@ setScheduledNote("");
               </h1>
 
               <p className="mt-2 text-sm font-bold text-neutral-500">
-                Bánh tráng & ăn vặt Quận 6
+                {selectedBranch
+                  ? `Bánh tráng & ăn vặt · ${
+                      selectedBranch.short_name ||
+                      selectedBranch.code ||
+                      "Chi nhánh"
+                    }`
+                  : "Bánh tráng & ăn vặt"}
               </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
@@ -3799,10 +3745,13 @@ setScheduledNote("");
       onClick={() => {
         setFulfillmentType("pickup");
         setOrderType("scheduled");
-        setSelectedBranch(null);
         setGoogleShippingFee(0);
         setDeliveryDistanceKm(0);
-        setRouteMessage("Tự đến lấy tại quán - không tính phí ship");
+        setRouteMessage(
+          selectedBranch
+            ? `Tự đến lấy tại ${selectedBranch.short_name} - không tính phí ship`
+            : "Tự đến lấy tại quán - không tính phí ship"
+        );
 
         if (!scheduledDate) setScheduledDate(todayInputValue());
         if (!scheduledTime) setScheduledTime(suggestedScheduledTime());
@@ -3821,7 +3770,16 @@ setScheduledNote("");
     <div className="mt-3 rounded-2xl bg-[#FFF7E8] px-4 py-3 text-xs font-bold leading-5 text-[#B45309]">
       🏃 Tự đến lấy tại quán. Quán cần ít nhất 30 phút để chuẩn bị.
       <br />
-      Địa chỉ: 240/127/22C Nguyễn Văn Luông, Bình Phú, Quận 6.
+      Chi nhánh: {selectedBranch?.short_name || "Chưa chọn chi nhánh"}
+      <br />
+      Địa chỉ: {selectedBranch?.address || "Chưa xác định địa chỉ chi nhánh"}
+      <button
+        type="button"
+        onClick={handleOpenBranchSelector}
+        className="mt-3 w-full rounded-xl border border-[#B45309]/20 bg-white px-4 py-3 text-sm font-black text-[#B45309]"
+      >
+        Đổi chi nhánh đến lấy
+      </button>
     </div>
   )}
 </div>
@@ -4166,7 +4124,8 @@ setScheduledNote("");
       </p>
 
       <p>
-        📍 240/127/22C Nguyễn Văn Luông, Bình Phú, Quận 6
+        📍 {selectedBranch?.short_name || "Chi nhánh"} ·{" "}
+        {selectedBranch?.address || "Chưa xác định địa chỉ"}
       </p>
 
       <p className="text-[#00B14F]">

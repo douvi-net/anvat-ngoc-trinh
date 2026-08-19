@@ -24,7 +24,6 @@ type BranchRow = {
   latitude: number | null;
   longitude: number | null;
   is_active?: boolean | null;
-  is_open?: boolean | null;
 };
 
 type SelectedBranchPreview = {
@@ -103,15 +102,40 @@ function isValidCoordinate(value: number | null) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+/**
+ * Server API ưu tiên Service Role.
+ * Nếu môi trường production thiếu Service Role thì fallback anon key.
+ *
+ * Lưu ý:
+ * - API này chỉ đọc branches đang active.
+ * - Không dùng branches.is_open để chọn chi nhánh.
+ * - Trạng thái mở/đóng/paused do branch_settings xử lý ở tầng sau.
+ */
+function getSupabaseServerClient() {
+  const supabaseUrl = String(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  ).trim();
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  const serviceRoleKey = String(
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  ).trim();
+
+  const anonKey = String(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  ).trim();
+
+  const apiKey = serviceRoleKey || anonKey;
+
+  if (!supabaseUrl || !apiKey) {
+    console.error("MAPS BRANCH RESOLVER CONFIG ERROR:", {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
+      hasAnonKey: Boolean(anonKey),
+    });
     return null;
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(supabaseUrl, apiKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -120,30 +144,48 @@ function getSupabaseAdmin() {
 }
 
 async function loadAvailableBranches(): Promise<BranchRow[]> {
-  const supabaseAdmin = getSupabaseAdmin();
+  const supabaseServer = getSupabaseServerClient();
 
-  if (!supabaseAdmin) {
+  if (!supabaseServer) {
     return [];
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabaseServer
     .from("branches")
     .select(
-      "id,code,short_name,address,latitude,longitude,is_active,is_open"
+      "id,code,short_name,address,latitude,longitude,is_active"
     )
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("code", { ascending: true });
 
   if (error) {
     console.error("LOAD BRANCHES ERROR:", error);
     return [];
   }
 
-  return ((data || []) as BranchRow[]).filter(
+  const rows = (data || []) as BranchRow[];
+
+  const validBranches = rows.filter(
     (branch) =>
-      branch.is_open !== false &&
+      branch.is_active !== false &&
       isValidCoordinate(branch.latitude) &&
       isValidCoordinate(branch.longitude)
   );
+
+  if (validBranches.length === 0) {
+    console.warn("MAPS BRANCH RESOLVER: no active branches with coordinates", {
+      totalRows: rows.length,
+      rows: rows.map((branch) => ({
+        id: branch.id,
+        code: branch.code,
+        is_active: branch.is_active,
+        latitude: branch.latitude,
+        longitude: branch.longitude,
+      })),
+    });
+  }
+
+  return validBranches;
 }
 
 function calculateDistanceResult(
@@ -308,7 +350,7 @@ export async function POST(request: NextRequest) {
           {
             ok: false,
             message:
-              "Chi nhánh đã chọn không tồn tại, đang đóng hoặc chưa có tọa độ.",
+              "Chi nhánh đã chọn không tồn tại, chưa kích hoạt hoặc chưa có tọa độ.",
           },
           { status: 409 }
         );
@@ -327,21 +369,27 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * Không âm thầm dùng Quận 6 trong luồng chọn chi nhánh.
-     * Nếu database không trả được chi nhánh, frontend cần biết để chặn đơn,
-     * tránh hiển thị Quận 1 nhưng lại tính ship từ Quận 6.
+     * Production multi-branch tuyệt đối không âm thầm gán Q6
+     * trong bước chọn chi nhánh.
+     *
+     * Nếu không đọc được branches thì frontend phải chặn đặt đơn,
+     * tránh đơn hiển thị Q1 nhưng lại ghi branch_id Q6.
      */
     if (previewNearestBranch) {
       return NextResponse.json(
         {
           ok: false,
           message:
-            "Không tải được chi nhánh đang mở để tính quãng đường.",
+            "Không tải được chi nhánh hoạt động để tính quãng đường.",
         },
         { status: 503 }
       );
     }
 
+    /*
+     * Giữ fallback legacy cho các caller cũ chưa dùng previewNearestBranch.
+     * Flow production /dat-mon-nhanh không đi vào nhánh này.
+     */
     const fallbackBranch = buildFallbackSelectedBranch(lat, lng);
     return buildResponse(fallbackBranch, "fallback_shop");
   } catch (error) {

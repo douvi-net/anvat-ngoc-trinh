@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import BranchPaymentQr from "@/components/payment/BranchPaymentQr";
 
 type OrderItem = {
   id: string;
@@ -893,11 +894,7 @@ alert(uploadError?.message || "Upload thất bại");
     </p>
 
     <div className="mt-4 flex justify-center">
-      <img
-        src="/images/payment-qr.jpg"
-        alt="QR thanh toán"
-        className="w-full max-w-[320px] rounded-3xl border"
-      />
+      <BranchPaymentQr orderId={order.id} />
     </div>
 
     <div className="mt-4 rounded-2xl bg-[#F5FFF8] p-4">

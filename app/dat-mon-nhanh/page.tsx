@@ -31,6 +31,7 @@ import {
   type BranchCartValidationResult,
 } from "@/lib/validateBranchCart";
 import { BranchCartValidationModal } from "@/components/order/BranchCartValidationModal";
+import BranchPaymentQr from "@/components/payment/BranchPaymentQr";
 
 type Product = {
   id: string;
@@ -2338,6 +2339,28 @@ if (process.env.NODE_ENV === "development") {
     return `${hour}:${minute}`;
   }
   async function submitOrder() {
+    try {
+      const maintenanceResponse = await fetch("/api/maintenance", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (maintenanceResponse.ok) {
+        const maintenancePayload = await maintenanceResponse.json();
+        const maintenanceSettings = maintenancePayload?.settings;
+
+        if (
+          maintenanceSettings?.maintenance_enabled === true &&
+          maintenanceSettings?.maintenance_disable_checkout === true
+        ) {
+          window.dispatchEvent(new Event("avnt:maintenance-open"));
+          return;
+        }
+      }
+    } catch (maintenanceError) {
+      console.warn("MAINTENANCE CHECK ERROR:", maintenanceError);
+    }
+
     if (!isShopOpen) {
       alert("Hiện tại quán chưa nhận đơn. Anh quay lại sau giúp em nha.");
       return;
@@ -4010,10 +4033,13 @@ setScheduledNote("");
                   </p>
 
                   <div className="mt-4 flex justify-center">
-                    <img
-                      src="/images/payment-qr.jpg"
-                      alt="QR thanh toán Ăn Vặt Ngọc Trinh"
-                      className="w-full max-w-[320px] rounded-3xl border border-black/10 shadow-lg"
+                    <BranchPaymentQr
+                      branchId={selectedBranch?.id}
+                      branchLabel={
+                        selectedBranch?.short_name ||
+                        selectedBranch?.code ||
+                        "Chi nhánh"
+                      }
                     />
                   </div>
 

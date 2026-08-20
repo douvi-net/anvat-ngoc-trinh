@@ -30,7 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 
 # vercel
@@ -39,4 +39,25 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local archives
 anvat-ngoc-trinh.zip
+anvat-ngoc-trinh*.zip
+
+# accidental Android/Gradle project files
+/.gradle/
+/.idea/
+*.iml
+/gradle/
+/build.gradle.kts
+/settings.gradle.kts
+/gradle.properties
+/gradlew
+/gradlew.bat
+/local.properties
+/app/build.gradle.kts
+/app/google-services.json
+/app/proguard-rules.pro
+/app/src/
+/app/.gitignore
+/public/nfcdouvi.apk

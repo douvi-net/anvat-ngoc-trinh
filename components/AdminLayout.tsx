@@ -47,6 +47,8 @@ const menuGroups = [
     title: "HỆ THỐNG",
     items: [
       { label: "Tài khoản Merchant", href: "/admin/merchants", icon: "👤" },
+      { label: "Thanh toán chi nhánh", href: "/admin/branch-payments", icon: "💳" },
+      { label: "Bảo trì website", href: "/admin/maintenance", icon: "🛠️" },
       { label: "Cài đặt", href: "/admin/settings", icon: "⚙️" },
     ],
   },

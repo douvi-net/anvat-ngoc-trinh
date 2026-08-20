@@ -10,6 +10,7 @@ import HideOnOrderMobile from "@/components/HideOnOrderMobile";
 import CopyProtection from "@/components/CopyProtection";
 import InstallAppPrompt from "@/components/InstallAppPrompt";
 import CustomerPushPrompt from "@/components/CustomerPushPrompt";
+import MaintenanceNotice from "@/components/MaintenanceNotice";
 import Script from "next/script";
 const beVietnam = Be_Vietnam_Pro({
   subsets: ["vietnamese"],
@@ -101,6 +102,7 @@ export default function RootLayout({
     `}
   </Script>
 
+  <MaintenanceNotice />
   <CustomerPushPrompt />
   <InstallAppPrompt />
   <CopyProtection />

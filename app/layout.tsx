@@ -11,6 +11,7 @@ import CopyProtection from "@/components/CopyProtection";
 import InstallAppPrompt from "@/components/InstallAppPrompt";
 import CustomerPushPrompt from "@/components/CustomerPushPrompt";
 import MaintenanceNotice from "@/components/MaintenanceNotice";
+import MetaPixel from "@/components/MetaPixel";
 import Script from "next/script";
 const beVietnam = Be_Vietnam_Pro({
   subsets: ["vietnamese"],

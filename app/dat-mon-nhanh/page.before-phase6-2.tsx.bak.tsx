@@ -32,11 +32,6 @@ import {
 } from "@/lib/validateBranchCart";
 import { BranchCartValidationModal } from "@/components/order/BranchCartValidationModal";
 import BranchPaymentQr from "@/components/payment/BranchPaymentQr";
-import { useBranchToppings } from "@/lib/useBranchToppings";
-import {
-  applyCartToppingChanges,
-  getCartToppingChanges,
-} from "@/lib/branchToppings";
 
 type Product = {
   id: string;
@@ -405,6 +400,7 @@ export default function DatMonNhanhPage() {
   const router = useRouter();
   
   const [products, setProducts] = useState<Product[]>([]);
+  const [toppings, setToppings] = useState<Topping[]>([]);
   const [shippingZones, setShippingZones] = useState<ShippingZone[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -446,34 +442,6 @@ const [scheduledTime, setScheduledTime] = useState("");
 const [scheduledNote, setScheduledNote] = useState("");
   const [selectedBranch, setSelectedBranch] =
     useState<PreviewSelectedBranch | null>(null);
-  // BRANCH_TOPPINGS_SYNC_V2: no fallback to the global topping catalogue.
-  const {
-    toppings,
-    ready: toppingsReady,
-    error: toppingsError,
-    refresh: refreshToppings,
-  } = useBranchToppings(selectedBranch?.id || null);
-  useEffect(() => {
-    if (checkoutOpen) void refreshToppings();
-  }, [checkoutOpen, refreshToppings]);
-  const cartHasToppings = cart.some((item) => item.selectedToppings.length > 0);
-  const cartToppingChanges = useMemo(
-    () => toppingsReady ? getCartToppingChanges(cart, toppings) : null,
-    [cart, toppings, toppingsReady]
-  );
-  const activeToppingBranchRef = useRef<string | null>(null);
-  const checkoutAttemptRef = useRef(false);
-
-  const [productOptionsBranchId, setProductOptionsBranchId] = useState(selectedBranch?.id || null);
-  if (productOptionsBranchId !== (selectedBranch?.id || null)) {
-    // A product option panel from the previous branch must not stay open.
-    setProductOptionsBranchId(selectedBranch?.id || null);
-    setSelectedProduct(null);
-    setSelectedToppingIds([]);
-  }
-  useEffect(() => {
-    activeToppingBranchRef.current = selectedBranch?.id || null;
-  }, [selectedBranch?.id]);
   const [availableBranches, setAvailableBranches] =
     useState<AvailableBranch[]>([]);
   const [branchSelectorOpen, setBranchSelectorOpen] = useState(false);
@@ -736,6 +704,7 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
   async function fetchInitialData() {
   const [
   productResult,
+  toppingResult,
   zoneResult,
   settingResult,
   bannerResult,
@@ -749,6 +718,12 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
         .select(
           "id,name,slug,price,badge,image_url,description,is_sold_out,category,topping_category"
         )
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true }),
+
+      supabase
+        .from("toppings")
+        .select("id,name,price,category")
         .eq("is_active", true)
         .order("sort_order", { ascending: true }),
 
@@ -787,6 +762,7 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     ]);
 
     setProducts((productResult.data || []) as Product[]);
+    setToppings((toppingResult.data || []) as Topping[]);
     setShippingZones((zoneResult.data || []) as ShippingZone[]);
     setShopSettings((settingResult.data || null) as ShopSettings | null);
     setBanners((bannerResult.data || []) as Banner[]);
@@ -1098,7 +1074,6 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
     );
   }
   function openProductOptions(product: Product) {
-    if (submitting) return;
     if (product.is_sold_out) {
       showToast("Món này đang tạm hết");
       return;
@@ -1145,13 +1120,6 @@ const [selectedGiftCoupon, setSelectedGiftCoupon] = useState<Coupon | null>(null
       return;
     }
   
-    // A loading/error response must not be mistaken for "this item has no toppings".
-    if (!toppingsReady) {
-      showToast(toppingsError || "Đang tải topping chi nhánh, anh/chị chờ một chút nha.");
-      void refreshToppings();
-      return;
-    }
-
     const matchedToppings = toppings.filter(
       (topping) =>
         topping.category === product.topping_category ||
@@ -1208,7 +1176,6 @@ setSelectedSugarLevel("Ngọt bình thường");
   }
 
   function toggleTopping(toppingId: string) {
-    if (!toppingsReady || !toppings.some((item) => item.id === toppingId)) return;
     setSelectedToppingIds((prev) =>
       prev.includes(toppingId)
         ? prev.filter((id) => id !== toppingId)
@@ -1226,29 +1193,18 @@ setSelectedSugarLevel("Ngọt bình thường");
   }
 
   function addSelectedProductToCart() {
-    if (!selectedProduct || submitting) return;
-    if (!toppingsReady) {
-      showToast(toppingsError || "Đang kiểm tra topping chi nhánh.");
-      void refreshToppings();
-      return;
-    }
+    if (!selectedProduct) return;
 
-    const selectedToppings = visibleToppings.filter((topping) =>
+    const selectedToppings = toppings.filter((topping) =>
       selectedToppingIds.includes(topping.id)
     );
-    if (selectedToppings.length !== selectedToppingIds.length) {
-      // First click acknowledges the change; never silently add a different item.
-      setSelectedToppingIds(selectedToppings.map((topping) => topping.id));
-      showToast("Đã bỏ topping vừa hết. Anh/chị kiểm tra lại lựa chọn trước khi thêm vào giỏ nha.");
-      return;
-    }
     const optionNote =
     selectedProduct && isDrinkProduct(selectedProduct)
       ? `${selectedIceLevel}, ${selectedSugarLevel}`
       : selectedSpicyLevel;
     const cartKey = [
       selectedProduct.id,
-      selectedToppings.map((topping) => topping.id).sort().join("-"),
+      [...selectedToppingIds].sort().join("-"),
       optionNote,
       itemNote.trim(),
     ].join("_");
@@ -1283,14 +1239,7 @@ setSelectedSugarLevel("Ngọt bình thường");
     setSelectedProduct(null);
   }
 
-  function updateCartToppings() {
-    if (!toppingsReady || submitting) return;
-    setCart((previous) => applyCartToppingChanges(previous, toppings));
-    showToast("Đã cập nhật topping. Anh/chị kiểm tra lại tổng tiền trước khi đặt nha.");
-  }
-
   function increaseItem(cartKey: string) {
-    if (submitting) return;
     setCart((prev) =>
       prev.map((item) =>
         item.cartKey === cartKey
@@ -1302,7 +1251,6 @@ setSelectedSugarLevel("Ngọt bình thường");
   }
 
   function decreaseItem(cartKey: string) {
-    if (submitting) return;
     setCart((prev) =>
       prev
         .map((item) =>
@@ -1809,9 +1757,6 @@ const amountToNextShippingPromo = nextShippingPromotion
         topping.category === "Topping dùng chung"
     );
   }, [toppings, selectedProduct]);
-  const selectedToppingUnavailable = toppingsReady && selectedToppingIds.some(
-    (id) => !visibleToppings.some((topping) => topping.id === id)
-  );
   const upsizeTopping = useMemo(() => {
     return visibleToppings.find((topping) =>
       isUpsizeOneLiterTopping(topping)
@@ -2394,19 +2339,6 @@ if (process.env.NODE_ENV === "development") {
     return `${hour}:${minute}`;
   }
   async function submitOrder() {
-    // Keep the new async topping check from allowing double-click submissions.
-    if (checkoutAttemptRef.current) return;
-    checkoutAttemptRef.current = true;
-    setSubmitting(true);
-    try {
-      await submitOrderWithToppingCheck();
-    } finally {
-      checkoutAttemptRef.current = false;
-      setSubmitting(false);
-    }
-  }
-
-  async function submitOrderWithToppingCheck() {
     try {
       const maintenanceResponse = await fetch("/api/maintenance", {
         method: "GET",
@@ -2524,33 +2456,6 @@ if (process.env.NODE_ENV === "development") {
     
     setSubmitting(true);
     try {
-      // Re-read availability before any order writes, not just on the 15s timer.
-      // The existing checkout/database architecture is deliberately unchanged.
-      if (cart.some((item) => item.selectedToppings.length > 0)) {
-        const latestToppings = await refreshToppings(true);
-        if (activeToppingBranchRef.current !== orderBranchId) {
-          alert("Chi nhánh đã thay đổi. Anh/chị kiểm tra lại giỏ hàng trước khi đặt nha.");
-          return;
-        }
-        if (!latestToppings) {
-          alert("Chưa kiểm tra được topping chi nhánh. Đơn chưa được gửi; anh/chị kiểm tra kết nối rồi thử lại nha.");
-          return;
-        }
-        const changes = getCartToppingChanges(cart, latestToppings);
-        if (changes.changed) {
-          alert([
-            changes.unavailableNames.length > 0
-              ? `Topping vừa hết/không bán tại chi nhánh: ${changes.unavailableNames.join(", ")}.`
-              : "",
-            changes.priceChangedNames.length > 0
-              ? `Topping vừa đổi giá: ${changes.priceChangedNames.join(", ")}.`
-              : "",
-            "Đơn chưa được gửi. Anh/chị bấm cập nhật topping trong giỏ và kiểm tra lại tổng tiền nha.",
-          ].filter(Boolean).join("\n"));
-          return;
-        }
-      }
-
       saveCustomerLocal();
 
       const customer = await upsertCustomer();
@@ -3360,14 +3265,7 @@ setScheduledNote("");
             </p>
           </div>
 
-          {!toppingsReady ? (
-            <div role="status" className="mt-3 rounded-2xl bg-orange-50 p-4 text-sm font-bold text-orange-900">
-              <p>{toppingsError || "Đang tải topping chi nhánh..."}</p>
-              <button type="button" onClick={() => void refreshToppings()} className="mt-2 underline">
-                Tải lại topping
-              </button>
-            </div>
-          ) : displayToppings.length === 0 ? (
+          {displayToppings.length === 0 ? (
             <p className="mt-3 rounded-2xl bg-[#F5FFF8] p-4 text-sm font-bold text-neutral-500">
               Món này chưa có topping phù hợp.
             </p>
@@ -3530,19 +3428,11 @@ setScheduledNote("");
       </div>
 
       <div className="border-t border-black/10 bg-white p-4">
-        {selectedToppingUnavailable && (
-          <p role="status" className="mb-3 text-sm font-bold text-orange-800">
-            Topping đã chọn vừa hết. Vui lòng cập nhật và kiểm tra lại lựa chọn.
-          </p>
-        )}
         <button
           onClick={addSelectedProductToCart}
-          disabled={!toppingsReady || submitting}
-          className="w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white disabled:opacity-60"
+          className="w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white"
         >
-          {!toppingsReady ? "Đang kiểm tra topping..." : selectedToppingUnavailable
-            ? "Cập nhật lựa chọn"
-            : `Thêm vào giỏ · ${selectedProductTotal.toLocaleString("vi-VN")}đ`}
+          Thêm vào giỏ · {selectedProductTotal.toLocaleString("vi-VN")}đ
         </button>
       </div>
     </div>
@@ -3567,32 +3457,6 @@ setScheduledNote("");
                 ✕
               </button>
             </div>
-
-            {cartHasToppings && !toppingsReady && (
-              <div role="status" className="mt-4 rounded-2xl bg-orange-50 p-4 text-sm font-bold text-orange-900">
-                <p>{toppingsError || "Đang kiểm tra topping cho giỏ hàng..."}</p>
-                <p className="mt-1">Giỏ hàng được giữ nguyên. Cần kiểm tra topping trước khi gửi đơn.</p>
-                <button type="button" onClick={() => void refreshToppings()} className="mt-2 underline">
-                  Tải lại topping
-                </button>
-              </div>
-            )}
-            {cartToppingChanges?.changed && (
-              <div role="alert" className="mt-4 rounded-2xl bg-orange-50 p-4 text-sm font-bold text-orange-900">
-                <p>Topping tại {selectedBranch?.short_name || "chi nhánh này"} vừa thay đổi.</p>
-                {cartToppingChanges.unavailableNames.length > 0 && (
-                  <p className="mt-1">Hết/không bán: {cartToppingChanges.unavailableNames.join(", ")}.</p>
-                )}
-                {cartToppingChanges.priceChangedNames.length > 0 && (
-                  <p className="mt-1">Đổi giá: {cartToppingChanges.priceChangedNames.join(", ")}.</p>
-                )}
-                <p className="mt-1">Cập nhật sẽ bỏ topping không còn bán, giữ món chính và tính lại tiền.</p>
-                <button type="button" onClick={updateCartToppings} disabled={submitting}
-                  className="mt-3 rounded-xl bg-[#00B14F] px-4 py-3 font-black text-white disabled:opacity-60">
-                  Cập nhật topping trong giỏ
-                </button>
-              </div>
-            )}
 
             <div className="mt-5 space-y-3">
               {cart.map((item) => (
@@ -4561,16 +4425,11 @@ setScheduledNote("");
 
             <button
               onClick={submitOrder}
-              disabled={submitting || !isShopOpen || customerFlag?.status === "blocked" ||
-                (cartHasToppings && !toppingsReady) || cartToppingChanges?.changed === true}
+              disabled={submitting || !isShopOpen || customerFlag?.status === "blocked"}
               className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white disabled:opacity-60"
             >
               {submitting
                 ? "Đang gửi đơn..."
-                : cartHasToppings && !toppingsReady
-                ? "Cần kiểm tra topping"
-                : cartToppingChanges?.changed
-                ? "Vui lòng cập nhật topping trong giỏ"
                 : !isShopOpen
                 ? "Quán đang tạm ngưng"
                 : customerFlag?.status === "blocked"

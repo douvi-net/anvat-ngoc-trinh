@@ -1,0 +1,942 @@
+--- a/app/dat-mon-nhanh/page.tsx
++++ b/app/dat-mon-nhanh/page.tsx
+@@ -32,6 +32,7 @@
+ } from "@/lib/validateBranchCart";
+ import { BranchCartValidationModal } from "@/components/order/BranchCartValidationModal";
+ import BranchPaymentQr from "@/components/payment/BranchPaymentQr";
++import StickyCheckoutBar from "@/components/order/StickyCheckoutBar";
+ 
+ type Product = {
+   id: string;
+@@ -160,6 +161,22 @@
+ const sugarOptions = ["Ít ngọt", "Ngọt bình thường"];
+ const MIN_SHIPPING_FEE = 15000;
+ 
++function createCheckoutRequestId() {
++  try {
++    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
++      return `web_${crypto.randomUUID()}`;
++    }
++  } catch {
++    // Older Safari/WebViews can expose crypto without randomUUID.
++  }
++
++  return `web_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
++}
++
++function sleep(ms: number) {
++  return new Promise((resolve) => window.setTimeout(resolve, ms));
++}
++
+ function normalizePhoneForLookup(phone: string) {
+   const trimmed = phone.trim();
+ 
+@@ -468,6 +485,8 @@
+   const [customerFoundMessage, setCustomerFoundMessage] = useState("");
+   const [customerFlag, setCustomerFlag] = useState<CustomerFlag | null>(null);
+   const [submitting, setSubmitting] = useState(false);
++  const [submitStatusMessage, setSubmitStatusMessage] = useState("");
++  const [checkoutErrorMessage, setCheckoutErrorMessage] = useState("");
+   const [toast, setToast] = useState("");
+   const [cartAnimate, setCartAnimate] = useState(false);
+   const [branchGateConfirmed, setBranchGateConfirmed] = useState(false);
+@@ -479,6 +498,9 @@
+   const addressSearchRequestRef = useRef(0);
+   const addressSearchAbortRef = useRef<AbortController | null>(null);
+   const routeRequestRef = useRef(0);
++  const submitLockRef = useRef(false);
++  const submitSucceededRef = useRef(false);
++  const checkoutRequestIdRef = useRef<string | null>(null);
+ 
+   // Multi-branch production mode.
+   // /dat-mon-nhanh always uses branch-aware menu, settings and cart validation.
+@@ -1815,6 +1837,93 @@
+     ? false
+     : true;
+ 
++  const checkoutIssues = useMemo(() => {
++    const issues: string[] = [];
++    const normalizedPhone = normalizePhoneForLookup(customerPhone);
++
++    if (!isShopOpen) {
++      issues.push("Quán đang tạm ngưng nhận đơn");
++    }
++
++    if (cart.length === 0) {
++      issues.push("Chưa có món trong giỏ");
++    }
++
++    if (!selectedBranch?.id) {
++      issues.push("Chưa xác định chi nhánh phục vụ");
++    }
++
++    if (!isValidLookupPhone(normalizedPhone)) {
++      issues.push("Kiểm tra lại số điện thoại");
++    }
++
++    if (!customerName.trim()) {
++      issues.push("Nhập tên người nhận");
++    }
++
++    if (customerFlag?.status === "blocked") {
++      issues.push("Số điện thoại đang bị hạn chế");
++    }
++
++    if (fulfillmentType === "delivery") {
++      if (!customerAddress.trim()) {
++        issues.push("Nhập địa chỉ giao hàng");
++      } else if (!branchGateDiagnostics.readyForMenu) {
++        issues.push("Chọn lại địa chỉ từ gợi ý Google");
++      } else if (deliveryLat === null || deliveryLng === null) {
++        issues.push("Chọn đúng địa chỉ Google Maps");
++      }
++
++      if (routeLoading) {
++        issues.push("Đang tính phí giao hàng");
++      } else if (!routeMessage) {
++        issues.push("Chưa tính phí giao hàng");
++      }
++    }
++
++    if (selectedReward && !canUseSelectedReward) {
++      issues.push("Quà đổi xu chưa đủ điều kiện");
++    }
++
++    if (orderType === "scheduled" || fulfillmentType === "pickup") {
++      if (!scheduledDate || !scheduledTime) {
++        issues.push(
++          fulfillmentType === "pickup"
++            ? "Chọn ngày và giờ đến lấy"
++            : "Chọn ngày và giờ nhận món"
++        );
++      } else {
++        const scheduled = new Date(`${scheduledDate}T${scheduledTime}:00`);
++        const minTime = new Date(Date.now() + 30 * 60 * 1000);
++
++        if (Number.isNaN(scheduled.getTime()) || scheduled < minTime) {
++          issues.push("Thời gian đặt trước phải cách ít nhất 30 phút");
++        }
++      }
++    }
++
++    return Array.from(new Set(issues));
++  }, [
++    isShopOpen,
++    cart.length,
++    selectedBranch?.id,
++    customerPhone,
++    customerName,
++    customerFlag?.status,
++    fulfillmentType,
++    customerAddress,
++    branchGateDiagnostics.readyForMenu,
++    deliveryLat,
++    deliveryLng,
++    routeLoading,
++    routeMessage,
++    selectedReward,
++    canUseSelectedReward,
++    orderType,
++    scheduledDate,
++    scheduledTime,
++  ]);
++
+     function applyCoupon(coupon: Coupon) {
+       const minOrder = getCouponMinOrder(coupon);
+     
+@@ -2338,128 +2447,258 @@
+   
+     return `${hour}:${minute}`;
+   }
+-  async function submitOrder() {
++  function getOrCreateCheckoutRequestId() {
++    if (checkoutRequestIdRef.current) {
++      return checkoutRequestIdRef.current;
++    }
++
+     try {
+-      const maintenanceResponse = await fetch("/api/maintenance", {
+-        method: "GET",
+-        cache: "no-store",
+-      });
++      const stored = window.sessionStorage.getItem(
++        "avnt_active_checkout_request_id"
++      );
+ 
+-      if (maintenanceResponse.ok) {
+-        const maintenancePayload = await maintenanceResponse.json();
+-        const maintenanceSettings = maintenancePayload?.settings;
+-
+-        if (
+-          maintenanceSettings?.maintenance_enabled === true &&
+-          maintenanceSettings?.maintenance_disable_checkout === true
+-        ) {
+-          window.dispatchEvent(new Event("avnt:maintenance-open"));
+-          return;
+-        }
++      if (stored) {
++        checkoutRequestIdRef.current = stored;
++        return stored;
+       }
+-    } catch (maintenanceError) {
+-      console.warn("MAINTENANCE CHECK ERROR:", maintenanceError);
++    } catch {
++      // sessionStorage may be blocked in strict/private browser modes.
+     }
+ 
+-    if (!isShopOpen) {
+-      alert("Hiện tại quán chưa nhận đơn. Anh quay lại sau giúp em nha.");
+-      return;
+-    }
++    const requestId = createCheckoutRequestId();
++    checkoutRequestIdRef.current = requestId;
+ 
+-    if (cart.length === 0) {
+-      alert("Anh chọn ít nhất 1 món trước khi đặt nha.");
+-      return;
+-    }
+-
+-    const orderBranchId = selectedBranch?.id;
+-    if (!orderBranchId) {
+-      alert(
+-        "Chưa xác định được chi nhánh phục vụ. Anh/chị vui lòng chọn lại địa chỉ hoặc chi nhánh."
++    try {
++      window.sessionStorage.setItem(
++        "avnt_active_checkout_request_id",
++        requestId
+       );
+-      setCheckoutOpen(false);
+-      setBranchGateConfirmed(false);
+-      setBranchGateLocked(false);
+-      return;
++    } catch {
++      // Ref-only fallback still protects against repeated taps in this page.
+     }
+ 
+-    const normalizedSubmitPhone = normalizePhoneForLookup(customerPhone);
++    return requestId;
++  }
+ 
+-    if (!isValidLookupPhone(normalizedSubmitPhone) || !customerName.trim()) {
+-      alert("Anh/chị nhập số điện thoại hợp lệ và tên giúp em nha.");
+-      return;
+-    }
++  function clearCheckoutRequestId() {
++    checkoutRequestIdRef.current = null;
+ 
+-    if (fulfillmentType === "delivery" && !customerAddress.trim()) {
+-      alert("Anh/chị nhập địa chỉ giao hàng giúp em nha.");
+-      return;
++    try {
++      window.sessionStorage.removeItem("avnt_active_checkout_request_id");
++    } catch {
++      // Ignore storage failures.
+     }
++  }
+ 
+-    if (
+-      fulfillmentType === "delivery" &&
+-      (isBranchFirstGateEnabled || isBranchMenuPreviewEnabled) &&
+-      !branchGateDiagnostics.readyForMenu
+-    ) {
+-      alert(
+-        branchGateDiagnostics.blockingReasons[0] ||
+-          "Anh/chị vui lòng chọn lại địa chỉ để xác định chi nhánh phục vụ."
+-      );
+-      setBranchGateConfirmed(false);
+-      setBranchGateLocked(true);
+-      setCheckoutOpen(false);
+-      return;
+-    }
++  async function recoverOrderAttempt(clientRequestId: string) {
++    for (let attempt = 0; attempt < 4; attempt += 1) {
++      if (attempt > 0) {
++        await sleep(700 * attempt);
++      }
+ 
+-    const latestFlag = await fetchCustomerFlag(normalizedSubmitPhone);
+-    if (latestFlag?.status === "blocked") {
+-      alert("Rất tiếc, quán hiện chưa thể tiếp nhận đơn hàng từ số điện thoại này. Anh/chị vui lòng liên hệ hotline 0392 496 220.");
+-      return;
+-    }
++      try {
++        const response = await fetch(
++          `/api/orders/create?clientRequestId=${encodeURIComponent(
++            clientRequestId
++          )}`,
++          {
++            method: "GET",
++            cache: "no-store",
++          }
++        );
+ 
+-    if (fulfillmentType === "delivery" && (!deliveryLat || !deliveryLng)) {
+-      alert("Anh/chị vui lòng chọn địa chỉ từ danh sách gợi ý Google.");
+-      return;
+-    }
+-    
+-    if (fulfillmentType === "delivery" && routeLoading) {
+-      alert("Hệ thống đang tính phí ship, anh/chị chờ vài giây nha.");
+-      return;
+-    }
+-    
+-    if (fulfillmentType === "delivery" && !routeMessage) {
+-      alert("Anh/chị bấm tính lại phí ship trước khi đặt hàng nha.");
+-      return;
++        const payload = await response.json().catch(() => null);
++
++        if (response.ok && payload?.ok && payload?.order?.id) {
++          return payload.order;
++        }
++
++        if (response.status !== 404) {
++          console.warn("ORDER RECOVERY CHECK:", response.status, payload);
++        }
++      } catch (error) {
++        console.warn("ORDER RECOVERY ERROR:", error);
++      }
+     }
+ 
+-    if (selectedReward && !canUseSelectedReward) {
+-      alert("Quà đã chọn chưa đủ điều kiện. Anh/chị bỏ quà hoặc chọn quà khác giúp em nha.");
++    return null;
++  }
++
++  async function submitOrder() {
++    // Synchronous lock: closes the double-tap race before the first await.
++    if (submitLockRef.current) {
+       return;
+     }
+-    const scheduledDateTime = getScheduledDateTime();
+ 
+-    if (orderType === "scheduled" || fulfillmentType === "pickup") {
+-      if (!scheduledDateTime) {
+-        alert(
+-          fulfillmentType === "pickup"
+-            ? "Anh/chị chọn ngày và giờ đến lấy món giúp em nha."
+-            : "Anh/chị chọn ngày và giờ nhận món giúp em nha."
++    submitLockRef.current = true;
++    submitSucceededRef.current = false;
++    setSubmitting(true);
++    setCheckoutErrorMessage("");
++    setSubmitStatusMessage("Đang kiểm tra thông tin đơn...");
++
++    const slowTimer = window.setTimeout(() => {
++      if (!submitSucceededRef.current) {
++        setSubmitStatusMessage(
++          "Đang xử lý đơn. Vui lòng giữ nguyên màn hình và không bấm lại."
+         );
++      }
++    }, 5000);
++
++    try {
++      try {
++        const maintenanceResponse = await fetch("/api/maintenance", {
++          method: "GET",
++          cache: "no-store",
++        });
++
++        if (maintenanceResponse.ok) {
++          const maintenancePayload = await maintenanceResponse.json();
++          const maintenanceSettings = maintenancePayload?.settings;
++
++          if (
++            maintenanceSettings?.maintenance_enabled === true &&
++            maintenanceSettings?.maintenance_disable_checkout === true
++          ) {
++            window.dispatchEvent(new Event("avnt:maintenance-open"));
++            return;
++          }
++        }
++      } catch (maintenanceError) {
++        // A maintenance status timeout must not make normal checkout unusable.
++        console.warn("MAINTENANCE CHECK ERROR:", maintenanceError);
++      }
++
++      if (!isShopOpen) {
++        const message =
++          "Hiện tại quán chưa nhận đơn. Anh/chị quay lại sau giúp quán nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
+         return;
+       }
+-    
+-      const minTime = new Date(Date.now() + 30 * 60 * 1000);
+-    
+-      if (scheduledDateTime < minTime) {
+-        alert("Đơn đặt trước cần cách hiện tại ít nhất 30 phút nha.");
++
++      if (cart.length === 0) {
++        const message = "Anh/chị chọn ít nhất 1 món trước khi đặt nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
+         return;
+       }
+-    }
+-    
+-    setSubmitting(true);
+-    try {
++
++      const orderBranchId = selectedBranch?.id;
++      if (!orderBranchId) {
++        const message =
++          "Chưa xác định được chi nhánh phục vụ. Anh/chị vui lòng chọn lại địa chỉ hoặc chi nhánh.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        setBranchGateConfirmed(false);
++        setBranchGateLocked(false);
++        return;
++      }
++
++      const normalizedSubmitPhone = normalizePhoneForLookup(customerPhone);
++
++      if (!isValidLookupPhone(normalizedSubmitPhone) || !customerName.trim()) {
++        const message =
++          "Anh/chị kiểm tra lại số điện thoại và tên người nhận giúp quán nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      if (fulfillmentType === "delivery" && !customerAddress.trim()) {
++        const message = "Anh/chị nhập địa chỉ giao hàng giúp quán nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      if (
++        fulfillmentType === "delivery" &&
++        (isBranchFirstGateEnabled || isBranchMenuPreviewEnabled) &&
++        !branchGateDiagnostics.readyForMenu
++      ) {
++        const message =
++          branchGateDiagnostics.blockingReasons[0] ||
++          "Anh/chị vui lòng chọn lại địa chỉ từ gợi ý Google để xác định chi nhánh phục vụ.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        setBranchGateConfirmed(false);
++        setBranchGateLocked(true);
++        return;
++      }
++
++      const latestFlag = await fetchCustomerFlag(normalizedSubmitPhone);
++      if (latestFlag?.status === "blocked") {
++        const message =
++          "Rất tiếc, quán hiện chưa thể tiếp nhận đơn hàng từ số điện thoại này. Anh/chị vui lòng liên hệ hotline 0392 496 220.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      if (
++        fulfillmentType === "delivery" &&
++        (deliveryLat === null || deliveryLng === null)
++      ) {
++        const message =
++          "Anh/chị vui lòng chọn địa chỉ từ danh sách gợi ý Google.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      if (fulfillmentType === "delivery" && routeLoading) {
++        const message =
++          "Hệ thống đang tính phí ship, anh/chị chờ vài giây nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      if (fulfillmentType === "delivery" && !routeMessage) {
++        const message =
++          "Anh/chị bấm tính lại phí ship trước khi đặt hàng nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      if (selectedReward && !canUseSelectedReward) {
++        const message =
++          "Quà đã chọn chưa đủ điều kiện. Anh/chị bỏ quà hoặc chọn quà khác giúp quán nha.";
++        setCheckoutErrorMessage(message);
++        alert(message);
++        return;
++      }
++
++      const scheduledDateTime = getScheduledDateTime();
++
++      if (orderType === "scheduled" || fulfillmentType === "pickup") {
++        if (!scheduledDateTime) {
++          const message =
++            fulfillmentType === "pickup"
++              ? "Anh/chị chọn ngày và giờ đến lấy món giúp quán nha."
++              : "Anh/chị chọn ngày và giờ nhận món giúp quán nha.";
++          setCheckoutErrorMessage(message);
++          alert(message);
++          return;
++        }
++
++        const minTime = new Date(Date.now() + 30 * 60 * 1000);
++
++        if (scheduledDateTime < minTime) {
++          const message =
++            "Đơn đặt trước cần cách hiện tại ít nhất 30 phút nha.";
++          setCheckoutErrorMessage(message);
++          alert(message);
++          return;
++        }
++      }
++
++      setSubmitStatusMessage("Đang gửi đơn đến quán...");
+       saveCustomerLocal();
+ 
+       const customer = await upsertCustomer();
+-      const orderCode = `AVNT${Date.now().toString().slice(-6)}`;
++      const clientRequestId = getOrCreateCheckoutRequestId();
+ 
+       const estimateBaseTime = new Date();
+       const estimatedFrom = new Date(
+@@ -2468,99 +2707,102 @@
+             60 *
+             1000
+       );
+-      const estimatedTo = new Date(estimatedFrom.getTime() + 10 * 60 * 1000);
++      const estimatedTo = new Date(
++        estimatedFrom.getTime() + 10 * 60 * 1000
++      );
+ 
+-      const { data: order, error: orderError } = await supabase
+-        .from("orders")
+-        .insert({
+-          order_code: orderCode,
+-          customer_id: customer.id,
+-          customer_name: customerName.trim(),
+-          customer_phone: normalizedSubmitPhone,
+-          customer_address:
+-  fulfillmentType === "delivery" ? customerAddress.trim() : "Khách tự đến lấy",
+-address_detail:
+-  fulfillmentType === "delivery" ? customerAddressDetail.trim() || null : null,
+-          note: [
+-            orderType === "scheduled" && scheduledDateTime
+-              ? `⏰ Đơn đặt trước: ${scheduledDateTime.toLocaleString("vi-VN")}${
+-                  scheduledNote.trim() ? `\nGhi chú đặt trước: ${scheduledNote.trim()}` : ""
+-                }`
+-              : "",
+-            note.trim(),
+-            latestFlag?.status === "warning"
+-              ? `⚠️ Khách cần xác nhận trước: ${latestFlag.note || "Admin đã đánh dấu cần xác nhận."}`
+-              : "",
+-            selectedReward ? `🎁 Quà đổi xu: ${selectedReward.name} (${rewardPointsUsed} xu)` : "",
+-          ]
+-            .filter(Boolean)
+-            .join("\n"),
+-          subtotal,
+-          shipping_fee_original:
++      const orderPayload = {
++        customer_id: customer.id,
++        customer_name: customerName.trim(),
++        customer_phone: normalizedSubmitPhone,
++        customer_address:
++          fulfillmentType === "delivery"
++            ? customerAddress.trim()
++            : "Khách tự đến lấy",
++        address_detail:
++          fulfillmentType === "delivery"
++            ? customerAddressDetail.trim() || null
++            : null,
++        note: [
++          orderType === "scheduled" && scheduledDateTime
++            ? `⏰ Đơn đặt trước: ${scheduledDateTime.toLocaleString("vi-VN")}${
++                scheduledNote.trim()
++                  ? `\nGhi chú đặt trước: ${scheduledNote.trim()}`
++                  : ""
++              }`
++            : "",
++          note.trim(),
++          latestFlag?.status === "warning"
++            ? `⚠️ Khách cần xác nhận trước: ${
++                latestFlag.note || "Admin đã đánh dấu cần xác nhận."
++              }`
++            : "",
++          selectedReward
++            ? `🎁 Quà đổi xu: ${selectedReward.name} (${rewardPointsUsed} xu)`
++            : "",
++        ]
++          .filter(Boolean)
++          .join("\n"),
++        subtotal,
++        shipping_fee_original:
+           fulfillmentType === "pickup" ? 0 : actualShippingFee,
+-        
+         shipping_discount:
+           fulfillmentType === "pickup" ? 0 : shippingDiscount,
+-        
+         coupon_discount: discountAmount,
+-        
+         shipping_fee:
+           fulfillmentType === "pickup" ? 0 : finalShippingFee,
+-        
+         discount_amount:
+           discountAmount + shippingDiscount + usePointsDiscount,
+-
+-          points_used: totalPointsUsed,
+-          points_earned: rewardPoints,
+-          points_discount: usePointsDiscount,
+-          
+-          coupon_code: [
++        points_used: totalPointsUsed,
++        points_earned: rewardPoints,
++        points_discount: usePointsDiscount,
++        coupon_code:
++          [
+             selectedDiscountCoupon?.code || "",
+             selectedGiftCoupon?.code || "",
+           ]
+             .filter(Boolean)
+             .join(", ") || null,
+-          total: totalAfterPoints,
+-          status:
+-            paymentMethod === "momo"
+-              ? "waiting_payment"
+-              : latestFlag?.status === "warning"
+-              ? "need_confirm"
+-              : "new",
+-          source: "website",
+-          payment_method: paymentMethod,
+-          payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
+-          delivery_distance_km: fulfillmentType === "pickup" ? 0 : deliveryDistanceKm,
+-delivery_area:
+-  fulfillmentType === "pickup"
+-    ? "Tự đến lấy"
+-    : selectedShippingZone?.name || "Quán xác nhận",
+-fulfillment_type: fulfillmentType,
+-          delivery_status: "pending",
+-          preparation_minutes: estimatedReceive.prepMinutes,
+-          delivery_minutes: estimatedReceive.deliveryMinutes,
+-          estimated_delivery_from: estimatedFrom.toISOString(),
+-          estimated_delivery_to: estimatedTo.toISOString(),
+-          confirmed_at: paymentMethod === "cod" ? new Date().toISOString() : null,
+-          order_type: fulfillmentType === "pickup" ? "scheduled" : orderType,
+-scheduled_at:
+-  (orderType === "scheduled" || fulfillmentType === "pickup") && scheduledDateTime
+-    ? scheduledDateTime.toISOString()
+-    : null,
+-    scheduled_note:
+-  orderType === "scheduled" || fulfillmentType === "pickup"
+-    ? scheduledNote.trim() || null
+-    : null,
+-          branch_id: orderBranchId,
+-        })
+-        .select()
+-        .single();
+-
+-      if (orderError || !order) throw orderError;
++        total: totalAfterPoints,
++        status:
++          paymentMethod === "momo"
++            ? "waiting_payment"
++            : latestFlag?.status === "warning"
++            ? "need_confirm"
++            : "new",
++        source: "website",
++        payment_method: paymentMethod,
++        payment_status: paymentMethod === "cod" ? "unpaid" : "pending",
++        delivery_distance_km:
++          fulfillmentType === "pickup" ? 0 : deliveryDistanceKm,
++        delivery_area:
++          fulfillmentType === "pickup"
++            ? "Tự đến lấy"
++            : selectedShippingZone?.name || "Quán xác nhận",
++        fulfillment_type: fulfillmentType,
++        delivery_status: "pending",
++        preparation_minutes: estimatedReceive.prepMinutes,
++        delivery_minutes: estimatedReceive.deliveryMinutes,
++        estimated_delivery_from: estimatedFrom.toISOString(),
++        estimated_delivery_to: estimatedTo.toISOString(),
++        confirmed_at:
++          paymentMethod === "cod" ? new Date().toISOString() : null,
++        order_type:
++          fulfillmentType === "pickup" ? "scheduled" : orderType,
++        scheduled_at:
++          (orderType === "scheduled" || fulfillmentType === "pickup") &&
++          scheduledDateTime
++            ? scheduledDateTime.toISOString()
++            : null,
++        scheduled_note:
++          orderType === "scheduled" || fulfillmentType === "pickup"
++            ? scheduledNote.trim() || null
++            : null,
++        branch_id: orderBranchId,
++      };
+ 
+       const orderItems = [
+         ...cart.map((item) => ({
+-          order_id: order.id,
+           product_id: item.id,
+           product_name: item.name,
+           quantity: item.quantity,
+@@ -2579,7 +2821,6 @@
+         ...(selectedGiftCoupon
+           ? [
+               {
+-                order_id: order.id,
+                 product_id: selectedGiftCoupon.gift_product_id || null,
+                 product_name: `🎁 Món tặng: ${selectedGiftCoupon.gift_product_name}`,
+                 quantity: Number(selectedGiftCoupon.gift_quantity || 1),
+@@ -2595,7 +2836,6 @@
+         ...(selectedReward
+           ? [
+               {
+-                order_id: order.id,
+                 product_id: null,
+                 product_name: `🎁 Quà đổi xu: ${selectedReward.name}`,
+                 quantity: 1,
+@@ -2610,76 +2850,134 @@
+           : []),
+       ];
+ 
+-      const { error: itemsError } = await supabase
+-        .from("order_items")
+-        .insert(orderItems);
++      const controller = new AbortController();
++      const requestTimeout = window.setTimeout(() => controller.abort(), 12000);
+ 
+-      if (itemsError) throw itemsError;
++      let createPayload: any = null;
++      let uncertainNetworkFailure = false;
+ 
+-      if (selectedReward) {
+-        await supabase.from("reward_redemptions").insert({
+-          customer_phone: normalizedSubmitPhone,
+-          reward_id: selectedReward.id,
+-          reward_name: selectedReward.name,
+-          points_used: rewardPointsUsed,
+-          code: `${orderCode}-REWARD`,
+-          status: "pending",
++      try {
++        const response = await fetch("/api/orders/create", {
++          method: "POST",
++          headers: {
++            "Content-Type": "application/json",
++          },
++          cache: "no-store",
++          signal: controller.signal,
++          body: JSON.stringify({
++            clientRequestId,
++            order: orderPayload,
++            items: orderItems,
++            clientContext: {
++              userAgent: navigator.userAgent || "",
++              language: navigator.language || "",
++              viewport: `${window.innerWidth}x${window.innerHeight}`,
++            },
++          }),
+         });
+-      }
+ 
+-      await supabase
+-      .from("customers")
+-      .update({
+-        total_orders: (customer.total_orders || 0) + 1,
+-        updated_at: new Date().toISOString(),
+-      })
+-      .eq("id", customer.id);
++        createPayload = await response.json().catch(() => null);
+ 
+-      await fetch("/api/notify-new-order", {
+-        method: "POST",
+-        headers: {
+-          "Content-Type": "application/json",
+-        },
+-        body: JSON.stringify({
+-          orderId: order.id,
+-          // Gửi kèm để rollout tương thích; API sẽ ưu tiên đọc
+-          // orders.branch_id trực tiếp từ database làm nguồn chính xác.
+-          branchId: order.branch_id || null,
+-          orderCode,
+-          total: totalAfterPoints,
+-          paymentMethod,
+-          orderType,
+-          scheduledAt:
+-            orderType === "scheduled" && scheduledDateTime
+-              ? scheduledDateTime.toISOString()
+-              : null,
+-          status:
+-          
+-            paymentMethod === "momo"
+-              ? "waiting_payment"
+-              : latestFlag?.status === "warning"
+-              ? "need_confirm"
+-              : "new",
+-        }),
+-      });
++        if (!response.ok || !createPayload?.ok || !createPayload?.order?.id) {
++          throw new Error(
++            createPayload?.message ||
++              `Không tạo được đơn (${response.status || "network"}).`
++          );
++        }
++      } catch (requestError) {
++        uncertainNetworkFailure = true;
++        console.warn("ORDER CREATE RESPONSE UNCERTAIN:", requestError);
++        setSubmitStatusMessage(
++          "Kết nối chậm. Đang kiểm tra xem quán đã nhận đơn chưa..."
++        );
++
++        const recoveredOrder = await recoverOrderAttempt(clientRequestId);
++
++        if (!recoveredOrder) {
++          throw requestError;
++        }
++
++        createPayload = {
++          ok: true,
++          created: false,
++          recovered: true,
++          order: recoveredOrder,
++        };
++      } finally {
++        window.clearTimeout(requestTimeout);
++      }
++
++      const order = createPayload.order;
++      const orderCode = String(order.order_code || "").trim();
++
++      if (!order?.id || !orderCode) {
++        throw new Error("Đơn đã tạo nhưng thiếu mã tra cứu.");
++      }
++
++      setSubmitStatusMessage(
++        uncertainNetworkFailure
++          ? `Đã tìm thấy đơn ${orderCode}. Đang hoàn tất...`
++          : `Quán đã nhận đơn ${orderCode}. Đang hoàn tất...`
++      );
++
++      // Non-critical side effects must never turn a successfully-created order
++      // into a scary "failed" message for the customer.
++      if (selectedReward) {
++        try {
++          await supabase.from("reward_redemptions").insert({
++            customer_phone: normalizedSubmitPhone,
++            reward_id: selectedReward.id,
++            reward_name: selectedReward.name,
++            points_used: rewardPointsUsed,
++            code: `${orderCode}-REWARD`,
++            status: "pending",
++          });
++        } catch (rewardError) {
++          console.warn("REWARD REDEMPTION AFTER ORDER ERROR:", rewardError);
++        }
++      }
++
++      try {
++        await supabase
++          .from("customers")
++          .update({
++            total_orders: (customer.total_orders || 0) + 1,
++            updated_at: new Date().toISOString(),
++          })
++          .eq("id", customer.id);
++      } catch (customerUpdateError) {
++        console.warn("CUSTOMER TOTAL AFTER ORDER ERROR:", customerUpdateError);
++      }
+ 
+       setCart([]);
+       setNote("");
+       setSelectedDiscountCoupon(null);
+-setSelectedGiftCoupon(null);
++      setSelectedGiftCoupon(null);
+       setSelectedRewardId("");
+       setOrderType("now");
+-setScheduledDate("");
+-setScheduledTime("");
+-setScheduledNote("");
+-      setCheckoutOpen(false);
++      setScheduledDate("");
++      setScheduledTime("");
++      setScheduledNote("");
++      setCheckoutErrorMessage("");
++      clearCheckoutRequestId();
++      submitSucceededRef.current = true;
+       playSound("success");
+-      router.push(`/tra-cuu-don?code=${orderCode}`);
++      setSubmitStatusMessage(`✅ Đã gửi đơn ${orderCode}`);
++      router.push(`/tra-cuu-don?code=${encodeURIComponent(orderCode)}`);
+     } catch (error) {
+       console.error("CREATE ORDER ERROR:", error);
+-      alert("Lỗi tạo đơn hàng. Anh thử lại giúp em.");
++      const message =
++        "Kết nối chưa ổn định và hệ thống chưa xác nhận được đơn. Anh/chị có thể bấm Thử gửi lại; website sẽ dùng cùng mã gửi để không tạo đơn trùng.";
++      setCheckoutErrorMessage(message);
++      alert(message);
+     } finally {
+-      setSubmitting(false);
++      window.clearTimeout(slowTimer);
++
++      if (!submitSucceededRef.current) {
++        submitLockRef.current = false;
++        setSubmitting(false);
++        setSubmitStatusMessage("");
++      }
+     }
+   }
+ 
+@@ -3451,8 +3749,12 @@
+               </div>
+ 
+               <button
+-                onClick={() => setCheckoutOpen(false)}
+-                className="rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C]"
++                type="button"
++                onClick={() => {
++                  if (!submitting) setCheckoutOpen(false);
++                }}
++                disabled={submitting}
++                className="rounded-full bg-neutral-100 px-4 py-2 font-black text-[#06113C] disabled:cursor-not-allowed disabled:opacity-40"
+               >
+                 ✕
+               </button>
+@@ -4423,25 +4725,23 @@
+               </div>
+             </div>
+ 
+-            <button
+-              onClick={submitOrder}
+-              disabled={submitting || !isShopOpen || customerFlag?.status === "blocked"}
+-              className="mt-5 w-full rounded-2xl bg-[#00B14F] px-5 py-4 text-base font-black text-white disabled:opacity-60"
+-            >
+-              {submitting
+-                ? "Đang gửi đơn..."
+-                : !isShopOpen
+-                ? "Quán đang tạm ngưng"
+-                : customerFlag?.status === "blocked"
+-                ? "Số điện thoại đang bị hạn chế"
+-                : customerFlag?.status === "warning"
+-                ? `Gửi đơn chờ xác nhận · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
+-                : fulfillmentType === "pickup"
+-                ? `Đặt món đến lấy · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
+-                : orderType === "scheduled"
+-                ? `Đặt trước · ${totalAfterPoints.toLocaleString("vi-VN")}đ`
+-                : `Đặt hàng · ${totalAfterPoints.toLocaleString("vi-VN")}đ`}
+-            </button>
++            <StickyCheckoutBar
++              total={totalAfterPoints}
++              submitting={submitting}
++              statusMessage={submitStatusMessage}
++              errorMessage={checkoutErrorMessage}
++              issues={checkoutIssues}
++              onSubmit={submitOrder}
++              actionLabel={
++                customerFlag?.status === "warning"
++                  ? "Gửi đơn chờ xác nhận"
++                  : fulfillmentType === "pickup"
++                  ? "Đặt món đến lấy"
++                  : orderType === "scheduled"
++                  ? "Đặt trước"
++                  : "Đặt hàng"
++              }
++            />
+           </div>
+         </div>
+       )}

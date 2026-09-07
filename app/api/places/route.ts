@@ -11,6 +11,117 @@ type PlacesRequestBody = {
 
 type UnknownRecord = Record<string, unknown>;
 
+// Server-side protection for Google Places.
+// Note: module memory is best-effort on Vercel/serverless and is NOT a replacement
+// for a durable/global rate limiter at the platform edge.
+const AUTOCOMPLETE_MIN_LENGTH = 6;
+const AUTOCOMPLETE_MAX_LENGTH = 160;
+const RATE_WINDOW_MS = 60_000;
+const AUTOCOMPLETE_LIMIT_PER_MINUTE = 20;
+const DETAILS_LIMIT_PER_MINUTE = 10;
+const GOOGLE_QUOTA_COOLDOWN_MS = 5 * 60_000;
+const MAX_RATE_BUCKETS = 2_000;
+
+type RateAction = "autocomplete" | "details";
+type RateBucket = {
+  windowStartedAt: number;
+  autocomplete: number;
+  details: number;
+  lastSeenAt: number;
+};
+
+const rateBuckets = new Map<string, RateBucket>();
+let autocompleteQuotaBlockedUntil = 0;
+let detailsQuotaBlockedUntil = 0;
+
+function normalizeAddressInput(value: string) {
+  return value.trim().replace(/\\s+/g, " ");
+}
+
+function isMeaningfulAddressInput(value: string) {
+  return (
+    value.length >= AUTOCOMPLETE_MIN_LENGTH &&
+    value.length <= AUTOCOMPLETE_MAX_LENGTH &&
+    /[A-Za-zÀ-ỹ]/.test(value)
+  );
+}
+
+function getClientIp(request: NextRequest) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
+
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function isSameOriginRequest(request: NextRequest) {
+  const origin = request.headers.get("origin");
+
+  // Same-origin browser POST requests normally include Origin. We still allow
+  // requests without Origin because some legitimate clients/proxies omit it.
+  if (!origin) return true;
+
+  try {
+    const originUrl = new URL(origin);
+    return originUrl.host === request.nextUrl.host;
+  } catch {
+    return false;
+  }
+}
+
+function consumeRateLimit(ip: string, action: RateAction) {
+  const now = Date.now();
+  let bucket = rateBuckets.get(ip);
+
+  if (!bucket || now - bucket.windowStartedAt >= RATE_WINDOW_MS) {
+    bucket = {
+      windowStartedAt: now,
+      autocomplete: 0,
+      details: 0,
+      lastSeenAt: now,
+    };
+    rateBuckets.set(ip, bucket);
+  }
+
+  bucket.lastSeenAt = now;
+  bucket[action] += 1;
+
+  if (rateBuckets.size > MAX_RATE_BUCKETS) {
+    const oldest = [...rateBuckets.entries()]
+      .sort((a, b) => a[1].lastSeenAt - b[1].lastSeenAt)
+      .slice(0, Math.ceil(MAX_RATE_BUCKETS * 0.2));
+
+    for (const [key] of oldest) {
+      rateBuckets.delete(key);
+    }
+  }
+
+  const limit =
+    action === "autocomplete"
+      ? AUTOCOMPLETE_LIMIT_PER_MINUTE
+      : DETAILS_LIMIT_PER_MINUTE;
+
+  const remainingMs = Math.max(
+    1,
+    RATE_WINDOW_MS - (now - bucket.windowStartedAt)
+  );
+
+  return {
+    allowed: bucket[action] <= limit,
+    retryAfterSeconds: Math.ceil(remainingMs / 1000),
+  };
+}
+
+function isGoogleQuotaError(status: number, message: string) {
+  return (
+    status === 429 ||
+    /quota exceeded|resource_exhausted|autocompleteplacesrequest|rate limit/i.test(
+      message
+    )
+  );
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
 }
@@ -119,6 +230,16 @@ function normalizeAutocompleteSuggestions(payload: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "Yêu cầu không được phép.",
+        },
+        { status: 403 }
+      );
+    }
+
     const apiKey = getGoogleApiKey();
 
     if (!apiKey) {
@@ -147,13 +268,50 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "autocomplete") {
-      const input = String(body.input || "").trim();
+      const input = normalizeAddressInput(String(body.input || ""));
 
-      if (input.length < 2) {
+      // Chặn request rác trước khi chạm Google API.
+      // Ví dụ chỉ nhập "178" sẽ không tiêu quota.
+      if (!isMeaningfulAddressInput(input)) {
         return NextResponse.json({
           ok: true,
           suggestions: [],
         });
+      }
+
+      if (Date.now() < autocompleteQuotaBlockedUntil) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Google Maps đang tạm giới hạn lượt tìm địa chỉ. Vui lòng thử lại sau ít phút.",
+          },
+          {
+            status: 429,
+            headers: { "Retry-After": "300" },
+          }
+        );
+      }
+
+      const rateLimit = consumeRateLimit(
+        getClientIp(request),
+        "autocomplete"
+      );
+
+      if (!rateLimit.allowed) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Bạn đang tìm địa chỉ quá nhanh. Vui lòng chờ một chút rồi thử lại.",
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(rateLimit.retryAfterSeconds),
+            },
+          }
+        );
       }
 
       const googleResponse = await fetch(
@@ -192,19 +350,35 @@ export async function POST(request: NextRequest) {
           payload,
           `Google Places Autocomplete trả về lỗi HTTP ${googleResponse.status}.`
         );
+        const quotaError = isGoogleQuotaError(
+          googleResponse.status,
+          message
+        );
+
+        if (quotaError) {
+          autocompleteQuotaBlockedUntil =
+            Date.now() + GOOGLE_QUOTA_COOLDOWN_MS;
+        }
 
         console.warn("GOOGLE PLACES AUTOCOMPLETE ERROR:", {
           status: googleResponse.status,
           message,
+          quotaError,
           payload,
         });
 
         return NextResponse.json(
           {
             ok: false,
-            message,
+            // Không đưa project number / quota nội bộ của Google ra giao diện khách.
+            message: quotaError
+              ? "Google Maps đang tạm giới hạn lượt tìm địa chỉ. Vui lòng thử lại sau ít phút."
+              : "Chưa tải được gợi ý địa chỉ. Vui lòng thử lại sau.",
           },
-          { status: googleResponse.status || 502 }
+          {
+            status: quotaError ? 429 : googleResponse.status || 502,
+            headers: quotaError ? { "Retry-After": "300" } : undefined,
+          }
         );
       }
 
@@ -226,6 +400,48 @@ export async function POST(request: NextRequest) {
             message: "Thiếu placeId.",
           },
           { status: 400 }
+        );
+      }
+
+      if (placeId.length > 256) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: "placeId không hợp lệ.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (Date.now() < detailsQuotaBlockedUntil) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Google Maps đang tạm giới hạn lượt kiểm tra địa chỉ. Vui lòng thử lại sau ít phút.",
+          },
+          {
+            status: 429,
+            headers: { "Retry-After": "300" },
+          }
+        );
+      }
+
+      const rateLimit = consumeRateLimit(getClientIp(request), "details");
+
+      if (!rateLimit.allowed) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Bạn đang kiểm tra địa chỉ quá nhanh. Vui lòng chờ một chút rồi thử lại.",
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(rateLimit.retryAfterSeconds),
+            },
+          }
         );
       }
 
@@ -252,19 +468,34 @@ export async function POST(request: NextRequest) {
           payload,
           `Google Place Details trả về lỗi HTTP ${googleResponse.status}.`
         );
+        const quotaError = isGoogleQuotaError(
+          googleResponse.status,
+          message
+        );
+
+        if (quotaError) {
+          detailsQuotaBlockedUntil =
+            Date.now() + GOOGLE_QUOTA_COOLDOWN_MS;
+        }
 
         console.warn("GOOGLE PLACE DETAILS ERROR:", {
           status: googleResponse.status,
           message,
+          quotaError,
           payload,
         });
 
         return NextResponse.json(
           {
             ok: false,
-            message,
+            message: quotaError
+              ? "Google Maps đang tạm giới hạn lượt kiểm tra địa chỉ. Vui lòng thử lại sau ít phút."
+              : "Chưa kiểm tra được địa chỉ Google. Vui lòng thử lại sau.",
           },
-          { status: googleResponse.status || 502 }
+          {
+            status: quotaError ? 429 : googleResponse.status || 502,
+            headers: quotaError ? { "Retry-After": "300" } : undefined,
+          }
         );
       }
 

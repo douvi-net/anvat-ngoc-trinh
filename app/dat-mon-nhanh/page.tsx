@@ -165,6 +165,28 @@ const iceOptions = ["Không đá", "Ít đá", "Đá bình thường"];
 const sugarOptions = ["Ít ngọt", "Ngọt bình thường"];
 const MIN_SHIPPING_FEE = 15000;
 
+// Giảm số lần gọi Google Places Autocomplete:
+// - Không gọi khi khách mới nhập mỗi số nhà như "178".
+// - Chờ khách ngừng gõ 800ms trước khi tìm.
+const ADDRESS_AUTOCOMPLETE_MIN_LENGTH = 6;
+const ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS = 800;
+
+function normalizeAddressSearchInput(input: string) {
+  return input.trim().replace(/\\s+/g, " ");
+}
+
+function isMeaningfulAddressSearchInput(input: string) {
+  const normalized = normalizeAddressSearchInput(input);
+
+  if (normalized.length < ADDRESS_AUTOCOMPLETE_MIN_LENGTH) {
+    return false;
+  }
+
+  // Chỉ số nhà như "178" chưa đủ để tìm Google.
+  // Yêu cầu có ít nhất một ký tự chữ để khách nhập thêm tên đường.
+  return /[A-Za-zÀ-ỹ]/.test(normalized);
+}
+
 function normalizePhoneForLookup(phone: string) {
   const trimmed = phone.trim();
 
@@ -345,8 +367,8 @@ function normalizePlaceSuggestions(payload: unknown): PlaceSuggestion[] {
 }
 
 function buildAddressSearchCandidates(input: string) {
-  const candidates = [input];
-  const normalized = input.toLocaleLowerCase("vi-VN");
+  const normalizedInput = normalizeAddressSearchInput(input);
+  const normalized = normalizedInput.toLocaleLowerCase("vi-VN");
   const alreadyHasLocality =
     normalized.includes("hồ chí minh") ||
     normalized.includes("ho chi minh") ||
@@ -355,11 +377,14 @@ function buildAddressSearchCandidates(input: string) {
     normalized.includes("sài gòn") ||
     normalized.includes("sai gon");
 
-  if (!alreadyHasLocality) {
-    candidates.push(`${input}, Hồ Chí Minh`);
-  }
-
-  return Array.from(new Set(candidates));
+  // Quán hiện phục vụ tại TP.HCM, nên chỉ gửi MỘT request autocomplete.
+  // Bản cũ có thể gửi request thứ hai với ", Hồ Chí Minh" nếu lần đầu
+  // không có kết quả, khiến một lần khách dừng gõ có thể tốn 2 quota.
+  return [
+    alreadyHasLocality
+      ? normalizedInput
+      : `${normalizedInput}, Hồ Chí Minh`,
+  ];
 }
 
 const frequentlyBoughtTogether: Record<string, string[]> = {
@@ -1994,28 +2019,39 @@ total_spent: 0,
       addressSearchTimerRef.current = null;
     }
 
-    if (value.trim().length < 3) {
+    const normalizedAddress = normalizeAddressSearchInput(value);
+
+    if (!isMeaningfulAddressSearchInput(normalizedAddress)) {
       setAddressSuggestions([]);
       setAddressLoading(false);
+      setAddressSearchMessage(
+        normalizedAddress.length === 0
+          ? ""
+          : "Nhập thêm số nhà và tên đường, ví dụ: 178 Cô Giang."
+      );
       return;
     }
 
     addressSearchTimerRef.current = window.setTimeout(() => {
-      void searchAddressSuggestions(value, requestId);
+      void searchAddressSuggestions(normalizedAddress, requestId);
       addressSearchTimerRef.current = null;
-    }, 350);
+    }, ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS);
   }
 
   async function searchAddressSuggestions(
     value: string,
     requestId: number
   ) {
-    const input = value.trim();
+    const input = normalizeAddressSearchInput(value);
 
-    if (input.length < 3) {
+    if (!isMeaningfulAddressSearchInput(input)) {
       if (requestId === addressSearchRequestRef.current) {
         setAddressSuggestions([]);
-        setAddressSearchMessage("");
+        setAddressSearchMessage(
+          input.length === 0
+            ? ""
+            : "Nhập thêm số nhà và tên đường, ví dụ: 178 Cô Giang."
+        );
       }
       return;
     }
@@ -2057,15 +2093,29 @@ if (process.env.NODE_ENV === "development") {
         }
 
         if (!res.ok || !data?.ok) {
-          lastErrorMessage = String(
+          const rawErrorMessage = String(
             data?.message ||
               `Google Maps trả về lỗi ${res.status || "không xác định"}.`
           );
+          const quotaExceeded =
+            res.status === 429 ||
+            /quota|resource_exhausted|autocompleteplacesrequest/i.test(
+              rawErrorMessage
+            );
+
+          lastErrorMessage = quotaExceeded
+            ? "Google Maps đang tạm giới hạn lượt tìm địa chỉ. Anh/chị vui lòng thử lại sau hoặc liên hệ quán để được hỗ trợ."
+            : "Chưa tải được gợi ý địa chỉ. Anh/chị vui lòng thử lại sau ít phút.";
+
           console.warn("PLACES AUTOCOMPLETE ERROR:", {
             status: res.status,
+            message: rawErrorMessage,
             data,
           });
-          continue;
+
+          // Không thử thêm candidate khi Google đã báo lỗi/quota,
+          // tránh tốn thêm một request vô ích.
+          break;
         }
 
         suggestions = normalizePlaceSuggestions(data);

@@ -2506,11 +2506,8 @@ if (process.env.NODE_ENV === "development") {
       branchMenuPreviewBranchId !== orderBranchId
     ) {
       alert(
-        "Chi nhánh của giỏ hàng không còn khớp với menu hiện tại. Anh/chị vui lòng chọn lại địa chỉ và đặt món lại từ đầu."
+        "Menu hiện tại chưa khớp với chi nhánh đang chọn. Anh/chị vui lòng chờ tải lại menu rồi đặt món lại."
       );
-      setCheckoutOpen(false);
-      setBranchGateConfirmed(false);
-      setBranchGateLocked(false);
       return;
     }
 
@@ -2971,71 +2968,7 @@ setScheduledNote("");
     }
   };
 
-  const handleRestartBranchSelection = () => {
-    if (submitting) return;
-
-    if (cart.length > 0) {
-      const confirmed = window.confirm(
-        "Đổi địa chỉ hoặc chi nhánh sẽ xóa toàn bộ món đang có trong giỏ. Anh/chị có muốn chọn lại từ đầu không?"
-      );
-
-      if (!confirmed) return;
-    }
-
-    setCart([]);
-    setSelectedProduct(null);
-    setSelectedToppingIds([]);
-    setSelectedCategory("Tất cả");
-    setCheckoutOpen(false);
-    setCouponOpen(false);
-    setSelectedDiscountCoupon(null);
-    setSelectedGiftCoupon(null);
-    setSelectedRewardId("");
-    setUsePointsDiscount(0);
-
-    addressSearchRequestRef.current += 1;
-    routeRequestRef.current += 1;
-    addressSearchAbortRef.current?.abort();
-    addressSearchAbortRef.current = null;
-
-    if (addressSearchTimerRef.current !== null) {
-      window.clearTimeout(addressSearchTimerRef.current);
-      addressSearchTimerRef.current = null;
-    }
-
-    setAddressLoading(false);
-    setRouteLoading(false);
-    setCustomerAddress("");
-    setCustomerAddressDetail("");
-    setDeliveryLat(null);
-    setDeliveryLng(null);
-    setSelectedBranch(null);
-    setManualBranchId(null);
-    setBranchSelectorOpen(false);
-    setAddressSelected(false);
-    setAddressSuggestions([]);
-    setAddressSearchMessage("");
-    setGoogleShippingFee(null);
-    setRouteMessage("");
-    setBranchMenuPreview([]);
-    setBranchMenuPreviewBranchId(null);
-    setBranchMenuPreviewError("");
-    setBranchCartValidation(null);
-    setBranchCartModalOpen(false);
-
-    setCustomerFoundMessage(
-      "Hãy chọn lại địa chỉ để quán xác định đúng chi nhánh phục vụ."
-    );
-    setBranchGateConfirmed(false);
-    setBranchGateLocked(false);
-  };
-
   const handleOpenBranchSelector = () => {
-    if (branchGateConfirmed) {
-      handleRestartBranchSelection();
-      return;
-    }
-
     if (availableBranches.length === 0) {
       showToast("Chưa tải được danh sách chi nhánh.");
       return;
@@ -3056,9 +2989,33 @@ setScheduledNote("");
       return;
     }
 
+    if (cart.length > 0) {
+      const confirmed = window.confirm(
+        "Đổi chi nhánh sẽ xóa toàn bộ món hiện có trong giỏ để tránh dùng sai menu, giá hoặc topping. Anh/chị có muốn tiếp tục không?"
+      );
+
+      if (!confirmed) {
+        setBranchSelectorOpen(false);
+        return;
+      }
+    }
+
+    // BRANCH_SWITCH_RESET_V1:
+    // Đổi branch = giữ địa chỉ hiện tại, xóa sạch giỏ/coupon/reward,
+    // rồi tải thẳng menu branch mới và tính lại phí ship từ đúng branch đó.
+    setCart([]);
+    setSelectedProduct(null);
+    setSelectedToppingIds([]);
+    setSelectedDiscountCoupon(null);
+    setSelectedGiftCoupon(null);
+    setSelectedRewardId("");
+    setUsePointsDiscount(0);
+    setSelectedCategory("Tất cả");
+    setBranchCartValidation(null);
+    setBranchCartModalOpen(false);
+
     setBranchGateLocked(false);
     setManualBranchId(branch.id || null);
-    setSelectedCategory("Tất cả");
 
     setBranchMenuPreview([]);
     setBranchMenuPreviewBranchId(null);
@@ -3072,13 +3029,26 @@ setScheduledNote("");
         skipBranchPreview: true,
         branchId: branch.id || null,
       });
+    } else {
+      // Trường hợp pickup hoặc địa chỉ chưa có tọa độ:
+      // vẫn đổi menu ngay, không bắt nhập lại địa chỉ.
+      setGoogleShippingFee(
+        fulfillmentType === "pickup" ? 0 : googleShippingFee
+      );
+      if (fulfillmentType === "pickup") {
+        setDeliveryDistanceKm(0);
+        setRouteMessage(
+          `Tự đến lấy tại ${branch.short_name || branch.code || "chi nhánh"} - không tính phí ship`
+        );
+      }
     }
 
+    setBranchGateConfirmed(true);
     setBranchGateLocked(true);
     showToast(
       `Đã chuyển sang menu ${
         branch.short_name || branch.code || "chi nhánh"
-      }`
+      } · Giỏ hàng đã được làm mới`
     );
   };
 
@@ -3232,10 +3202,10 @@ setScheduledNote("");
 
             <button
               type="button"
-              onClick={handleRestartBranchSelection}
+              onClick={handleOpenBranchSelector}
               className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#00B14F] ring-1 ring-[#00B14F]/20"
             >
-              Đổi địa chỉ
+              Đổi chi nhánh
             </button>
           </div>
         </section>
@@ -4060,9 +4030,13 @@ setScheduledNote("");
       Chi nhánh: {selectedBranch?.short_name || "Chưa chọn chi nhánh"}
       <br />
       Địa chỉ: {selectedBranch?.address || "Chưa xác định địa chỉ chi nhánh"}
-      <p className="mt-3 rounded-xl bg-white px-4 py-3 text-xs font-black text-[#B45309] ring-1 ring-[#B45309]/10">
-        Chi nhánh đã được khóa theo lựa chọn ban đầu. Muốn đổi chi nhánh, hãy quay lại bước chọn địa chỉ.
-      </p>
+      <button
+        type="button"
+        onClick={handleOpenBranchSelector}
+        className="mt-3 w-full rounded-xl border border-[#B45309]/20 bg-white px-4 py-3 text-sm font-black text-[#B45309]"
+      >
+        Đổi chi nhánh
+      </button>
     </div>
   )}
 </div>
@@ -4275,21 +4249,16 @@ setScheduledNote("");
     <p className="mt-1 text-xs font-bold text-[#00B14F]">
       Menu và đơn hàng đang dùng chi nhánh này
     </p>
-    <div className="mt-3 rounded-xl bg-white px-4 py-3 ring-1 ring-[#00B14F]/20">
-      <p className="text-xs font-black text-[#06113C]">
-        🔒 Chi nhánh đã khóa cho đơn hàng này
-      </p>
-      <p className="mt-1 text-[11px] font-bold leading-5 text-neutral-500">
-        Phí ship, menu, giá và tình trạng món đều được tính theo chi nhánh đã chọn từ đầu.
-      </p>
-      <button
-        type="button"
-        onClick={handleRestartBranchSelection}
-        className="mt-3 w-full rounded-xl border border-[#00B14F]/30 bg-[#F5FFF8] px-4 py-3 text-sm font-black text-[#00B14F]"
-      >
-        Chọn lại địa chỉ / chi nhánh
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={handleOpenBranchSelector}
+      className="mt-3 w-full rounded-xl border border-[#00B14F]/30 bg-white px-4 py-3 text-sm font-black text-[#00B14F]"
+    >
+      Đổi chi nhánh
+    </button>
+    <p className="mt-2 text-[11px] font-bold leading-5 text-neutral-500">
+      Nếu đổi chi nhánh, hệ thống sẽ xóa giỏ hiện tại rồi tải menu và tính lại phí ship của chi nhánh mới.
+    </p>
   </div>
 )}
               </div>

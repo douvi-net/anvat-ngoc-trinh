@@ -101,14 +101,14 @@ export default function Footer() {
               <div>
                 <p className="text-white">📍 Chi nhánh CN2</p>
                 <p>240/127/22C Nguyễn Văn Luông, Phường Bình Phú (Q6 cũ), TP.HCM</p>
-                <p className="mt-1 text-[#00B14F]">11:00 - 22:00 mỗi ngày</p>
+                <p className="mt-1 text-[#00B14F]">10:00 - 21:00 mỗi ngày</p>
               </div>
 
               <div>
                 <p className="text-white">📍 Chi nhánh CN1</p>
                 <p>178/4A Cô Giang, Phường Cầu Ông Lãnh (Q1 cũ), TP.HCM</p>
                 <p className="mt-1 text-[#00B14F]">
-                  Tạm đóng
+                  10:00 - 19:00 mỗi ngày
                 </p>
               </div>
             </div>

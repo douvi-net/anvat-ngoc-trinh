@@ -59,8 +59,8 @@ export default function HomePage() {
           "Saturday",
           "Sunday",
         ],
-        opens: "18:00",
-        closes: "23:00",
+        opens: "10:00",
+        closes: "21:00",
       },
     ],
     sameAs: [

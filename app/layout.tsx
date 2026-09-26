@@ -25,11 +25,11 @@ export const metadata: Metadata = {
     apple: "/apple-icon.png",
   },
   title: {
-    default: "Ăn Vặt Ngọc Trinh - Bánh tráng & ăn vặt Quận 6",
+    default: "Ăn Vặt Ngọc Trinh - Bánh tráng & ăn vặt Quận 6 & Quận 1",
     template: "%s | Ăn Vặt Ngọc Trinh",
   },
   description:
-    "Ăn Vặt Ngọc Trinh chuyên bánh tráng cuốn, bánh tráng trộn, bánh tráng chấm và nước uống tại Quận 6. Xem menu và đặt món trực tiếp trên website.",
+    "Ăn Vặt Ngọc Trinh chuyên bánh tráng cuốn, bánh tráng trộn, bánh tráng chấm và nước uống tại Quận 6 & Quận 1. Xem menu và đặt món trực tiếp trên website.",
   keywords: [
     "ăn vặt quận 6",
     "bánh tráng quận 6",

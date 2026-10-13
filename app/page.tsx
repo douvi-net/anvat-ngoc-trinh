@@ -5,12 +5,12 @@ import { products } from "@/data/products";
 import SocialVideoSection from "@/components/SocialVideoSection";
 import JsonLd from "@/components/JsonLd";
 export const metadata: Metadata = {
-  title: "Ăn Vặt Ngọc Trinh - Bánh tráng, ăn vặt Quận 6 giao nhanh",
+  title: "Ăn Vặt Ngọc Trinh - Bánh tráng, ăn vặt Quận 6, Quận 1, Bình Thạnh",
   description:
-    "Đặt bánh tráng trộn, cuốn đỏ sốt me, bánh tráng cuốn và nước uống tại Ăn Vặt Ngọc Trinh. Giao nhanh khu vực Quận 6 và lân cận.",
+    "Đặt bánh tráng trộn, cuốn đỏ sốt me, bánh tráng cuốn và nước uống tại Ăn Vặt Ngọc Trinh. Phục vụ Quận 6, Quận 1 và Bình Thạnh. CN3: 544 (số mới 682) Xô Viết Nghệ Tĩnh, Phường Thạnh Mỹ Tây, mở cửa 09:00–21:00 mỗi ngày.",
 };
 
-const areas = ["Quận 6", "Quận 5", "Quận 8", "Quận 11", "Bình Tân"];
+const areas = ["Quận 6", "Quận 1", "Bình Thạnh", "Quận 5", "Quận 8", "Quận 11", "Bình Tân"];
 
 const benefits = [
   "Xem giá rõ",
@@ -73,6 +73,29 @@ export default function HomePage() {
     },
   }}
 />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Restaurant",
+          "@id": "https://anvatngoctrinh.vn/#cn3-binh-thanh",
+          name: "Ăn Vặt Ngọc Trinh - CN3 Bình Thạnh",
+          url: "https://anvatngoctrinh.vn",
+          servesCuisine: ["Ăn vặt", "Bánh tráng", "Trà sữa", "Trà trái cây"],
+          address: {
+            "@type": "PostalAddress",
+            streetAddress: "544 (số mới 682) Xô Viết Nghệ Tĩnh",
+            addressLocality: "Phường Thạnh Mỹ Tây",
+            addressRegion: "TP. Hồ Chí Minh",
+            addressCountry: "VN",
+          },
+          openingHoursSpecification: [{
+            "@type": "OpeningHoursSpecification",
+            dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+            opens: "09:00",
+            closes: "21:00",
+          }],
+        }}
+      />
       <section className="bg-[#00B14F] px-4 py-6 md:py-8">
         <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2 md:items-center">
           <div>
@@ -248,7 +271,7 @@ export default function HomePage() {
           </p>
 
           <h2 className="mt-1 text-2xl font-black text-[#06113C]">
-            Giao gần khu vực Quận 6 và Quận 1 lân cận
+            Giao gần Quận 6, Quận 1 và Bình Thạnh
           </h2>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -260,6 +283,18 @@ export default function HomePage() {
                 {area}
               </span>
             ))}
+          </div>
+
+          <div className="mt-5 rounded-2xl bg-white p-4">
+            <h3 className="text-lg font-black text-[#06113C]">
+              📍 CN3 · Bình Thạnh
+            </h3>
+            <p className="mt-2 text-sm font-bold leading-6 text-neutral-600">
+              544 (số mới 682) Xô Viết Nghệ Tĩnh, Phường Thạnh Mỹ Tây, TP.HCM
+            </p>
+            <p className="mt-1 text-sm font-black text-[#00B14F]">
+              09:00 - 21:00 mỗi ngày
+            </p>
           </div>
         </div>
       </section>

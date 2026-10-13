@@ -111,6 +111,12 @@ export default function Footer() {
                   10:00 - 19:00 mỗi ngày
                 </p>
               </div>
+
+              <div>
+                <p className="text-white">📍 Chi nhánh CN3 · Bình Thạnh</p>
+                <p>544 (số mới 682) Xô Viết Nghệ Tĩnh, Phường Thạnh Mỹ Tây, TP.HCM</p>
+                <p className="mt-1 text-[#00B14F]">09:00 - 21:00 mỗi ngày</p>
+              </div>
             </div>
           </div>
 
